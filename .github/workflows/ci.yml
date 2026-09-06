@@ -6,6 +6,41 @@ on:
   pull_request:
 
 jobs:
+  tag-release:
+    name: Tag Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag this commit if _meta/VERSION isn't tagged yet
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '[:space:]' < _meta/VERSION)
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "$VERSION already tagged — nothing to do."
+            exit 0
+          fi
+          # Tag message mirrors CHANGELOG.md's own heading for this release ("## [1.2.0] — title"),
+          # matching the "vX.Y.Z — title" convention every tag in this repo already uses. A version
+          # bump with no matching CHANGELOG entry fails loudly here rather than tagging blind or
+          # silently skipping — the two ways this has actually gone missing before (PR #7, PR #8).
+          NUM="${VERSION#v}"
+          TITLE=$(grep -m1 "^## \[$NUM\]" CHANGELOG.md | sed -E 's/^## \[[^]]+\] — //')
+          if [ -z "$TITLE" ]; then
+            echo "No CHANGELOG.md heading found for $VERSION — refusing to tag blind. Add the '## [$NUM] — ...' entry, or tag manually."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "$VERSION — $TITLE"
+          git push origin "$VERSION"
+          echo "Tagged $VERSION — $TITLE"
+
   markdown-lint:
     name: Markdown Lint
     runs-on: ubuntu-latest
