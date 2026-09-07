@@ -3,7 +3,7 @@
 # Permanence people-rule guard (pre-commit)
 # -------------------------------------
 # Flags staged Markdown additions whose phrasing lexically resembles a
-# "Writing about people" breach (see README → "Writing about people"):
+# breach of the people-rule (see README → "The four conventions", bullet 1):
 #   - protected-characteristic-linked judgement
 #   - fixed-character verdicts
 #   - person-directed coarse character attacks
@@ -97,8 +97,9 @@ done < <(git diff --cached --unified=0 --no-color -- '*.md')
 
 if [ "$flagged" -eq 1 ]; then
   cat >&2 <<'EOF'
-This phrasing may cross the "Writing about people" line — a protected
-characteristic, a fixed-character verdict, or a person-directed attack.
+This phrasing may cross the people-rule line (README → "The four
+conventions", bullet 1) — a protected characteristic, a fixed-character
+verdict, or a person-directed attack.
 Because it would also land in git history (a DSAR / disclosure covers the
 history, not just the current file), apply the reframe before committing:
 

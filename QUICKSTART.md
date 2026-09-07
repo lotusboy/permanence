@@ -39,37 +39,59 @@ remote you just removed.
 
 **This is the point where it matters most, so it's worth doing now rather than "eventually."** The
 `.git` history you just created is local-only — there's no remote, and nothing here sets one up.
-`runtime/make-backup.sh` gives you an encrypted, verified off-machine backup in one command: it bundles
-the whole history, encrypts it to a key only you hold, verifies the round-trip before trusting it, and
-keeps a few dated copies. The one-time setup and restore steps are in the comment at the top of the
-script itself.
+`runtime/make-backup.sh` gives you an encrypted, round-trip-verified backup **on this machine**, ready
+to copy somewhere else: it bundles the whole history, encrypts it to a key only you hold, verifies it
+restores before trusting it, and keeps the last three locally in `~/Backups`. **Copying that file off
+the machine is the step it can't do for you** — put it on your Drive (or equivalent) and keep three
+there; a blob sitting in `~/Backups` dies with the laptop like everything else. The one-time setup and
+restore steps are in the comment at the top of the script itself.
+
+It needs the `age` encryption tool, which isn't preinstalled:
 
 ```bash
-age-keygen -o ~/.config/age/perma-backup.key    # one-time — store this key safely, separately from the backup
+brew install age                                  # or your package manager's equivalent
+age-keygen -o ~/.config/age/perma-backup.key      # one-time — store this key safely, separately from the backup
 ~/permanence/runtime/make-backup.sh
 ```
+
+It writes **two** files: your Permanence history, and a small second blob of the `~/.claude` state
+`install.sh` can't rebuild (settings, memory files, any skill credentials) — treat both as secrets.
 
 It's **not** run automatically — `install.sh` doesn't schedule it, and it checks your working tree
 before bundling, telling you plainly if anything's uncommitted (run `/perma-shutdown` first, or commit
 by hand, for a backup that covers everything). Re-run it any time; a weekly cron/launchd entry alongside
 the nightly consolidate is a reasonable default once you've got real notes worth losing. If this machine
-is the only copy and something happens to it, losing the machine loses everything — this script is the
-whole difference.
+is the only copy and something happens to it, losing the machine loses everything — getting the result
+off it is the whole difference.
 
-## 3. Explore the example, then delete it
+## 3. Explore the example
 
-Open `~/permanence/example/` and read a stream or two (`home/bathroom`, `home/kitchen`) — that's the shape and the conventions in action. When it's clicked:
-
-```bash
-rm -rf ~/permanence/example     # your Permanence starts empty; the example was just the demo
-```
+Open `~/permanence/example/` and read a stream or two (`home/bathroom`, `home/kitchen`) — that's the
+shape and the conventions in action. Worth a proper look now: `example/.consolidation/REPORT-example.md`
+shows what a real `/perma-consolidate` pass actually produces, and `example/_meta/emergent.md` shows what
+`/perma-orchestrate` finds. Keep it around through step 6 below — you'll want it again.
 
 ## 4. Install the machinery
 
 ```bash
 ~/permanence/runtime/install.sh
 ```
-This sets up **everything global, hands-off**: copies the `/perma-*` commands into Claude Code, arms the git hooks, loads the nightly consolidate, **and wires `~/.claude/settings.json`** (the SessionStart hook + the `~/permanence` permission) — merged in safely, leaving your other settings untouched. No manual editing. *(Only if you don't have `python3` will it print the settings snippet for you to paste instead.)*
+
+This sets up everything global and hands-off. Specifically, it:
+
+- copies the `/perma-*` commands into `~/.claude/commands/`
+- points this repo's `core.hooksPath` at `.githooks` (the people-rule guard + contents refresh)
+- schedules the nightly consolidate (05:30)
+- merges two hooks and the `~/permanence` permission into `~/.claude/settings.json` — **SessionStart**
+  (`session-start.sh`) and **UserPromptSubmit** (`session-load.sh`, the one that actually forces the
+  read on your first message)
+- adds a delimited `<!-- perma:begin … end -->` block to your global `~/.claude/CLAUDE.md`, and the
+  same block to `~/.config/agents/AGENTS.md` (plus Codex/droid/Amp's global `AGENTS.md` if those are
+  installed) — never a project's own committed `AGENTS.md`
+
+Every one of these is a merge, not an overwrite: your other settings are left alone, files are backed
+up before any in-place edit, and it's safe to re-run any time. *(Without `python3` it prints the
+settings.json snippet for you to paste instead.)*
 
 ## 5. Register your first project
 
@@ -111,6 +133,8 @@ A couple of things worth knowing:
 
 **A daily pair worth trying early:** `/perma-shutdown` when you stop (it gets the day's open loops out of your head and into the stream, with exact resume points), and `/perma-startup` when you start (where you left off, plus a couple of candidates for what's next). They're the two that make Permanence feel like it's carrying something for you rather than being another thing to maintain.
 
+**Optional — a weekday reminder.** `~/permanence/runtime/shutdown-nudge.sh --install 17:00` pings you Mon–Fri to run `/perma-shutdown` (`--uninstall` to stop). Worth it in week one, while the habit is still new.
+
 **The nightly tidy needs a token.** `install.sh` schedules a nightly consolidate (05:30) that runs Claude unattended. Scheduled jobs get no shell config, so it can't see your normal login — give it a token of its own:
 
 ```bash
@@ -122,10 +146,16 @@ chmod 600 ~/.config/perma/claude-code-oauth-token.env
 
 Keep it in that file rather than your shell profile — in your profile it can leak into other tools and override your normal Claude Code login. Already keep it somewhere else? Set `PERMA_TOKEN_ENV` to that path instead. Skip this and the nightly run simply aborts each night with a message telling you the same thing — it will **never** fall back to an API key.
 
-**Optional — cross-project events.** Once you've got two or more projects you switch between, you can let one quietly tell the others when something material happens (`/perma-emit`), so the Claude in your other open project picks it up next time you type there. *Emitting* works out of the box; *receiving* is opt-in — `install.sh` prints the one `settings.json` hook line to enable it (it runs on every prompt, so it's left for you to switch on deliberately). Skip this until you actually feel the "I changed X over here and forgot to tell the other project" pain.
+**Optional — cross-project events.** Once you've got two or more projects you switch between, you can let one quietly tell the others when something material happens (`/perma-emit`), so the Claude in your other open project picks it up next time you type there. *Emitting* works out of the box; *receiving* is opt-in — `install.sh` prints the **two** `settings.json` hook lines to enable it; add both, since they share one cursor so a message still arrives exactly once (both run on every prompt, so they're left for you to switch on deliberately). Skip this until you actually feel the "I changed X over here and forgot to tell the other project" pain.
 
 **Programme groups, for a tech lead tracking a team's repos (`/perma-register-group`).** No setup step to skip here — it's just a command that sits inert until you actually use it, not a toggle. Still one owner's own Permanence, tracking several repos from one vantage point (clone them locally so `/perma-register-group` can read each one's `git log`) — nobody else on the team needs to run Permanence at all. `/perma-shutdown` in *any* member repo then refreshes one shared plan-and-status folder in the coordinating repo, written for a reader who isn't in the work (a manager or director) — it converges, so you never have to be in the "right" repo. (Not for coordinating different people's own laptops — see the README for why.) Reach for this only once a programme spans more than one repo and somebody outside the work keeps asking where things are.
 
 ---
 
 **The honest bit:** the real payoff is *your own* Permanence after a week or two, once it's holding state you'd otherwise lose. The example is just the bridge across the "empty Permanence, can't see the point yet" valley. Get one real stream going and let it accumulate.
+
+Once it has — you don't need the example anymore:
+
+```bash
+rm -rf ~/permanence/example
+```
