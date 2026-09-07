@@ -15,6 +15,50 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.2.1] — a marketing + fact-check pass over the docs
+
+A blind review (fresh agent, no prior context) read README/QUICKSTART/SPEC as a cold prospect
+would, then fact-checked every checkable claim against the actual source rather than the docs'
+own word. The positioning held up; a handful of specific claims didn't.
+
+- **Fixed the dead link on the docs' own key evidence.** README pointed to
+  `example/.consolidation/REPORT-example.md` to back up its biggest caveat ("this is
+  instruction-following, not a guarantee") — the file never shipped, though `.gitignore` already
+  carried a rule promising it would. It now exists, grounded in the example streams already
+  there (the bathroom LOG's deliberately-planted PROJECT-behind-LOG gap, Jamie's dated inference
+  in the kitchen `PEOPLE.md`, and the kitchen `QUESTIONS.md` deadline that's since passed).
+- **QUICKSTART now discloses what `install.sh` actually touches**: the global `~/.claude/CLAUDE.md`
+  and `~/.config/agents/AGENTS.md` blocks, and the UserPromptSubmit hook — previously undisclosed,
+  despite the safety engineering around them (backup before any in-place edit, refuse on a
+  mismatched marker) being worth advertising, not hiding.
+- **Fixed the backup section's central claim.** README/QUICKSTART called `make-backup.sh`'s output
+  an "off-machine" backup; it writes to `~/Backups` on the same disk, and the script's own last
+  line tells you to upload it yourself. Also documented the undisclosed `age` dependency and that
+  a second blob it writes contains `~/.claude` credentials.
+- **Fixed four checkable overclaims**, each previously wrong in a way a sceptical reader would
+  catch in the first ten minutes: "you'll never be nagged twice" (nothing persists that state —
+  it's once per session, not once ever), "before your first message lands" (contradicted the
+  doc's own later, correct explanation of the UserPromptSubmit hook), the pre-commit guard
+  "nudges" (it `exit 1`s and blocks the commit), and "the only thing that talks to a network is
+  the optional nightly tidy" (`/perma-upgrade` fetches too, and the nightly is scheduled by
+  default, not opt-in).
+- **Brought SPEC.md's Claude Code binding up to date** — it omitted `session-load.sh` entirely,
+  despite README calling it "the reliable trigger." Also repointed three dangling references
+  (`_meta/generative-orchestration-pass.md`, a `_personal/` folder that never shipped, and
+  `README → "Writing about people"`, a section that doesn't exist under that name) — including
+  the one `.githooks/pre-commit` prints to a user whose commit was just rejected, at the exact
+  moment they go looking for the rule it's citing.
+- **Smaller fixes**: pluralized "Optional extra" → "Optional extras" and added the shutdown
+  nudge, which shipped but was undocumented outside `install.sh`'s own output; added `session-load.sh`
+  and the untracked `axis/` folder to README's file table; reconciled the install-time estimate
+  (5 vs. 10 minutes) and the `QUESTIONS.md` close-marker format (`[CLOSED YYYY-MM-DD]` vs.
+  `[CLOSED YYYY-MM-DD: answer]`) between README and QUICKSTART/SPEC; moved QUICKSTART's
+  `rm -rf example/` from step 3 (before the example's exhibits are ever used) to the end, since
+  step 3 was deleting reference material steps 5-6 still point at.
+
+No **Migration notes** — docs and comment text only; no stream shape, invariant, or script
+behavior changed.
+
 ## [1.2.0] — trim the optional extras; a real fix for how upgrades handle removed files
 
 Two of the four "optional extras" are gone, for opposite-sounding but related reasons: neither
