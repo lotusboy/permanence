@@ -15,6 +15,29 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.2.2] — `templates/` is no longer mistaken for a project stream
+
+**Fixed: `templates/` was being discovered as a stream.** Stream discovery is "every directory
+containing a `PROJECT.md`", and one of the shipped skeletons was named exactly that — so every
+pass that walks streams counted the template directory as a project, reporting its `YYYY-MM-DD`
+placeholder as permanent staleness. Confirmed affected: `/perma-consolidate`, `/perma-list`,
+`/perma-orchestrate`, `/perma-brief`, and `/perma-help`'s stream count (`runtime/perma-help.sh`'s
+`find -name PROJECT.md`, which matches on path depth alone and carries no reference to
+`templates/` by name — worth noting since a plan drafted for this fix initially missed it,
+having only grepped for the string `templates/`).
+
+The four discovered skeletons are now `templates/*.template.md`. Renamed with `git mv`, so their
+history is intact. `perma-register` already looked for these "if present", so registration was
+never at risk either way; its wording and README's file table now say `*.template.md` explicitly.
+`programme-task-doc.md` is unchanged — it's copied by name and was never discoverable as a stream.
+
+Deliberately not folded in: F27 (`templates/` ships four of `SPEC.md`'s six canonical files, no
+`STRATEGY.md` or stream `README.md` skeleton) — same directory, same underlying `axis` finding,
+but a separate defect. Left open on purpose, not fixed here.
+
+No **Migration notes** — machinery only; no existing stream's shape changes, and nothing under
+`templates/` is ever a real user's own content.
+
 ## [1.2.1] — a marketing + fact-check pass over the docs
 
 A blind review (fresh agent, no prior context) read README/QUICKSTART/SPEC as a cold prospect

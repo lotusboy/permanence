@@ -116,7 +116,7 @@ These are deliberately off by default — the core (streams + the loops above) i
 | `.githooks/` | a **people-rule pre-commit guard** + a post-commit inventory refresh |
 | `SPEC.md` | the system, harness-independently — data model, invariants, runtime contract |
 | `docs/` | reference for one specific situation, read only when you're in it: [`UPGRADE.md`](./docs/UPGRADE.md) (the `/perma-upgrade` walkthrough) and [`TOOL-SUPPORT.md`](./docs/TOOL-SUPPORT.md) (which AI tools are automated vs. manual, including Claude Desktop) |
-| `templates/` | blank skeletons for the canonical files |
+| `templates/` | blank skeletons for the canonical files, named `*.template.md` so they're never mistaken for a real stream |
 | `example/` | a **fictional** populated Permanence (home decorating/DIY) showing the shape + each mechanism in action. **Delete `example/` once your own streams are going.** |
 | `axis/` | archived [`axis-engineering`](https://github.com/lotusboy/axis-engineering)-methodology review runs — historical snapshots describing the codebase as it was on that date, not current docs |
 | `_meta/REGISTRY.md` | maps each of your project folders → Permanence stream it should load (you fill this in) |

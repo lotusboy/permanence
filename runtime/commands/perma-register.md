@@ -28,7 +28,7 @@ Argument: `$ARGUMENTS` — a path to the project folder **or its README**, **or 
    - If the project's **path** is already in `_meta/REGISTRY.md`, say so and offer to refresh the existing stream instead of duplicating.
    - If `~/permanence/<stream>/` already **exists for a different path**, don't write into it — that would silently merge two unrelated projects' notes into one stream. Say so plainly and ask for a different name instead.
 
-4. **Create the stream** at `~/permanence/<stream>/` (use `~/permanence/templates/` skeletons if present; otherwise write the canonical files directly):
+4. **Create the stream** at `~/permanence/<stream>/` (use `~/permanence/templates/*.template.md` skeletons if present; otherwise write the canonical files directly):
    - `PROJECT.md` — `> Last updated <today>` header, a "What it is" paragraph, current phase/state as best read from the README, and an "Open" section for anything it flags as TODO/roadmap.
    - `LOG.md` — one dated entry: *"Stream created + registered from `<project path>`."*
    - `QUESTIONS.md`, `PEOPLE.md` — light skeletons, ready to grow.
