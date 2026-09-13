@@ -90,6 +90,7 @@ show perma-orchestrate        "find ideas converging across streams you had not 
 
 printf '\n\033[1mSetting things up\033[0m\n'
 show perma-register       "turn a project into a Permanence stream"
+show perma-unregister     "completely remove a stream — folder + registry row, one step"
 show perma-register-group "several repos → one shared programme folder (plan + RAG status)"
 show perma-upgrade         "pull the latest machinery from your team template"
 
