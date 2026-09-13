@@ -36,6 +36,18 @@ a new release also changes that file, `/perma-upgrade` won't pick a winner for y
 started from, what you have now, and what the release wants — then asks. This is the only place an
 upgrade needs your judgment; everything else is mechanical.
 
+## A newly-added file might take two runs to arrive
+
+Occasionally a release adds a whole new tracked file or folder (not just changing an existing
+one). The very first `/perma-upgrade` after that release ships might not bring it in yet — it
+can take a second run, right after the first, to fully catch up.
+
+**Why, so it doesn't look broken:** `update.sh` decides what's changed using the copy of itself
+already sitting on your machine — which doesn't know about the new file until *after* that first
+run has updated it. The second run, now using the updated script, sees it correctly. This isn't
+specific to any one release; it's a property of a script that updates itself. If `/perma-upgrade`
+ever reports "nothing changed" for a version bump you were expecting more from, just run it again.
+
 ## Migrating from an old `~/brain` install
 
 If you're on a pre-rename install (the folder is `~/brain`, commands are `/brain-*`), that's a one-time
