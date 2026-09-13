@@ -119,6 +119,7 @@ These are deliberately off by default — the core (streams + the loops above) i
 | `templates/` | blank skeletons for the canonical files, named `*.template.md` so they're never mistaken for a real stream |
 | `example/` | a **fictional** populated Permanence (home decorating/DIY) showing the shape + each mechanism in action. **Delete `example/` once your own streams are going.** |
 | `axis/` | archived [`axis-engineering`](https://github.com/lotusboy/axis-engineering)-methodology review runs — historical snapshots describing the codebase as it was on that date, not current docs |
+| `ROADMAP.md`, `design/` | forward-looking only — what might be next, and the detailed design for anything substantial enough to need one. `CHANGELOG.md`'s mirror: dated history vs. undated possibility. |
 | `_meta/REGISTRY.md` | maps each of your project folders → Permanence stream it should load (you fill this in) |
 
 > **Why root vs. `docs/`?** Root holds what everyone needs on day one (`QUICKSTART.md`), what convention already puts there (`README`, `LICENSE`, `CHANGELOG`), and the one file everything else answers to (`SPEC.md` — every command's behavior traces back to its invariants, so it's foundational even though most people never open it day one). `docs/` is reference for one specific situation — you open it when you're actually upgrading, or actually on a different tool, not before.

@@ -1,8 +1,9 @@
 # Changelog
 
-Releases of Permanence **machinery** — `runtime/`, `.githooks/`, `templates/`, and the
-docs. Your own streams, `_meta/REGISTRY.md`, and notes are never part of a release;
-they're yours, not the template's.
+Releases of Permanence **machinery** — `runtime/`, `.githooks/`, `templates/`, the
+docs, and the forward-looking `ROADMAP.md`/`design/` (this file's own mirror — dated
+history here, undated possibility there). Your own streams, `_meta/REGISTRY.md`, and
+notes are never part of a release; they're yours, not the template's.
 
 Tagged `vMAJOR.MINOR.PATCH`. `/perma-upgrade` diffs your installed version (recorded
 in `_meta/VERSION`) against the latest tag here and walks you through what changed.
@@ -14,6 +15,24 @@ refreshes machinery as usual. Migration notes are read and *proposed* against yo
 streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
+
+## [1.4.0] — `ROADMAP.md` + `design/`: a place for what's next, tracked by `/perma-upgrade`
+
+**New: forward-looking planning has a home in the template itself.** Added root `ROADMAP.md`
+(undated possibility — this file's own mirror, which stays dated history) and a `design/` folder
+for anything substantial enough to need its own doc. Both are now tracked by `runtime/update.sh`
+alongside `runtime/`, `.githooks/`, `templates/`, and the other root docs — a future edit to the
+roadmap or a design doc reaches existing installs via `/perma-upgrade` like everything else,
+rather than being invisible to it the way `axis/`'s historical review runs deliberately are.
+
+**First two entries**: design docs for a Gemini CLI adapter and a Google Antigravity adapter —
+proposed, unbuilt, verified against each tool's own current docs rather than assumed. Notably,
+despite sharing a `~/.gemini/` path prefix, the two turned out to need genuinely separate
+designs — Gemini CLI's hooks (`SessionStart`, `BeforeAgent`, …) and Antigravity's
+(`PreToolUse`, `PreInvocation`, …) are two different vocabularies, not variants of one.
+
+No **Migration notes** — nothing in any existing stream changes shape; this is purely new
+tracked machinery paths and new planning docs.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step
 
