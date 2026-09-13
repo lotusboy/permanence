@@ -86,32 +86,28 @@ On-commit (guard + refresh) is unaffected: a git hook, not an AI-harness hook, n
 
 ## 4. Proposed shape (not file-final — a sketch to react to)
 
-Keep `runtime/session-start.sh` / `session-load.sh` as the **one** canonical implementation of
-"resolve the stream, produce the orientation text" — the harness-specific piece is only the I/O
-envelope around that, which differs from Claude Code's (Claude's hook can apparently just emit
-text that becomes context; Gemini's hook contract wants a specific JSON shape back). Per
-`SPEC.md` §3, a binding is a directory:
+The `detect`/`wire` interface, and what `install.sh` does with this directory, are specified
+once in [`design/harness-binding-mechanism.md`](./harness-binding-mechanism.md) — not restated
+here. What's specific to Gemini CLI is the file layout underneath that interface:
 
 ```
-runtime/
-  session-start.sh          # unchanged — the actual logic
-  session-load.sh           # unchanged
-  bindings/
-    gemini-cli/
-      detect                 # exit 0 iff `gemini` (or its config dir) is present on this machine
-      wire                   # merges the hooks{} fragment into ~/.gemini/settings.json,
-                              # and — only if §5 item 1 concludes it's needed — writes
-                              # GEMINI-block.md's contents into GEMINI.md
-      session-start-hook.sh  # thin translator: calls session-start.sh, wraps its output as
-                              # Gemini's SessionStart JSON envelope
-      before-agent-hook.sh   # thin translator: calls session-load.sh, same wrapping for
-                              # BeforeAgent's envelope
-      GEMINI-block.md        # Gemini's equivalent of agents-md-block.md — only built if §5
-                              # item 1 concludes a standing-instruction file is worth writing
+runtime/bindings/gemini-cli/
+  detect                 # exit 0 iff `gemini` (or its config dir) is present on this machine
+  wire                   # merges the hooks{} fragment into ~/.gemini/settings.json, and —
+                          # only if §5 item 1 concludes it's needed — writes GEMINI-block.md's
+                          # contents into GEMINI.md
+  session-start-hook.sh  # thin translator: calls session-start.sh, wraps its output as
+                          # Gemini's SessionStart JSON envelope
+  before-agent-hook.sh   # thin translator: calls session-load.sh, same wrapping for
+                          # BeforeAgent's envelope
+  GEMINI-block.md        # Gemini's equivalent of agents-md-block.md — only built if §5 item 1
+                          # concludes a standing-instruction file is worth writing
 ```
 
-`runtime/install.sh` iterates `runtime/bindings/*/` and wires whatever `detect` reports present
-— adding this directory is the entire install-time change; no existing file needs editing.
+`session-start.sh` / `session-load.sh` themselves are unchanged — the harness-specific piece is
+only the I/O envelope around their existing output, which differs from Claude Code's (Claude's
+hook can apparently just emit text that becomes context; Gemini's hook contract wants a specific
+JSON shape back).
 
 ## 5. Must verify before writing any code
 

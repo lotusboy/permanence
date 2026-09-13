@@ -87,20 +87,20 @@ to above.
 
 ## 4. Proposed shape (a sketch, contingent on §5)
 
-Per `SPEC.md` §3, a binding is a directory. Only one translator is sketched here, because only
-one trigger (`PreInvocation`) is plausible today — a command layer or standing-instruction block
-isn't worth designing file-by-file while §3 questions 3–5 are still open:
+The `detect`/`wire` interface, and what `install.sh` does with this directory, are specified once
+in [`design/harness-binding-mechanism.md`](./harness-binding-mechanism.md) — not restated here.
+Only one translator is sketched below, because only one trigger (`PreInvocation`) is plausible
+today — a command layer or standing-instruction block isn't worth designing file-by-file while §3
+questions 3–5 are still open:
 
 ```
-runtime/
-  bindings/
-    antigravity/
-      detect                   # exit 0 iff Antigravity's CLI or config dir is present
-      wire                     # merges the hooks fragment into hooks.json — workspace
-                                # .agents/ or global ~/.gemini/config/, per §5 item 5
-      pre-invocation-hook.sh   # thin translator: calls session-start.sh + session-load.sh's
-                                # combined logic, wraps output as Antigravity's expected
-                                # PreInvocation hook response
+runtime/bindings/antigravity/
+  detect                   # exit 0 iff Antigravity's CLI or config dir is present
+  wire                     # merges the hooks fragment into hooks.json — workspace .agents/
+                            # or global ~/.gemini/config/, per §5 item 5
+  pre-invocation-hook.sh   # thin translator: calls session-start.sh + session-load.sh's
+                            # combined logic, wraps output as Antigravity's expected
+                            # PreInvocation hook response
 ```
 
 ## 5. Must verify before writing any code

@@ -7,6 +7,10 @@ implies a commitment or a date — this is a place to put things down, not a pro
 
 ## In design
 
+- **The harness-binding mechanism** — the `runtime/bindings/<harness>/` discovery mechanism
+  both bindings below sit on, including the deliberate decision that Claude Code's own wiring
+  stays outside it. Build this first; it's how either binding below gets proven, not just
+  proposed. [design/harness-binding-mechanism.md](./design/harness-binding-mechanism.md)
 - **Gemini CLI binding** — a second harness alongside Claude Code, answering all five of
   `SPEC.md`'s binding questions if its hook contract allows.
   [design/gemini-cli-binding.md](./design/gemini-cli-binding.md)

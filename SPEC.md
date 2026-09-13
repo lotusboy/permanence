@@ -73,12 +73,12 @@ read carries current state, the standing instruction carries the rule, and the h
 ordinary file/git tools do the rest. **On-commit and on-schedule are not harness questions at
 all** — git fires the first, the OS scheduler the second; neither consults an AI tool's config.
 
-**A binding is a directory**: `runtime/bindings/<harness>/`, holding `detect` (exit 0 iff this
-harness is present on the machine), `wire` (perform that harness's own config merges), and
-whatever small translators its hook contract demands. The core — `session-start.sh`,
+**A binding beyond Claude Code is a directory**, `runtime/bindings/<harness>/`, discovered and
+wired by `runtime/install.sh` without editing it — the mechanism itself, including why Claude
+Code's own wiring deliberately stays outside it, is specified in
+`design/harness-binding-mechanism.md`, not restated here. The core — `session-start.sh`,
 `session-load.sh`, `runtime/commands/*.md`, the block files — emits harness-neutral text and
-never varies per harness. `runtime/install.sh` iterates `runtime/bindings/*/` and wires
-whatever detects, so **adding a harness adds a directory and changes no existing file.**
+never varies per harness regardless of which binding wires it in.
 
 Numbered tiers are deliberately not used: a tier is ordinal, but these five are a set, so two
 harnesses with opposite failure modes (one reads manually and writes automatically; one reads

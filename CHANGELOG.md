@@ -50,6 +50,15 @@ varies. The intent is that `runtime/install.sh` iterates `runtime/bindings/*/`, 
 harness adds a directory and changes no existing file.** *(Contract and structure only — the
 iteration in `install.sh` is not implemented in this release.)*
 
+**New: `design/harness-binding-mechanism.md`** gives that mechanism its own design, separate
+from either tool binding — the `detect`/`wire` interface, the proposed `install.sh` loop, and the
+decision the two tool docs were each silently assuming: Claude Code's existing wiring stays
+outside this mechanism, deliberately, rather than migrating for symmetry alone — a real
+regression risk (its wiring carries real hardening: backup-before-edit, a mismatched-marker
+refusal, the different-Permanence-owns-this-job warning) for a benefit that's aesthetic, not
+functional. `runtime/bindings/` is for what's genuinely optional; Claude Code isn't. Both tool
+docs' shape sections now reference this doc instead of each re-deriving the same mechanism.
+
 **Two corrections to `docs/TOOL-SUPPORT.md`, found while researching the above.** Both were
 shipped inaccuracies: Gemini CLI was listed among tools reading `AGENTS.md` (it reads `GEMINI.md`
 and does not support `AGENTS.md` — confirmed against its own configuration reference), and
