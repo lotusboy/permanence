@@ -1,7 +1,7 @@
 # Design — the harness-binding mechanism itself
 
 > Status: **proposed, not started.** No code in this repo implements any of this yet.
-> Written 2026-09-13. See [ROADMAP.md](../ROADMAP.md), and read this *before*
+> Written 2026-09-13. Read this *before*
 > [gemini-cli-binding.md](./gemini-cli-binding.md) or [antigravity-binding.md](./antigravity-binding.md)
 > — both assume the mechanism this doc specifies, rather than each defining their own.
 

@@ -36,7 +36,7 @@ if [ "$MODE" = "apply" ] && { ! git -C "$PERMA" diff --quiet || ! git -C "$PERMA
   exit 1
 fi
 
-PATHS=(runtime .githooks templates SPEC.md README.md QUICKSTART.md CHANGELOG.md ROADMAP.md design)   # machinery + the template's own planning docs
+PATHS=(runtime .githooks templates SPEC.md README.md QUICKSTART.md CHANGELOG.md design)   # machinery + the template's own planning docs
 CURRENT=$(tr -d '[:space:]' < "$PERMA/_meta/VERSION" 2>/dev/null || echo "")
 [ -n "$CURRENT" ] || CURRENT="unknown"
 

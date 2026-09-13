@@ -1,9 +1,9 @@
 # Changelog
 
 Releases of Permanence **machinery** — `runtime/`, `.githooks/`, `templates/`, the
-docs, and the forward-looking `ROADMAP.md`/`design/` (this file's own mirror — dated
-history here, undated possibility there). Your own streams, `_meta/REGISTRY.md`, and
-notes are never part of a release; they're yours, not the template's.
+docs, and the forward-looking `design/` docs for work substantial enough to need one.
+Your own streams, `_meta/REGISTRY.md`, and notes are never part of a release; they're
+yours, not the template's.
 
 Tagged `vMAJOR.MINOR.PATCH`. `/perma-upgrade` diffs your installed version (recorded
 in `_meta/VERSION`) against the latest tag here and walks you through what changed.
@@ -66,20 +66,21 @@ Antigravity was described as reading `AGENTS.md` when its context-file conventio
 either way. Anyone who tried Permanence on Gemini CLI expecting that path to work would have got
 nothing, with no error.
 
-**New: `ROADMAP.md` + `design/`**, both tracked by `runtime/update.sh` so a future edit reaches
-existing installs via `/perma-upgrade`. First two entries are design docs for a Gemini CLI
-binding and an Antigravity binding — proposed, unbuilt, each verified against that tool's own
-docs and explicit about what remains unverified. Despite a shared `~/.gemini/` path prefix, the
-two need genuinely separate bindings: their hook vocabularies are entirely different.
+**New: `design/`**, tracked by `runtime/update.sh` so a future edit reaches existing installs via
+`/perma-upgrade`. First three entries are design docs for the harness-binding mechanism itself, a
+Gemini CLI binding, and an Antigravity binding — proposed, unbuilt, each verified against that
+tool's own docs and explicit about what remains unverified. Despite a shared `~/.gemini/` path
+prefix, Gemini CLI and Antigravity need genuinely separate bindings: their hook vocabularies are
+entirely different.
 
 **Fixed a real correctness bug in `update.sh`, found by actually testing this release before
-shipping it, not just by lint/link checks.** Adding `ROADMAP.md`/`design` to the tracked paths
-above surfaced it: `update.sh` decides "am I fully caught up?" using its own currently-installed
-file list, which can't know a release added a brand new tracked path until *after* it's finished
-updating itself. Reproduced directly against a real scratch install: `_meta/VERSION` reached
-`v1.4.0` — full agreement, nothing pending — while `ROADMAP.md`/`design` were never delivered and
-never would be, since the next `/perma-upgrade` would see `v1.4.0 → v1.4.0` and stop at "already
-up to date" before checking again. Silent, permanent, and reported as success.
+shipping it, not just by lint/link checks.** Adding `design` to the tracked paths above surfaced
+it: `update.sh` decides "am I fully caught up?" using its own currently-installed file list, which
+can't know a release added a brand new tracked path until *after* it's finished updating itself.
+Reproduced directly against a real scratch install: `_meta/VERSION` reached `v1.4.0` — full
+agreement, nothing pending — while `design/` was never delivered and never would be, since the
+next `/perma-upgrade` would see `v1.4.0 → v1.4.0` and stop at "already up to date" before checking
+again. Silent, permanent, and reported as success.
 
 Fixed at two layers. **`update.sh` now notices when it has just updated itself** and re-execs the
 updated script before deciding anything, rather than finishing on stale in-memory state — verified
@@ -138,9 +139,10 @@ history is intact. `perma-register` already looked for these "if present", so re
 never at risk either way; its wording and README's file table now say `*.template.md` explicitly.
 `programme-task-doc.md` is unchanged — it's copied by name and was never discoverable as a stream.
 
-Deliberately not folded in: F27 (`templates/` ships four of `SPEC.md`'s six canonical files, no
-`STRATEGY.md` or stream `README.md` skeleton) — same directory, same underlying `axis` finding,
-but a separate defect. Left open on purpose, not fixed here.
+Deliberately not folded in: `templates/` still ships only four of `SPEC.md`'s six canonical
+stream files — no `STRATEGY.md` or stream `README.md` skeleton, so a newly registered project
+is missing both by default. Same directory, same underlying `axis` review finding (tracked
+internally as F27) as the fix above, but a separate defect. Left open on purpose, not fixed here.
 
 No **Migration notes** — machinery only; no existing stream's shape changes, and nothing under
 `templates/` is ever a real user's own content.

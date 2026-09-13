@@ -4,7 +4,6 @@
 > five binding-contract questions now have live-verified or authoritatively-documented answers,
 > not open unknowns.
 > Written 2026-09-13, substantially revised twice the same day after live testing. See
-> [ROADMAP.md](../ROADMAP.md) for where this sits relative to other work, and
 > [gemini-cli-binding.md](./gemini-cli-binding.md) — Antigravity shares a `~/.gemini/` path
 > prefix with Gemini CLI, which is shared branding, not a shared mechanism for hooks (confirmed
 > below), though the two may genuinely share one standing-instruction file (also below).

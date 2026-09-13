@@ -1,7 +1,7 @@
 # Design — a Gemini CLI binding for Permanence
 
 > Status: **proposed, not started.** No code in this repo implements any of this yet.
-> Written 2026-09-13. See [ROADMAP.md](../ROADMAP.md) for where this sits relative to other work.
+> Written 2026-09-13. Paused, not abandoned — see §5 and `docs/TOOL-SUPPORT.md` for why.
 
 **Owner carries:** unresolved, pending §5 — best case (all five questions land, matching Claude
 Code's binding), nothing; worst case (no custom-command mechanism, no reason to write a
@@ -144,5 +144,7 @@ exactly this kind of "the doc said one thing, the actual behavior was slightly d
 - Not attempting feature parity with Claude Code on day one — answering questions 1+2 (a working
   `SessionStart` + `BeforeAgent` pair) is the meaningful first milestone; the write/command layer
   can follow once §5's unknowns are resolved.
-- Not touching the Gemini Mac app — see `ROADMAP.md`, out of scope for a separate, verified
-  reason.
+- Not touching the Gemini Mac app ("Gemini Spark") — verified 2026-09-13 it runs agentic work on
+  Google's own cloud servers against Workspace APIs, not local shell/git execution, so it's
+  architecturally unlike Claude Code/Antigravity and out of scope for a separate reason from
+  Gemini CLI's pause.
