@@ -130,6 +130,12 @@ jobs:
           CURRENT_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           BASE_VERSION=$(tr -d '[:space:]' < _meta/VERSION)
 
+          # A fresh runner has no git identity configured at all (unlike a dev machine, where
+          # this silently worked). Needed here too, not just in $SCRATCH below -- the "simulate
+          # a future release" commits a few lines down happen in this checkout directly.
+          git config user.email "ci@example.com"
+          git config user.name "CI"
+
           SCRATCH="${RUNNER_TEMP}/upgrade-scratch"
           git worktree add --detach "$SCRATCH" HEAD -q
           rm -rf "$SCRATCH/.git"
