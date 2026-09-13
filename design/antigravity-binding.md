@@ -47,6 +47,31 @@ Checked directly against Antigravity's own docs (`antigravity.google/docs/hooks/
 - **No context-file convention was confirmed** (no `CLAUDE.md`/`GEMINI.md`/`AGENTS.md`
   equivalent found in what's been checked so far) — an open question, not a "confirmed absent."
 
+**Update, 2026-09-13 — live-tested against a real install**, not just vendor docs (the CLI
+variant, `antigravity-cli`, installed via `brew install --cask antigravity-cli`; already
+authenticated on this machine, so real sessions were run, not simulated):
+
+- **`hooks.json` at `~/.gemini/config/hooks.json` is confirmed correct** — proven by a real Go
+  parse error from the binary itself (`hooks_manager.go`) when the schema was wrong, then a real
+  "loaded N named hooks" log line once corrected. Not inferred from docs; read from the actual
+  running code's own log output.
+- **The real per-event schema is a single object, not an array** — `{"EventName": {"command":
+  ..., "timeout": ...}}`. The vendor docs didn't specify this precisely enough to get right on
+  the first try; the binary's own parse error did.
+- **Headless mode exists and is confirmed real**: `agy --print "<prompt>"` (alias `-p`) runs
+  non-interactively, with `--output-format text|json|stream-json`. Resolves item 5 below to
+  "yes, it exists" — but see the finding right after this list, which complicates what that's
+  actually worth.
+- **A real, negative, reproduced finding on `PreInvocation`/`PostInvocation`/`PreToolUse`/
+  `PostToolUse`**: all four loaded successfully (confirmed via the log) but **none fired**
+  across two separate `--print` runs — one a plain text reply, one a prompt that provably ran a
+  real shell tool call (its output appeared in the response). Zero hook-execution log lines
+  either time. This was not expected going in, and changes item 5 below from "does headless
+  exist" to a sharper, more consequential question — see §5.
+
+None of this came from re-reading the vendor docs harder; it came from installing the real
+binary and watching what it actually logs when given a wrong answer and then a right one.
+
 ## 3. Trigger mapping — the five binding-contract questions
 
 Per `SPEC.md` §3's binding contract, these five questions are answered independently, not as a
@@ -57,13 +82,11 @@ that's a real, load-bearing difference between the two, not an oversight here.
    documented hook set (§2). This is not treated as a gap on its own: per `SPEC.md` §3,
    "forcing subsumes passive" — if question 2 (`PreInvocation`) turns out to be a reliable
    forcing read, this question is correctly answered by omission, not left unbuilt.
-2. **Forcing read.** `PreInvocation` ("fires before the model is called") is the only
-   candidate. Under the binding contract, **one forcing-capable hook can be a complete answer
-   to questions 1 and 2 together** — not a compromise standing in for a missing `SessionStart`.
-   Whether it actually is one depends entirely on its firing cardinality: once per user turn
-   would make it exactly that; more often (e.g. also firing on internal tool-loop
-   continuations within a turn) would make it too noisy to use without its own once-per-session
-   cursor. **Unverified — this is the single highest-priority thing to check, see §5.**
+2. **Forcing read.** `PreInvocation` is still the only candidate event name, and the config side
+   is now fully verified (§2) — but a live test moved the open question from "what's its firing
+   cardinality" to something more basic: **it didn't fire at all**, across two real `--print`
+   sessions (plain text, and a real tool call). Cardinality is now moot until presence is
+   explained — see §5, which now leads with this instead of the schema question it used to.
 3. **Standing instruction.** No context-file convention confirmed either way — no
    `CLAUDE.md`/`GEMINI.md`/`AGENTS.md` equivalent found in what's been checked so far. This is
    an open question, not a confirmed absence (§2). Per `SPEC.md` §3, this is the question whose
@@ -73,10 +96,15 @@ that's a real, load-bearing difference between the two, not an oversight here.
 4. **Command invocation.** Same open question as the Gemini CLI design, checked independently
    since there's no reason to assume Antigravity and Gemini CLI answer it the same way: does
    Antigravity have a custom-slash-command layer at all for `/perma-*` to live in? Unverified.
-5. **Headless invocation.** Depends entirely on whether Antigravity has a headless/
-   non-interactive CLI mode comparable to `gemini -p`. **Not checked yet** — no equivalent of
-   Gemini's `docs/cli/headless.md` has been fetched for Antigravity. Unverified — check before
-   assuming this trigger is buildable at all.
+5. **Headless invocation.** Confirmed: `agy --print`/`-p` is real, with `text`/`json`/
+   `stream-json` output — the nightly-consolidate use case is buildable on its own terms. **But
+   it may be a *different, non-overlapping* capability from question 2, not a mode that also
+   carries hooks** — the live test that found `PreInvocation` silent (item 2) used exactly this
+   headless mode. If hooks turn out to be interactive-session-only, "headless invocation" and
+   "forcing read" stop being two independent yes/no answers and become a real either/or: a
+   scheduled `--print` run would never carry the forcing-read instruction the way Claude Code's
+   nightly consolidate and session hooks both do today. Worth resolving deliberately, not
+   assumed away.
 
 Material-shift is what (2) and (3) produce together, not a sixth question — see `SPEC.md` §3.
 On-commit (guard + refresh) is unaffected: a git hook, not an AI-harness hook, no binding needed.
@@ -115,17 +143,23 @@ than the Gemini CLI design:
    `PreInvocation`, which is a different (heavier) design than Claude Code's. This goes first
    because, unlike the other four questions, a wrong or missing answer here produces no error —
    just a stream that silently stops updating.
-2. **Does `PreInvocation` fire once per user turn, or once per model call** (including internal
-   tool-loop continuations within a turn)? This is the most consequential open question for
-   whether Antigravity gets a clean binding at all: if it fires reliably once per turn, it is by
-   itself a complete answer to both question 1 (passive orientation) and question 2 (forcing
-   read) — one hook doing the whole read side, per the "forcing subsumes passive" rule in
-   `SPEC.md` §3, not a stopgap standing in for a missing `SessionStart`. If instead it fires
-   more often, it needs its own once-per-session cursor (`session-load.sh` already has this
-   pattern for Claude Code — `/tmp/.perma-loaded-<session-id>` — reusable if Antigravity exposes
-   a comparable session identifier).
-3. **Does Antigravity have a headless/non-interactive CLI mode** for the nightly consolidate?
-   Unchecked — this entire trigger may simply not be buildable until confirmed.
+2. **Does `PreInvocation` fire at all, in a real interactive session** — no longer a cardinality
+   question, a presence one. Live-tested 2026-09-13 (§2): config loads correctly, but across two
+   real `--print` (headless) runs, zero hook-execution log lines. Not yet tested in a genuine
+   interactive session, which is the next concrete step, not more config-reading — if it still
+   doesn't fire there, `PreInvocation` may not be a usable trigger at all, and the binding has no
+   read-side candidate left. *If* it does fire, cardinality (once per turn vs. more often) is
+   still the follow-up question, per the original reasoning: once per turn is a complete answer
+   to both question 1 and question 2 together (forcing subsumes passive, `SPEC.md` §3); more
+   often needs its own once-per-session cursor, reusable from `session-load.sh`'s existing
+   pattern for Claude Code.
+3. **Whether headless mode and hooks are mutually exclusive.** `agy --print` is confirmed real
+   (§2) — but the same live test that left item 2 unresolved used exactly this mode, so it's
+   live evidence, not speculation, that headless and hook-carrying might be two different
+   execution paths rather than one capability with two names. If so, the nightly consolidate
+   (headless, no hooks needed) and the forcing-read trigger (needs hooks) end up on genuinely
+   different footing for this harness, unlike Claude Code where the same session type carries
+   both.
 4. **Does a custom-slash-command mechanism exist** for the `/perma-*` command layer — same open
    question as the Gemini CLI design, checked independently since there's no reason to assume
    Antigravity and Gemini CLI answer it the same way.
