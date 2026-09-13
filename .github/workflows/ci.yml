@@ -314,7 +314,7 @@ jobs:
       - name: Syntax-check every shell script
         run: |
           set -e
-          for f in $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit; do
+          for f in $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit runtime/bindings/*/detect runtime/bindings/*/wire; do
             echo "checking $f"
             bash -n "$f"
           done
@@ -323,7 +323,7 @@ jobs:
         run: |
           set -e
           # extract each `<<'PY' ... PY` block per shell script and compile-check it
-          for f in $(find . -name "*.sh" -not -path "./.git/*"); do
+          for f in $(find . -name "*.sh" -not -path "./.git/*") runtime/bindings/*/detect runtime/bindings/*/wire; do
             awk '/<<.PY/{flag=1;next} /^PY$/{flag=0} flag' "$f" > /tmp/_heredoc_check.py
             if [ -s /tmp/_heredoc_check.py ]; then
               echo "checking embedded python in $f"
@@ -333,7 +333,7 @@ jobs:
 
       - name: ShellCheck
         run: |
-          shellcheck --severity=warning $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit
+          shellcheck --severity=warning $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit runtime/bindings/*/detect runtime/bindings/*/wire
 
   install-matrix:
     strategy:
