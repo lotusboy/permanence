@@ -11,9 +11,11 @@ implies a commitment or a date — this is a place to put things down, not a pro
   both bindings below sit on, including the deliberate decision that Claude Code's own wiring
   stays outside it. Build this first; it's how either binding below gets proven, not just
   proposed. [design/harness-binding-mechanism.md](./design/harness-binding-mechanism.md)
-- **Google Antigravity binding** — now the priority (flipped 2026-09-13; see below). A third
-  harness, on Antigravity's own (materially different) hook system; how many of the five it can
-  answer is still open. [design/antigravity-binding.md](./design/antigravity-binding.md)
+- **Google Antigravity binding** — the priority (flipped 2026-09-13; see below). A third harness,
+  on Antigravity's own (materially different) hook system. All five binding-contract questions
+  are now answered — three live-tested against a real session the same day, two confirmed
+  against the installed product's own bundled docs — so what's left is writing the code, not
+  resolving unknowns. [design/antigravity-binding.md](./design/antigravity-binding.md)
 - **Gemini CLI binding** — paused, not abandoned. Design-wise it had fewer open unknowns than
   Antigravity, but personal Google-account sign-in to Gemini CLI is currently being rejected
   server-side, reproduced twice on 2026-09-13 — Google's own message points individual accounts
