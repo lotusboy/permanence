@@ -127,7 +127,6 @@ jobs:
           # caught up to THIS PR's content, upgrading to some future release that adds one more
           # new tracked path, should self-heal in one --apply with no manual step at all. That's
           # simulated here with a throwaway commit on top of this checkout.
-          CURRENT_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           BASE_VERSION=$(tr -d '[:space:]' < _meta/VERSION)
 
           # A fresh runner has no git identity configured at all (unlike a dev machine, where
@@ -158,8 +157,15 @@ jobs:
           git commit -q -m "CI test only: simulate a future release adding TESTFILE.md"
           git tag "$NEXT_VERSION" HEAD
 
+          # A branch NAME isn't reliably fetchable here: a PR checkout leaves this repo in a
+          # detached/merge-ref state, not on a real local branch (the actual cause of a prior
+          # failure on a real runner -- "couldn't find remote ref <branch>", never hit locally
+          # since a dev checkout normally has the named branch). A commit SHA has no such
+          # ambiguity -- fetch that instead, from this checkout's own HEAD right now.
+          CURRENT_SHA=$(git rev-parse HEAD)
+
           export PERMA_UPDATE_SOURCE="${GITHUB_WORKSPACE}" PERMA_DIR="$SCRATCH"
-          export PERMA_UPDATE_BRANCH="$CURRENT_BRANCH"
+          export PERMA_UPDATE_BRANCH="$CURRENT_SHA"
 
           bash "$SCRATCH/runtime/update.sh" --apply
 
