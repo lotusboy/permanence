@@ -62,19 +62,22 @@ LATEST_TAG=$(git -C "$PERMA" tag --merged FETCH_HEAD --sort=-v:refname 2>/dev/nu
 TARGET="${LATEST_TAG:-FETCH_HEAD}"
 echo "installed: $CURRENT  →  latest: ${LATEST_TAG:-"(untagged, using $BRANCH HEAD)"}"
 
-if [ -n "$LATEST_TAG" ] && [ "$CURRENT" = "$LATEST_TAG" ]; then
+CHANGED=$(git -C "$PERMA" diff --name-status HEAD "$TARGET" -- "${PATHS[@]}" 2>/dev/null)
+
+# Deliberately no early-exit on CURRENT == LATEST_TAG alone — that string comparison is exactly
+# what let the tracked-path bug this file's own history records go undetected: _meta/VERSION can
+# claim the target while real content for a newly-tracked path still hasn't landed. Confirm
+# against the actual diff instead, every time; it's a cheap local git operation once already
+# fetched, not worth trusting a cached string to skip.
+if [ -z "$CHANGED" ]; then
+  echo ""
   echo "Already up to date."
   exit 0
 fi
 
 echo ""
 echo "Changed machinery files (HEAD..$TARGET):"
-CHANGED=$(git -C "$PERMA" diff --name-status HEAD "$TARGET" -- "${PATHS[@]}" 2>/dev/null)
-if [ -z "$CHANGED" ]; then
-  echo "  (none)"
-else
-  echo "$CHANGED" | sed 's/^/  /'
-fi
+echo "$CHANGED" | sed 's/^/  /'
 
 # Individual changed files — everything below works file-by-file from here on, not by the
 # top-level PATHS entry a file happens to live under. The old design skipped an entire directory

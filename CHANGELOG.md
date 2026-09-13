@@ -63,6 +63,27 @@ binding and an Antigravity binding — proposed, unbuilt, each verified against 
 docs and explicit about what remains unverified. Despite a shared `~/.gemini/` path prefix, the
 two need genuinely separate bindings: their hook vocabularies are entirely different.
 
+**Fixed a real correctness bug in `update.sh`, found by actually testing this release before
+shipping it, not just by lint/link checks.** Adding `ROADMAP.md`/`design` to the tracked paths
+above surfaced it: `update.sh` decides "am I fully caught up?" using its own currently-installed
+file list, which can't know a release added a brand new tracked path until *after* it's finished
+updating itself. Reproduced directly against a real scratch install: `_meta/VERSION` reached
+`v1.4.0` — full agreement, nothing pending — while `ROADMAP.md`/`design` were never delivered and
+never would be, since the next `/perma-upgrade` would see `v1.4.0 → v1.4.0` and stop at "already
+up to date" before checking again. Silent, permanent, and reported as success.
+
+Fixed at two layers: `update.sh` now notices when it has just updated itself and re-execs the
+updated script before deciding anything, rather than finishing on stale in-memory state (verified
+against a live simulated future release — one `--apply` invocation, no manual re-run, reaches the
+target version and delivers the new path). Separately, `/perma-upgrade`'s own Phase 5 now
+double-checks with a second dry-run after every apply regardless — the standing safety net for
+this whole class of bug, including for **this exact upcoming transition**: any install upgrading
+from before this fix shipped is running the *old*, unfixed script for that one upgrade, so the
+bash-level fix can't protect it (a real limitation of fixing a self-updating script, not an
+oversight) — but the AI-driven command layer isn't bound by "whatever bytecode already loaded"
+the way a running bash process is, so it catches it regardless of which side introduced or fixed
+the gap.
+
 No **Migration notes** — nothing in any existing stream changes shape.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step

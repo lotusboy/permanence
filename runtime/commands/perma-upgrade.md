@@ -74,12 +74,20 @@ On go-ahead:
 
 1. Run `~/permanence/runtime/update.sh --apply` — it checks out the non-conflicted machinery paths,
    re-runs `install.sh`, commits the change, and writes `_meta/VERSION`.
-2. For each "take theirs" conflict: check out that specific path from the latest tag and add it to the
+2. **Verify it actually finished — don't trust the printed "✅" alone.** Run
+   `~/permanence/runtime/update.sh` again (plain dry-run). If it says "Already up to date," the apply
+   genuinely completed. If it reports more changed files, run `--apply` once more before continuing —
+   this closes a real gap: a release that adds a whole new tracked path can, on an install whose
+   currently-running `update.sh` predates that fix, report success while quietly leaving that new path
+   undelivered, because the script decided "am I done?" using its own file list from *before* it updated
+   itself. A second dry-run catches this unconditionally, regardless of which version introduced or fixed
+   it — treat this as a standing step, not a one-time patch for one known case.
+3. For each "take theirs" conflict: check out that specific path from the latest tag and add it to the
    same commit (or a clearly-labeled follow-up commit — never silently folded in with no trace).
-3. For each accepted migration-note edit: apply it to the relevant stream file(s), in a separate commit
+4. For each accepted migration-note edit: apply it to the relevant stream file(s), in a separate commit
    from the machinery update (a stream edit and a machinery refresh are different kinds of change and
    should be revertable independently).
-4. Anything the owner chose "keep mine" or "I'll merge by hand" on: leave untouched, and say so plainly in
+5. Anything the owner chose "keep mine" or "I'll merge by hand" on: leave untouched, and say so plainly in
    the close-out so it isn't forgotten.
 
 ## Guardrails
