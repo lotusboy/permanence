@@ -81,12 +81,16 @@ differ, the local one wins below, and the difference is called out.
   and the tested location (`.agents/`, never discovered) were wrong simultaneously. Once both
   were corrected, hooks fired correctly inside plain `agy --print` (headless) sessions — headless
   and hook-carrying are **not** mutually exclusive on this harness. That concern is retired.
-- **A real, still-open caveat**: `workspacePaths` came back as an empty array in every captured
-  payload, even when `agy --print` was run from inside a real directory. A plain `--print`
-  invocation may not attach real workspace/project context automatically — possibly needs
-  `--add-dir` (a real CLI flag) or an actually-opened project, the way the GUI IDE works. This
-  matters directly for stream resolution (which Permanence stream a session belongs to) and is
-  the next concrete thing to check, not assumed either way.
+- **`workspacePaths` resolved, and the two surfaces behave oppositely.** Plain `agy --print` run
+  from inside a real directory left it empty — needs the explicit `--add-dir <path>` flag, which
+  then populates it correctly (live-confirmed). **The GUI IDE populates it automatically**, no
+  flag needed: opening a real project folder (`File → Open Folder`) and sending one message
+  produced `"workspacePaths":["/Users/lotusboy/workspaces/modo"]` — the actual real folder,
+  correctly, with zero configuration. Since opening a folder in the IDE is how this harness is
+  actually used day to day, stream resolution (mapping `workspacePaths[0]` through
+  `_meta/REGISTRY.md`, the same longest-prefix logic `resolve-stream.sh` already does) is now
+  confirmed buildable on the realistic path. The CLI path only matters if a headless/scripted use
+  case needs it later — `--add-dir` is the fix if so.
 - **No context-file convention confirmed either way still** — no `CLAUDE.md`/`GEMINI.md`/
   `AGENTS.md` equivalent found in the local hooks doc or elsewhere checked so far. Genuinely open,
   not just under-researched — the local doc that resolved everything else above doesn't mention
@@ -115,10 +119,10 @@ ladder.
    for `/perma-*` to live in? Not checked in this round of live testing.
 5. **Headless invocation.** Confirmed real (`agy --print`), **and confirmed to carry hooks
    correctly** — the earlier concern that headless and hook-carrying might be separate
-   capabilities was live-tested and retired (§2). One caveat remains: `workspacePaths` came back
-   empty in headless mode, so headless invocation may not carry real project context without an
-   explicit `--add-dir` — relevant to the nightly-consolidate use case specifically, not to the
-   forcing-read mechanism itself.
+   capabilities was live-tested and retired (§2). `workspacePaths` needs the explicit `--add-dir`
+   flag in this mode (confirmed working once added) — relevant only to a future headless/
+   scripted use case like the nightly consolidate, not to the forcing-read mechanism, which is
+   confirmed working with or without it.
 
 Material-shift is what (2) and (3) produce together, not a sixth question — see `SPEC.md` §3.
 On-commit (guard + refresh) is unaffected: a git hook, not an AI-harness hook, no binding needed.
@@ -146,19 +150,17 @@ runtime/bindings/antigravity/
 Sharply shorter than before this round of live testing — most of what blocked a first milestone
 is now resolved.
 
-1. **Does Antigravity read any global standing-instructions file** — still the top question,
-   unchanged reasoning: its absence is silent, so it's verified first, not last.
-2. **Does `--add-dir` (or an actually-opened project) make `workspacePaths` non-empty** — needed
-   to confirm stream resolution is possible at all from a `PreInvocation` payload; not yet
-   checked.
-3. **Does a custom-slash-command mechanism exist** for the `/perma-*` command layer — unchanged,
+1. **Does Antigravity read any global standing-instructions file** — the one remaining question
+   with the same weight as before: its absence is silent, so it's the priority.
+2. **Does a custom-slash-command mechanism exist** for the `/perma-*` command layer — unchanged,
    still open, checked independently since there's no reason to assume Antigravity and Gemini
    CLI answer it the same way.
-4. **Whether a Gemini CLI hook and an Antigravity hook can coexist on one machine** without
+3. **Whether a Gemini CLI hook and an Antigravity hook can coexist on one machine** without
    collision — lower priority now that Gemini CLI's own binding is paused (see
    `harness-binding-mechanism.md` §5), but still relevant if that pauses ends.
 
-Retired by live testing, no longer open: `PreInvocation`'s existence and cardinality, whether
+Retired by live testing, no longer open: `PreInvocation`'s existence and cardinality,
+`workspacePaths` resolution (confirmed automatic in the GUI, the realistic case), whether
 headless mode excludes hooks, the exact I/O schema for `PreInvocation`/`PreToolUse`.
 
 ## 6. Non-goals
