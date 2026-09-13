@@ -1,0 +1,96 @@
+#!/bin/bash
+# claude-code/wire — connects Permanence to Claude Code: commands (command invocation), the
+# CLAUDE.md standing instruction, and the SessionStart/UserPromptSubmit hooks in settings.json
+# (passive orientation + the forcing read). Migrated out of install.sh verbatim — see
+# design/harness-binding-mechanism.md §2 for why Claude Code's wiring now lives here like any
+# other binding instead of staying a permanent special case.
+#
+# Exit code: only the settings.json merge failing is treated as a real wire failure (the one
+# genuine hard-failure path install.sh already tracked before this migration). A command-copy
+# failure is reported but historically wasn't fatal to the overall install either — preserved
+# as-is rather than tightening behavior nobody asked for. A mismatched-marker CLAUDE.md WARN
+# (see block-merge.sh) is a deliberate soft warning, never a wire failure.
+set -u
+PERMA="${PERMA_DIR:-$HOME/permanence}"
+CMD_SRC="$PERMA/runtime/commands"
+CMD_DST="$HOME/.claude/commands"
+SHA=$(git -C "$PERMA" rev-parse --short HEAD 2>/dev/null || echo "unversioned")
+
+WIRE_FAILED=0
+
+# Commands: copy with version marker appended (Copy-on-install, NOT symlinks — installed copies
+# carry a version marker; symlinked commands would track whatever ref the working tree has
+# checked out).
+mkdir -p "$CMD_DST"
+for f in "$CMD_SRC"/*.md; do
+  name=$(basename "$f")
+  if cp "$f" "$CMD_DST/$name"; then
+    printf '\n<!-- installed-from: ~/permanence/runtime/commands/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$CMD_DST/$name"
+    echo "  command: $name"
+  else
+    echo "  command: $name — FAILED to copy"
+  fi
+done
+
+# CLAUDE.md: manage ONLY the delimited Permanence block, never the rest of a file we don't own.
+source "$PERMA/runtime/lib/block-merge.sh"
+CMD_MD="$HOME/.claude/CLAUDE.md"
+BLOCK_SRC="$PERMA/runtime/claude-md-block.md"
+if _perma_block_merge "$CMD_MD" "$BLOCK_SRC"; then
+  echo "  CLAUDE.md: Permanence block refreshed"
+fi
+
+# settings.json: safely MERGE the SessionStart + UserPromptSubmit hooks + ~/permanence permission
+# (add only if absent; preserve everything else; back up before writing).
+SETTINGS="$HOME/.claude/settings.json"
+if command -v python3 >/dev/null 2>&1; then
+  if ! python3 - "$SETTINGS" "$PERMA" <<'PY'
+import json, sys, os, shutil
+path, perma = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+data = {}
+if os.path.exists(path):
+    try:
+        data = json.load(open(path))
+    except Exception:
+        print("  settings.json: present but unparseable — NOT touched. Add the hook + permission by hand.")
+        sys.exit(1)
+cmd = f"{perma}/runtime/session-start.sh"
+changed = False
+ad = data.setdefault("permissions", {}).setdefault("additionalDirectories", [])
+if perma not in ad:
+    ad.append(perma); changed = True
+ss = data.setdefault("hooks", {}).setdefault("SessionStart", [])
+present = any(isinstance(e, dict) and any(h.get("command") == cmd for h in e.get("hooks", [])) for e in ss)
+if not present:
+    ss.append({"hooks": [{"type": "command", "command": cmd, "timeout": 10}]}); changed = True
+# UserPromptSubmit: session-load — RELIABLE per-session context auto-load (SessionStart context is
+# passive; this fires on the user's first prompt so the model actually reads the stream). Core, so
+# auto-wired (unlike events, which is opt-in).
+cmd_load = f"{perma}/runtime/session-load.sh"
+ups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+if not any(isinstance(e, dict) and any(h.get("command") == cmd_load for h in e.get("hooks", [])) for e in ups):
+    ups.insert(0, {"hooks": [{"type": "command", "command": cmd_load, "timeout": 10}]}); changed = True
+if changed:
+    if os.path.exists(path): shutil.copy(path, path + ".perma-bak")
+    json.dump(data, open(path, "w"), indent=2)
+    print("  settings.json: SessionStart + session-load (auto context) hooks + ~/permanence permission merged in (backup: settings.json.perma-bak)")
+else:
+    print("  settings.json: hook + permission already present")
+PY
+  then
+    echo "  settings.json: FAILED to configure automatically — add the hook + permission by hand (see message above)"
+    WIRE_FAILED=1
+  fi
+else
+  cat <<SETTINGS
+  settings.json: python3 not found — add these by hand to ~/.claude/settings.json (MERGE, don't overwrite):
+      "permissions": { "additionalDirectories": ["$PERMA"] },
+      "hooks": {
+        "SessionStart": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/session-start.sh", "timeout": 10 } ] } ],
+        "UserPromptSubmit": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/session-load.sh", "timeout": 10 } ] } ]
+      }
+SETTINGS
+fi
+
+exit "$WIRE_FAILED"

@@ -1,0 +1,11 @@
+#!/bin/bash
+# claude-code/detect — exit 0 iff Claude Code is usable on this machine.
+#
+# Claude Code is the one harness every Permanence install already has, by construction — you
+# need some AI tool with shell access just to run install.sh in the first place. Migrating it
+# into runtime/bindings/ (design/harness-binding-mechanism.md §2) is about symmetry with other
+# bindings, not new gatekeeping, so on any machine that got this far, this check will
+# essentially always pass. No side effects, per the detect/wire interface's own contract.
+[ -d "$HOME/.claude" ] && exit 0
+command -v claude >/dev/null 2>&1 && exit 0
+exit 1
