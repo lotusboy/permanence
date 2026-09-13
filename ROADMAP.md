@@ -1,23 +1,25 @@
 # Roadmap
 
 Forward-looking only. `CHANGELOG.md` records what's shipped; this records what might be next —
-and it's not just adapters. Anything with real design detail gets its own file under
+and it's not just bindings. Anything with real design detail gets its own file under
 [`design/`](./design/), linked from here; anything smaller stays a line item. No status here
 implies a commitment or a date — this is a place to put things down, not a promise.
 
 ## In design
 
-- **Gemini CLI adapter** — a real second Tier 1 harness alongside Claude Code, using Gemini
-  CLI's own hook system. [design/gemini-cli-adapter.md](./design/gemini-cli-adapter.md)
-- **Google Antigravity adapter** — a third Tier 1 harness, on Antigravity's own (materially
-  different) hook system. [design/antigravity-adapter.md](./design/antigravity-adapter.md)
+- **Gemini CLI binding** — a second harness alongside Claude Code, answering all five of
+  `SPEC.md`'s binding questions if its hook contract allows.
+  [design/gemini-cli-binding.md](./design/gemini-cli-binding.md)
+- **Google Antigravity binding** — a third harness, on Antigravity's own (materially different)
+  hook system; how many of the five it can answer is still open.
+  [design/antigravity-binding.md](./design/antigravity-binding.md)
 
 ## Considered, not started
 
 - **A model-agnostic front end** (something that routes between Claude/Gemini/others under one
-  session) needs no new Permanence work of its own once a harness has an adapter — Permanence
+  session) needs no new Permanence work of its own once a harness has a binding — Permanence
   binds to *whatever runs the session* (hooks, shell, a global config file), not to the model
-  behind it. Worth remembering if this comes up again: it's not a fourth adapter, it's a
+  behind it. Worth remembering if this comes up again: it's not a fourth binding, it's a
   consequence of the first three.
 - F27 — `templates/` ships four of `SPEC.md`'s six canonical files (no `STRATEGY.md` or stream
   `README.md` skeleton). Logged in `CHANGELOG.md`'s `v1.3.0` entry as deliberately deferred.

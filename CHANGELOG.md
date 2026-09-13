@@ -16,23 +16,54 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
-## [1.4.0] — `ROADMAP.md` + `design/`: a place for what's next, tracked by `/perma-upgrade`
+## [1.4.0] — the binding contract: decoupling Permanence from any one AI tool's mechanics
 
-**New: forward-looking planning has a home in the template itself.** Added root `ROADMAP.md`
-(undated possibility — this file's own mirror, which stays dated history) and a `design/` folder
-for anything substantial enough to need its own doc. Both are now tracked by `runtime/update.sh`
-alongside `runtime/`, `.githooks/`, `templates/`, and the other root docs — a future edit to the
-roadmap or a design doc reaches existing installs via `/perma-upgrade` like everything else,
-rather than being invisible to it the way `axis/`'s historical review runs deliberately are.
+**New in `SPEC.md` §3: the binding contract.** Permanence's support for an AI tool is now defined
+as five independent questions — passive orientation, forcing read, standing instruction, command
+invocation, headless invocation — rather than a tool being labelled wholesale. Two properties
+that weren't previously written down anywhere:
 
-**First two entries**: design docs for a Gemini CLI adapter and a Google Antigravity adapter —
-proposed, unbuilt, verified against each tool's own current docs rather than assumed. Notably,
-despite sharing a `~/.gemini/` path prefix, the two turned out to need genuinely separate
-designs — Gemini CLI's hooks (`SessionStart`, `BeforeAgent`, …) and Antigravity's
-(`PreToolUse`, `PreInvocation`, …) are two different vocabularies, not variants of one.
+- **Forcing subsumes passive.** A harness with only one usable injection point binds it to the
+  forcing read and omits passive orientation entirely. That is a *complete* binding, not a
+  degraded one.
+- **The standing-instruction question is the one whose absence is silent.** Without it the model
+  never learns to update streams unprompted, nothing raises an error, and the failure surfaces
+  only as an empty `LOG.md` weeks later. It should be verified first, not last.
 
-No **Migration notes** — nothing in any existing stream changes shape; this is purely new
-tracked machinery paths and new planning docs.
+Also recorded: material-shift is not a separate question (it's what the forcing read and the
+standing instruction produce together), and on-commit/on-schedule are not harness questions at
+all — git fires one, the OS scheduler the other.
+
+**Numbered tiers (Tier 1/Tier 2) are retired.** A tier is ordinal; the five questions are a set.
+Two tools with opposite failure modes — one reads manually but writes automatically, one reads
+automatically but silently never writes — collapsed to the same "Tier 2" label, hiding exactly
+the difference that matters most. Each binding now states plainly **what the owner carries**.
+`docs/TOOL-SUPPORT.md` gains a capability table; `README.md` keeps its plain-English "fully
+automated on Claude Code", now phrased as what you carry rather than a tier number. Historical
+CHANGELOG entries still mention tiers and are deliberately left alone — they record what those
+releases actually said.
+
+**A binding is now a directory.** `runtime/bindings/<harness>/` holds `detect` and `wire`, plus
+any small translators that harness's hook contract needs; the core (`session-start.sh`,
+`session-load.sh`, `runtime/commands/*.md`, the block files) emits harness-neutral text and never
+varies. The intent is that `runtime/install.sh` iterates `runtime/bindings/*/`, so **adding a
+harness adds a directory and changes no existing file.** *(Contract and structure only — the
+iteration in `install.sh` is not implemented in this release.)*
+
+**Two corrections to `docs/TOOL-SUPPORT.md`, found while researching the above.** Both were
+shipped inaccuracies: Gemini CLI was listed among tools reading `AGENTS.md` (it reads `GEMINI.md`
+and does not support `AGENTS.md` — confirmed against its own configuration reference), and
+Antigravity was described as reading `AGENTS.md` when its context-file convention isn't confirmed
+either way. Anyone who tried Permanence on Gemini CLI expecting that path to work would have got
+nothing, with no error.
+
+**New: `ROADMAP.md` + `design/`**, both tracked by `runtime/update.sh` so a future edit reaches
+existing installs via `/perma-upgrade`. First two entries are design docs for a Gemini CLI
+binding and an Antigravity binding — proposed, unbuilt, each verified against that tool's own
+docs and explicit about what remains unverified. Despite a shared `~/.gemini/` path prefix, the
+two need genuinely separate bindings: their hook vocabularies are entirely different.
+
+No **Migration notes** — nothing in any existing stream changes shape.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step
 
