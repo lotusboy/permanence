@@ -391,6 +391,16 @@ jobs:
           print("settings.json: hooks + permission OK")
           PY
 
+      - name: Verify Antigravity's detect correctly reports absent on a CI runner
+        shell: bash
+        run: |
+          set -e
+          if bash "${PERMA_DIR}/runtime/bindings/antigravity/detect"; then
+            echo "FAILED: antigravity/detect exited 0, but no Antigravity install exists on this runner"
+            exit 1
+          fi
+          echo "antigravity/detect: correctly reports absent (proves the gate itself works, not a mocked agy)"
+
       - name: Verify the scheduled task actually exists (real backend for this OS)
         shell: bash
         run: |
