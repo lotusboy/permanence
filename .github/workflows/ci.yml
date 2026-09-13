@@ -401,6 +401,16 @@ jobs:
           fi
           echo "antigravity/detect: correctly reports absent (proves the gate itself works, not a mocked agy)"
 
+      - name: Verify Devin's detect correctly reports absent on a CI runner
+        shell: bash
+        run: |
+          set -e
+          if bash "${PERMA_DIR}/runtime/bindings/devin/detect"; then
+            echo "FAILED: devin/detect exited 0, but no Devin CLI install exists on this runner"
+            exit 1
+          fi
+          echo "devin/detect: correctly reports absent (proves the gate itself works, not a mocked devin)"
+
       - name: Verify the scheduled task actually exists (real backend for this OS)
         shell: bash
         run: |
