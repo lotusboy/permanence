@@ -135,6 +135,11 @@ if git -C "$PERMA" diff --name-only HEAD "$TARGET" -- CHANGELOG.md 2>/dev/null |
 fi
 
 if [ "$MODE" = "dry-run" ]; then
+  if printf '%s\n' "${CHANGED_FILES[@]:-}" | grep -qx "runtime/update.sh"; then
+    echo ""
+    echo "ℹ️  runtime/update.sh itself is in this range — --apply may take one extra internal step"
+    echo "   (re-checking with the updated script) before everything above is fully delivered."
+  fi
   echo ""
   echo "Dry run only — nothing changed. Re-run with --apply to fetch and commit the non-conflicted machinery changes."
   exit 0
@@ -163,6 +168,42 @@ fi
 if [ "${#DELETED_FILES[@]}" -gt 0 ]; then
   git -C "$PERMA" rm -q -- "${DELETED_FILES[@]}" 2>/dev/null || true
 fi
+
+# If update.sh itself just landed, everything computed above (PATHS, CHANGED_FILES, CONFLICTS)
+# came from the OLD script and no longer reflects the truth — a release that adds a whole new
+# tracked path (not just changes an existing one) means the OLD PATHS array never even looked
+# for it, so this run's view of "what changed" is incomplete by construction, not just stale.
+# Left alone, the block below would still write VERSION = LATEST_TAG (nothing in the CURRENT
+# CONFLICTS list blocks it) — falsely claiming full currency while the untracked-until-now paths
+# are silently never delivered: the next run sees CURRENT == LATEST_TAG and stops at "Already up
+# to date" before ever looking again. Reproduced directly (not reasoned about): a scratch install
+# genuinely reached that false "up to date" state with a real new top-level path missing.
+# Fix: commit only what THIS run found (never VERSION — that would be the false claim), then
+# re-exec the just-updated script so it re-checks from a clean slate against its own current path
+# list. Depth-guarded, though this should resolve in exactly one hop: after the commit below,
+# update.sh's checked-out content already matches TARGET, so the re-exec's own diff won't see
+# itself as changed a second time.
+self_updated=false
+for f in "${APPLY_FILES[@]:-}"; do
+  [ "$f" = "runtime/update.sh" ] && self_updated=true && break
+done
+if $self_updated; then
+  chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* 2>/dev/null
+  git -C "$PERMA" add "${APPLY_FILES[@]}" 2>/dev/null
+  if ! git -C "$PERMA" diff --cached --quiet; then
+    git -C "$PERMA" commit -q -m "perma-upgrade: machinery refreshed (update.sh itself changed — continuing with the updated script) ($SRC)"
+  fi
+  DEPTH="${_PERMA_UPDATE_REEXEC_DEPTH:-0}"
+  if [ "$DEPTH" -ge 3 ]; then
+    echo "update.sh kept changing across $DEPTH re-runs without settling — stopping rather than looping forever. Run /perma-upgrade again by hand to continue." >&2
+    exit 1
+  fi
+  echo ""
+  echo "runtime/update.sh itself just changed — re-checking with the updated script to see what it now tracks ..."
+  export _PERMA_UPDATE_REEXEC_DEPTH=$((DEPTH + 1))
+  exec bash "$PERMA/runtime/update.sh" --apply
+fi
+
 chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* 2>/dev/null
 echo "re-running install.sh (re-wires hooks + commands) ..."
 bash "$PERMA/runtime/install.sh"
