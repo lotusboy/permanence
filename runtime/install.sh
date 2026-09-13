@@ -59,33 +59,11 @@ if [ -n "$(_existing_job_command "perma-cogdebt" 2>/dev/null)" ]; then
 fi
 
 # 4. CLAUDE.md + AGENTS.md: manage ONLY the delimited Permanence block, never the rest of a
-#    file we don't own. `_perma_block_merge` is the one place that splices into someone else's
-#    file, so it carries the safety net: refuse to touch a mismatched begin/end pair (writing
-#    through one would delete everything after it) and back up before any in-place replace.
-_perma_block_merge() {  # _perma_block_merge <target-file> <block-source-file>
-  local dst="$1" src="$2" begins ends begin_line end_line
-  [ -f "$src" ] || return 0
-  mkdir -p "$(dirname "$dst")"
-  if [ -f "$dst" ] && grep -q '<!-- perma:begin' "$dst" 2>/dev/null; then
-    begins=$(grep -c '<!-- perma:begin' "$dst")
-    ends=$(grep -c '<!-- perma:end -->' "$dst")
-    begin_line=$(grep -n '<!-- perma:begin' "$dst" | head -1 | cut -d: -f1)
-    end_line=$(grep -n '<!-- perma:end -->' "$dst" | head -1 | cut -d: -f1)
-    if [ "$begins" -ne "$ends" ] || [ -z "$end_line" ] || [ "$end_line" -le "$begin_line" ]; then
-      echo "  WARN — $dst has a perma:begin marker with no matching perma:end after it (or a mismatched count). Left COMPLETELY UNTOUCHED — writing here would delete everything after the marker. Fix or remove the marker(s) by hand, then re-run install.sh."
-      return 1
-    fi
-    cp "$dst" "$dst.perma-bak"
-    awk -v s="$src" '
-      /<!-- perma:begin/ {while ((getline line < s) > 0) print line; close(s); skip=1; next}
-      /<!-- perma:end -->/ {skip=0; next}
-      !skip {print}' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
-  else
-    # No existing marker: this can only ever ADD content (prepend), never destroy any — no
-    # backup needed, because nothing here can lose data.
-    { cat "$src"; echo; cat "$dst" 2>/dev/null; } > "$dst.tmp" && mv "$dst.tmp" "$dst"
-  fi
-}
+#    file we don't own. `_perma_block_merge` (runtime/lib/block-merge.sh) is the one place that
+#    splices into someone else's file, so it carries the safety net there: refuse to touch a
+#    mismatched begin/end pair (writing through one would delete everything after it) and back up
+#    before any in-place replace.
+source "$PERMA/runtime/lib/block-merge.sh"
 
 CMD_MD="$HOME/.claude/CLAUDE.md"
 BLOCK_SRC="$PERMA/runtime/claude-md-block.md"
