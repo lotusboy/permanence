@@ -1,0 +1,93 @@
+#!/bin/bash
+# devin/wire — connects Permanence to Devin CLI: SessionStart + UserPromptSubmit hooks in the
+# global ~/.config/devin/config.json "hooks" key (passive orientation + the forcing read), and
+# the standing instruction in the global ~/.config/devin/AGENTS.md. See design/devin-binding.md
+# for the confirmed mechanics this implements — nothing here was guessed. Claude Code's own
+# hooks are deliberately NOT reused: live-tested and confirmed not to fire, despite one of
+# Devin's own bundled docs claiming they would. This writes the GLOBAL user config, never
+# .devin/hooks.v1.json, which lives inside whatever project repo is open and would violate
+# invariant 1 if Permanence-referencing content landed there.
+#
+# The command-invocation (Skills) layer is deliberately NOT built here yet —
+# design/devin-binding.md §5 item 4 says that needs its own live-fire test first, which this
+# pass didn't include.
+set -u
+PERMA="${PERMA_DIR:-$HOME/permanence}"
+BINDING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+WIRE_FAILED=0
+
+# config.json: safely MERGE the SessionStart + UserPromptSubmit hooks (add only if absent;
+# preserve everything else; back up before writing) — same idempotent-merge idiom
+# install.sh's own settings.json step and the other bindings' wire scripts already use.
+CONFIG_JSON="$HOME/.config/devin/config.json"
+if ! python3 - "$CONFIG_JSON" "$BINDING_DIR" <<'PY'
+import json, sys, os, shutil
+
+path, binding_dir = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+data = {}
+if os.path.exists(path):
+    try:
+        data = json.load(open(path))
+    except Exception:
+        print("  config.json: present but unparseable — NOT touched. Add the hooks by hand.")
+        sys.exit(1)
+
+session_start_cmd = f"{binding_dir}/session-start-hook.sh"
+prompt_submit_cmd = f"{binding_dir}/user-prompt-submit-hook.sh"
+changed = False
+
+hooks = data.setdefault("hooks", {})
+
+ss = hooks.get("SessionStart") or []
+present = any(
+    isinstance(g, dict) and any(
+        isinstance(h, dict) and h.get("command") == session_start_cmd
+        for h in g.get("hooks", [])
+    )
+    for g in ss
+)
+if not present:
+    ss.append({"matcher": "", "hooks": [{"type": "command", "command": session_start_cmd, "timeout": 10}]})
+    hooks["SessionStart"] = ss
+    changed = True
+
+ups = hooks.get("UserPromptSubmit") or []
+present = any(
+    isinstance(g, dict) and any(
+        isinstance(h, dict) and h.get("command") == prompt_submit_cmd
+        for h in g.get("hooks", [])
+    )
+    for g in ups
+)
+if not present:
+    ups.insert(0, {"matcher": "", "hooks": [{"type": "command", "command": prompt_submit_cmd, "timeout": 10}]})
+    hooks["UserPromptSubmit"] = ups
+    changed = True
+
+if changed:
+    if os.path.exists(path):
+        shutil.copy(path, path + ".perma-bak")
+    json.dump(data, open(path, "w"), indent=2)
+    print("  config.json: SessionStart + UserPromptSubmit hooks merged in (backup: config.json.perma-bak)")
+else:
+    print("  config.json: hooks already present")
+PY
+then
+  echo "  config.json: FAILED to configure automatically — add the hooks by hand (see message above)"
+  WIRE_FAILED=1
+fi
+
+# AGENTS.md: standing instruction, global (live-tested: `devin rules list` shows "AGENTS
+# [Standard] always-on" once this file exists). Same delimited-block splice as CLAUDE.md's and
+# every other binding's standing-instruction file — refuse-on-mismatched-marker, back up before
+# any in-place edit.
+source "$PERMA/runtime/lib/block-merge.sh"
+DEVIN_AGENTS_MD="$HOME/.config/devin/AGENTS.md"
+BLOCK_SRC="$PERMA/runtime/devin-agents-md-block.md"
+if _perma_block_merge "$DEVIN_AGENTS_MD" "$BLOCK_SRC"; then
+  echo "  AGENTS.md: Permanence block refreshed at $DEVIN_AGENTS_MD"
+fi
+
+exit "$WIRE_FAILED"
