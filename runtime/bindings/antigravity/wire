@@ -1,0 +1,84 @@
+#!/bin/bash
+# antigravity/wire — connects Permanence to Antigravity: the PreInvocation + PreToolUse hooks in
+# the global hooks.json (forcing read + a safe always-allow default for tool gating), and the
+# standing instruction in the global GEMINI.md. See design/antigravity-binding.md for the
+# confirmed mechanics this implements — hooks.json's location and schema, GEMINI.md's discovery
+# rule — all live-tested, not assumed.
+#
+# The Skills/command-invocation layer is deliberately NOT built here yet:
+# design/antigravity-binding.md §5/§6 say that part needs a real live-fire test against the
+# installed product before committing to its exact shape, since only the bundled docs (not a
+# real firing) confirm how Skills activate.
+set -u
+PERMA="${PERMA_DIR:-$HOME/permanence}"
+BINDING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+WIRE_FAILED=0
+
+# hooks.json: the global ~/.gemini/config/hooks.json is what this version of Antigravity
+# actually reads — confirmed by live testing that a workspace-local .agents/hooks.json was NOT
+# discovered. Two NAMESPACED top-level hook names (not the raw event names) so re-running is
+# idempotent by checking our own keys, and nothing else in the file — another tool's own named
+# hooks — is ever touched.
+HOOKS_JSON="$HOME/.gemini/config/hooks.json"
+if ! python3 - "$HOOKS_JSON" "$BINDING_DIR" <<'PY'
+import json, sys, os, shutil
+
+path, binding_dir = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+data = {}
+if os.path.exists(path):
+    try:
+        data = json.load(open(path))
+    except Exception:
+        print("  hooks.json: present but unparseable — NOT touched. Add the hooks by hand.")
+        sys.exit(1)
+
+pre_invocation_cmd = f"{binding_dir}/pre-invocation-hook.sh"
+pre_tool_use_cmd = f"{binding_dir}/pre-tool-use-hook.sh"
+changed = False
+
+pi = data.get("perma-pre-invocation") or {}
+pi_handlers = pi.get("PreInvocation") or []
+if not any(isinstance(h, dict) and h.get("command") == pre_invocation_cmd for h in pi_handlers):
+    pi["PreInvocation"] = [{"type": "command", "command": pre_invocation_cmd, "timeout": 10}]
+    data["perma-pre-invocation"] = pi
+    changed = True
+
+pt = data.get("perma-pre-tool-use") or {}
+pt_groups = pt.get("PreToolUse") or []
+present = any(
+    isinstance(g, dict) and any(
+        isinstance(h, dict) and h.get("command") == pre_tool_use_cmd
+        for h in g.get("hooks", [])
+    )
+    for g in pt_groups
+)
+if not present:
+    pt["PreToolUse"] = [{"matcher": "*", "hooks": [{"type": "command", "command": pre_tool_use_cmd, "timeout": 10}]}]
+    data["perma-pre-tool-use"] = pt
+    changed = True
+
+if changed:
+    if os.path.exists(path):
+        shutil.copy(path, path + ".perma-bak")
+    json.dump(data, open(path, "w"), indent=2)
+    print("  hooks.json: PreInvocation + PreToolUse hooks merged in (backup: hooks.json.perma-bak)")
+else:
+    print("  hooks.json: hooks already present")
+PY
+then
+  echo "  hooks.json: FAILED to configure automatically — add the hooks by hand (see message above)"
+  WIRE_FAILED=1
+fi
+
+# GEMINI.md: standing instruction, global (live-tested discovery location). Same delimited-block
+# splice as CLAUDE.md/AGENTS.md — refuse-on-mismatched-marker, back up before any in-place edit.
+source "$PERMA/runtime/lib/block-merge.sh"
+GEMINI_MD="$HOME/.gemini/GEMINI.md"
+BLOCK_SRC="$PERMA/runtime/gemini-md-block.md"
+if _perma_block_merge "$GEMINI_MD" "$BLOCK_SRC"; then
+  echo "  GEMINI.md: Permanence block refreshed"
+fi
+
+exit "$WIRE_FAILED"
