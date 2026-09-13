@@ -173,6 +173,12 @@ jobs:
           echo "NEXT_VERSION=$NEXT_VERSION" >> "$GITHUB_ENV"
           echo "SCRATCH=$SCRATCH" >> "$GITHUB_ENV"
 
+          # This job has a later step that also inspects tags/HEAD in this same checkout --
+          # leaving these behind would make its "latest tag" resolve to this step's own test
+          # tag instead of a real release. Clean up regardless (the later step is also written
+          # to be robust to this independently, but no reason to rely on only one of the two).
+          git tag -d "$BASE_VERSION" "$NEXT_VERSION" 2>/dev/null || true
+
       - name: Verify by content, not just the VERSION string
         shell: bash
         run: |
@@ -211,15 +217,22 @@ jobs:
           # completion while tracked content is actually missing -- the original bug this whole
           # release exists to fix. Safe outcomes: either it genuinely completes, or it correctly
           # stops short and says so. The one unsafe outcome -- claims done, isn't -- fails the job.
-          PREV_TAG=$(git tag --sort=-v:refname | head -1)
+          # The previous step commits and tags directly in this same checkout to simulate a
+          # future release -- so neither `git tag | head -1` nor HEAD nor the _meta/VERSION file
+          # on disk can be trusted here; all three now reflect that step's test state, not this
+          # PR's real one. THIS_SHA comes from GitHub's own context instead (immune to anything a
+          # prior step did), and THIS_VERSION is read from that exact commit's tree, not off disk.
+          THIS_SHA="${GITHUB_SHA}"
+          THIS_VERSION=$(git show "$THIS_SHA:_meta/VERSION" | tr -d '[:space:]')
+
+          # Real, already-tagged releases only -- excludes the previous step's own "-ci-next"
+          # simulated tag, which would otherwise be "the latest tag" in this same checkout.
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v -- '-ci-next$' | head -1)
           if [ -z "$PREV_TAG" ]; then
             echo "No existing shipped tag yet -- nothing to test this transition against."
             exit 0
           fi
-          echo "Testing: latest shipped ($PREV_TAG) -> this PR's HEAD, using that release's own script"
-
-          THIS_SHA=$(git rev-parse HEAD)
-          THIS_VERSION=$(tr -d '[:space:]' < _meta/VERSION)
+          echo "Testing: latest shipped ($PREV_TAG) -> this PR's real HEAD ($THIS_SHA), using that release's own script"
 
           # Without a tag matching THIS_VERSION, the OLD script's own tag resolution
           # (`git tag --merged FETCH_HEAD`) finds nothing newer than $PREV_TAG and short-circuits
