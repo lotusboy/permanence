@@ -76,12 +76,16 @@ On go-ahead:
    re-runs `install.sh`, commits the change, and writes `_meta/VERSION`.
 2. **Verify it actually finished — don't trust the printed "✅" alone.** Run
    `~/permanence/runtime/update.sh` again (plain dry-run). If it says "Already up to date," the apply
-   genuinely completed. If it reports more changed files, run `--apply` once more before continuing —
-   this closes a real gap: a release that adds a whole new tracked path can, on an install whose
-   currently-running `update.sh` predates that fix, report success while quietly leaving that new path
-   undelivered, because the script decided "am I done?" using its own file list from *before* it updated
-   itself. A second dry-run catches this unconditionally, regardless of which version introduced or fixed
-   it — treat this as a standing step, not a one-time patch for one known case.
+   genuinely completed. This closes a real gap: a release that adds a whole new tracked path can, on an
+   install whose currently-running `update.sh` predates that fix, report success while quietly leaving
+   that new path undelivered, because the script decided "am I done?" using its own file list from
+   *before* it updated itself — treat this verification as a standing step, not a one-time check.
+   If the dry-run instead reports more changed files, one of two things is true, and the dry-run's own
+   output tells you which: if it lists them as plain changes with no "⚠️ file(s) need review," run
+   `--apply` once more — that finishes it. If it flags them as needing review instead, treat them exactly
+   like any Phase 3 conflict (a brand-new file the owner never touched reads the same to `update.sh` as
+   one they deliberately removed, so it asks rather than guessing): they were never applied on your
+   original install, so "take theirs" is almost always the right call — negotiate quickly, then apply.
 3. For each "take theirs" conflict: check out that specific path from the latest tag and add it to the
    same commit (or a clearly-labeled follow-up commit — never silently folded in with no trace).
 4. For each accepted migration-note edit: apply it to the relevant stream file(s), in a separate commit

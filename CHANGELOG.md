@@ -72,17 +72,26 @@ updating itself. Reproduced directly against a real scratch install: `_meta/VERS
 never would be, since the next `/perma-upgrade` would see `v1.4.0 → v1.4.0` and stop at "already
 up to date" before checking again. Silent, permanent, and reported as success.
 
-Fixed at two layers: `update.sh` now notices when it has just updated itself and re-execs the
-updated script before deciding anything, rather than finishing on stale in-memory state (verified
-against a live simulated future release — one `--apply` invocation, no manual re-run, reaches the
-target version and delivers the new path). Separately, `/perma-upgrade`'s own Phase 5 now
-double-checks with a second dry-run after every apply regardless — the standing safety net for
-this whole class of bug, including for **this exact upcoming transition**: any install upgrading
-from before this fix shipped is running the *old*, unfixed script for that one upgrade, so the
-bash-level fix can't protect it (a real limitation of fixing a self-updating script, not an
-oversight) — but the AI-driven command layer isn't bound by "whatever bytecode already loaded"
-the way a running bash process is, so it catches it regardless of which side introduced or fixed
-the gap.
+Fixed at two layers. **`update.sh` now notices when it has just updated itself** and re-execs the
+updated script before deciding anything, rather than finishing on stale in-memory state — verified
+against a live simulated future release: one `--apply` invocation, no manual re-run, reaches the
+target version and delivers the new path. This protects every release from this one on.
+
+**The "already up to date" shortcut is also gone** — it used to trust `_meta/VERSION == latest tag`
+outright; now it always confirms against a real diff first. That mattered for a reason beyond this
+release: without it, even `/perma-upgrade`'s own verification dry-run (added to Phase 5) would have
+kept trusting the same lying string and reported nothing wrong.
+
+**Honest limit, found by testing this exact upcoming transition, not assumed:** the bash-level fix
+can't protect an install upgrading *from before this fix shipped* — that one upgrade runs the
+*old*, unfixed script, which has no way to know to re-exec itself. Confirmed what actually happens
+instead: `/perma-upgrade`'s verification pass correctly notices the new paths are missing (thanks
+to the shortcut removal above), but then treats them as needing review, the same as a genuine
+customization — a missing file and a deliberately-deleted one look structurally identical to a
+per-file diff. So this specific transition surfaces one small, safe, one-time decision — "take
+theirs" on 3 new files, via the existing negotiation flow — rather than either silently losing them
+(the original bug) or silently completing (which isn't actually achievable here). Every release
+after this one goes fully automatic, proven separately.
 
 No **Migration notes** — nothing in any existing stream changes shape.
 

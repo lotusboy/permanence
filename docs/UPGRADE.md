@@ -43,9 +43,15 @@ one. `update.sh` decides what's changed using the copy of itself already sitting
 — which can't know about a brand new path until *after* it's finished updating itself. Left
 alone, that could report success while quietly leaving the new path undelivered.
 
-You don't need to do anything about this — `/perma-upgrade` already handles it, by re-running
-`update.sh` once more after every apply and applying again if that second pass finds more to do.
-It's a standing safety check, not something you'll normally notice.
+For any release from `v1.4.0` on, you don't need to do anything about this — `/perma-upgrade`
+re-runs `update.sh` once more after every apply and applies again if that finds more to do. It's a
+standing safety check, not something you'll normally notice.
+
+**The one exception is upgrading to `v1.4.0` itself**, if you're coming from an older install: that
+specific upgrade runs your *current* `update.sh`, which predates this fix and can't know to
+re-check itself. You'll still land correctly — nothing is silently lost — but you'll see a small,
+one-time conflict prompt for the newly-added files, the same as any other customization prompt.
+The right answer there is simply "take theirs"; they're new files, not something you edited.
 
 ## Migrating from an old `~/brain` install
 

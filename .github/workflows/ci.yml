@@ -112,48 +112,53 @@ jobs:
         with:
           fetch-depth: 0   # need real tag history, not just the PR's own commits
 
-      - name: Build a scratch install at the latest real release, then upgrade it to this PR
+      - name: Simulate a hypothetical future release on top of this PR's own content
         shell: bash
         run: |
           set -e
-          PERMA_UPDATE_SOURCE="${GITHUB_WORKSPACE}"
-          NEW_VERSION=$(tr -d '[:space:]' < _meta/VERSION)
-          PREV_TAG=$(git tag --sort=-v:refname | head -1)
-          if [ -z "$PREV_TAG" ]; then echo "No existing tag to upgrade from — nothing to test yet."; exit 0; fi
+          # Deliberately NOT testing "upgrade from the latest real tag straight to this PR" —
+          # that transition is a known, accepted, one-time exception (see CHANGELOG.md's v1.4.0
+          # entry): an install upgrading from before this fix shipped runs the OLD script for
+          # that one upgrade, which can't know to re-check itself, so it correctly ends in a
+          # small manual "take theirs" decision rather than silent loss or full automation. A
+          # non-interactive CI job can't assert against a step that's supposed to ask a human.
+          #
+          # What CAN be asserted, and is the actual point of this fix: an install already fully
+          # caught up to THIS PR's content, upgrading to some future release that adds one more
+          # new tracked path, should self-heal in one --apply with no manual step at all. That's
+          # simulated here with a throwaway commit on top of this checkout.
           CURRENT_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          echo "Testing upgrade: $PREV_TAG -> $NEW_VERSION (branch: $CURRENT_BRANCH)"
+          BASE_VERSION=$(tr -d '[:space:]' < _meta/VERSION)
 
           SCRATCH="${RUNNER_TEMP}/upgrade-scratch"
-          git worktree add --detach "$SCRATCH" "$PREV_TAG" -q
+          git worktree add --detach "$SCRATCH" HEAD -q
           rm -rf "$SCRATCH/.git"
           git -C "$SCRATCH" init -q
           git -C "$SCRATCH" config user.email "ci@example.com"
           git -C "$SCRATCH" config user.name "CI"
           git -C "$SCRATCH" add -A
-          git -C "$SCRATCH" commit -q -m "scratch install at $PREV_TAG"
+          git -C "$SCRATCH" commit -q -m "scratch install already at $BASE_VERSION"
 
-          # Local-only tag simulating "this PR, once tagged" — never pushed, deleted below
-          # regardless of outcome. update.sh resolves releases by tag; without one, it can't
-          # see this PR's content as a real target at all.
-          git tag "$NEW_VERSION" HEAD
+          # Tag the base too, not just the target — conflict detection resolves _meta/VERSION as
+          # a git ref to tell "you customized this" from "the template changed this"; with no
+          # base tag it fails open and flags everything, which would make this test meaningless.
+          git tag "$BASE_VERSION" HEAD
 
-          export PERMA_UPDATE_SOURCE PERMA_DIR="$SCRATCH"
+          echo "hypothetical new tracked path, CI test only" > TESTFILE.md
+          sed -i "s/^PATHS=(\(.*\))/PATHS=(\1 TESTFILE.md)/" runtime/update.sh
+          NEXT_VERSION="${BASE_VERSION}-ci-next"
+          echo "$NEXT_VERSION" > _meta/VERSION
+          git add -A
+          git commit -q -m "CI test only: simulate a future release adding TESTFILE.md"
+          git tag "$NEXT_VERSION" HEAD
+
+          export PERMA_UPDATE_SOURCE="${GITHUB_WORKSPACE}" PERMA_DIR="$SCRATCH"
           export PERMA_UPDATE_BRANCH="$CURRENT_BRANCH"
 
-          # Mirrors runtime/commands/perma-upgrade.md's own documented procedure exactly: apply,
-          # then verify with a dry-run, applying again if that dry-run still finds changes —
-          # the standing safety net for a release that adds a whole new tracked path (the class
-          # of bug this job exists to catch; see CHANGELOG.md's v1.4.0 entry).
           bash "$SCRATCH/runtime/update.sh" --apply
-          echo "--- verification pass ---"
-          bash "$SCRATCH/runtime/update.sh" | tee "${RUNNER_TEMP}/verify.log"
-          if ! grep -q "Already up to date" "${RUNNER_TEMP}/verify.log"; then
-            echo "--- second apply pass (verification found more to do) ---"
-            bash "$SCRATCH/runtime/update.sh" --apply
-          fi
 
           echo "GOT_VERSION=$(tr -d '[:space:]' < "$SCRATCH/_meta/VERSION")" >> "$GITHUB_ENV"
-          echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
+          echo "NEXT_VERSION=$NEXT_VERSION" >> "$GITHUB_ENV"
           echo "SCRATCH=$SCRATCH" >> "$GITHUB_ENV"
 
       - name: Verify by content, not just the VERSION string
@@ -161,31 +166,23 @@ jobs:
         run: |
           set -e
           # A VERSION-string match alone is not sufficient evidence — that's exactly how the bug
-          # this job guards against went undetected: _meta/VERSION reached the target while real
-          # tracked paths were silently never delivered. Diff the actual tracked paths against the
+          # this job guards against went undetected: _meta/VERSION reached the target while a real
+          # tracked path was silently never delivered. Diff the actual tracked paths against the
           # actual target tag's content instead of trusting either side's own self-report.
-          #
-          # PATHS is read from this PR's OWN update.sh, not duplicated here — a hardcoded second
-          # copy of that list would just be the next version of the same two-sources-of-truth bug
-          # this job exists to catch.
           # shellcheck disable=SC1090
-          source <(grep "^PATHS=" "${GITHUB_WORKSPACE}/runtime/update.sh")
+          source <(grep "^PATHS=" "${SCRATCH}/runtime/update.sh")
 
-          if [ "$GOT_VERSION" != "$NEW_VERSION" ]; then
-            echo "FAILED: expected VERSION $NEW_VERSION, got $GOT_VERSION"
+          if [ "$GOT_VERSION" != "$NEXT_VERSION" ]; then
+            echo "FAILED: expected $NEXT_VERSION, got $GOT_VERSION — the new path should have been"
+            echo "delivered automatically in one --apply, with no manual re-run needed."
             exit 1
           fi
-          if ! git -C "$SCRATCH" diff --quiet HEAD "$NEW_VERSION" -- "${PATHS[@]}"; then
+          if ! git -C "$SCRATCH" diff --quiet HEAD "$NEXT_VERSION" -- "${PATHS[@]}"; then
             echo "FAILED: VERSION says $GOT_VERSION but tracked paths still differ from the target tag:"
-            git -C "$SCRATCH" diff --stat HEAD "$NEW_VERSION" -- "${PATHS[@]}"
+            git -C "$SCRATCH" diff --stat HEAD "$NEXT_VERSION" -- "${PATHS[@]}"
             exit 1
           fi
-          echo "PASS: reached $GOT_VERSION and every tracked path matches the target tag's content."
-
-      - name: Clean up the local-only version tag
-        if: always()
-        shell: bash
-        run: git tag -d "${NEW_VERSION}" 2>/dev/null || true
+          echo "PASS: a future release's new tracked path is delivered in one --apply, automatically."
 
   lint:
     runs-on: ubuntu-latest
