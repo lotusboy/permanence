@@ -71,10 +71,14 @@ merge_agents_block "$HOME/.config/agents/AGENTS.md"                 # emerging u
 #    its own detect script decides whether it applies to this machine, its own wire script does
 #    the actual merge. install.sh knows nothing about any specific harness here — adding one is a
 #    new directory, not an edit to this file. See design/harness-binding-mechanism.md.
+echo "DEBUG: ls -la $PERMA/runtime/bindings/ ->"; ls -la "$PERMA/runtime/bindings/" 2>&1
+echo "DEBUG: ls -la $PERMA/runtime/bindings/claude-code/ ->"; ls -la "$PERMA/runtime/bindings/claude-code/" 2>&1
+echo "DEBUG: glob expansion ->"; for x in "$PERMA/runtime/bindings/"*/; do echo "  matched: $x"; done
 for b in "$PERMA/runtime/bindings/"*/; do
-  [ -d "$b" ] || continue
+  echo "DEBUG: loop iteration, b=$b"
+  [ -d "$b" ] || { echo "DEBUG: not a dir, continue"; continue; }
   name="$(basename "$b")"
-  [ -x "$b/detect" ] || continue
+  [ -x "$b/detect" ] || { echo "DEBUG: detect not executable, continue"; continue; }
   if "$b/detect" >/dev/null 2>&1; then
     if [ -x "$b/wire" ] && "$b/wire"; then
       echo "  binding: $name wired"
