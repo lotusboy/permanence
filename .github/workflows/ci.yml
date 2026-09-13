@@ -371,6 +371,26 @@ jobs:
           test -f "$HOME/.claude/commands/perma-upgrade.md"
           echo "commands installed OK"
 
+      - name: Verify the migrated Claude Code binding actually wired everything
+        shell: bash
+        run: |
+          set -e
+          bash "${PERMA_DIR}/runtime/bindings/claude-code/detect"
+          echo "claude-code/detect: OK"
+
+          grep -q "perma:begin" "$HOME/.claude/CLAUDE.md"
+          echo "CLAUDE.md: perma block present"
+
+          python3 - "$HOME/.claude/settings.json" "$PERMA_DIR" <<'PY'
+          import json, sys
+          path, perma = sys.argv[1], sys.argv[2]
+          d = json.load(open(path))
+          assert perma in d["permissions"]["additionalDirectories"], "additionalDirectories missing PERMA"
+          assert any(h.get("command", "").endswith("session-start.sh") for e in d["hooks"]["SessionStart"] for h in e.get("hooks", [])), "SessionStart hook missing"
+          assert any(h.get("command", "").endswith("session-load.sh") for e in d["hooks"]["UserPromptSubmit"] for h in e.get("hooks", [])), "UserPromptSubmit hook missing"
+          print("settings.json: hooks + permission OK")
+          PY
+
       - name: Verify the scheduled task actually exists (real backend for this OS)
         shell: bash
         run: |
@@ -396,3 +416,16 @@ jobs:
             Windows) ! MSYS_NO_PATHCONV=1 schtasks /Query /TN "perma-consolidate" >/dev/null 2>&1 ;;
           esac
           echo "unschedule: OK"
+
+      - name: Verify a broken binding wire script is correctly reported as a failure
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -e
+          mv "${PERMA_DIR}/runtime/bindings/claude-code/wire" "${PERMA_DIR}/runtime/bindings/claude-code/wire.orig"
+          printf '#!/bin/bash\nexit 1\n' > "${PERMA_DIR}/runtime/bindings/claude-code/wire"
+          chmod +x "${PERMA_DIR}/runtime/bindings/claude-code/wire"
+          OUTPUT=$(bash "${PERMA_DIR}/runtime/install.sh")
+          echo "$OUTPUT"
+          mv "${PERMA_DIR}/runtime/bindings/claude-code/wire.orig" "${PERMA_DIR}/runtime/bindings/claude-code/wire"
+          echo "$OUTPUT" | grep -q "done, WITH FAILURES" && echo "failure path: OK — real binding failure correctly propagated"
