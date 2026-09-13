@@ -144,6 +144,35 @@ and a real failure-path test that temporarily breaks `claude-code/wire` and conf
 binding as the mechanism's test case, exactly as the design doc intended once a synthetic
 Gemini-CLI-shaped test case became unnecessary.
 
+**New: Devin CLI's binding, shipped for four of five questions.** Real market numbers (Cursor $2B
+ARR / 1M+ paying users, Copilot ~42% market share, Devin $492M ARR / 89% internal adoption at
+Cognition itself) prompted a feasibility check on Devin specifically — its older reputation as
+purely cloud-hosted turned out stale; Devin CLI runs locally with real shell access, and its hook
+event names are the same ones Claude Code uses. That similarity was misleading in one important
+way: a live test caught two of Devin's own bundled docs contradicting each other on whether
+Claude Code's hooks get imported — one says yes, a more specific page's own import table lists
+only rules/skills/commands-as-skills/MCP servers, no hooks. The live test sided with the second
+page (no injected context, no `session-load.sh` marker file created). `runtime/bindings/devin/`
+therefore ships its own translator hooks (`SessionStart` + `UserPromptSubmit`, wrapping
+`session-start.sh`/`session-load.sh` output in Devin's own `hookSpecificOutput` JSON envelope),
+not a reuse of Claude Code's. The standing instruction writes a dedicated global
+`~/.config/devin/AGENTS.md` rather than relying solely on Devin's separate (real, but conditional
+on Claude Code's binding also being present) pickup of `~/.claude/CLAUDE.md`. Verified live,
+end-to-end: wired for real, then a real `devin -p` session's actual reply quoted the injected
+`[perma]` content verbatim. Command invocation (Skills) deliberately not built yet — needs its
+own live-fire test first, the same discipline Antigravity's Skills layer is held to.
+
+**Gemini CLI's decline upgraded from a cost decision to a settled fact.** Google's own developer
+blog confirms free/individual access to Gemini CLI ended 2026-06-18 — consumer, Pro, and Ultra
+users are pointed at Antigravity CLI (the product already bound this session), enterprise access
+is unaffected. `docs/TOOL-SUPPORT.md` and the design docs already reflected the practical
+consequence (rejected server-side sign-in); this is the reason why, found afterward, not a
+change in what was already documented.
+
+**New: `design/claude-code-binding.md`**, written retrospectively so every binding — including
+the original, most-hardened one that predates `design/` as a convention — is documented to the
+same standard.
+
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step

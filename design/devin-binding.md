@@ -1,16 +1,18 @@
 # Design — a Devin CLI binding for Permanence
 
-> Status: **proposed, not started.** No code in this repo implements any of this yet — but every
-> claim below is live-verified against the real installed product (Devin CLI 3000.10.21), not
-> read from docs alone. One live test directly caught and resolved a contradiction between two of
-> the product's own bundled doc pages.
+> Status: **built and shipped, except the command layer.** `runtime/bindings/devin/` implements
+> the forcing read + passive orientation (`SessionStart` + `UserPromptSubmit`) and the standing
+> instruction (global `AGENTS.md`) — live-fire tested end-to-end against the real installed
+> product on this machine. Skills/command invocation is still deliberately unbuilt — see §5 item
+> 4, unchanged: it needs its own live-fire test before its `wire` shape is committed to.
 > Written 2026-09-13. See [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the
-> `detect`/`wire` interface this assumes rather than re-deriving.
+> `detect`/`wire` interface this implements rather than re-deriving.
 
-**Owner carries, once built: the command layer, and possibly nothing else.** Four of five
-binding-contract questions have real, live-tested answers. One (standing instruction) is
-*already true today*, for free, on any machine that also has Claude Code's binding installed —
-see §3.3 for the important condition attached to that.
+**Owner carries: the command layer.** Four of five binding-contract questions are shipped and
+live-fire tested — forcing read + passive orientation demonstrably steer a real `devin -p`
+session's actual reply, and the standing instruction writes to a dedicated global `AGENTS.md`
+rather than relying solely on the conditional `CLAUDE.md` pickup described in §3.3. Command
+invocation (Skills) is the one still open — see §5.
 
 ## 1. Why
 
@@ -123,21 +125,21 @@ Per `SPEC.md` §3's binding contract, independent questions, not a ladder.
    way it did for Antigravity — not yet established either way for Devin specifically.
 2. **Forcing read.** **Live-confirmed**, using Devin's own native hook format (§2) — Claude
    Code's existing hooks are not reused, a real translator script is needed.
-3. **Standing instruction.** **Live-confirmed, conditionally.** Works today for free via the
-   `CLAUDE.md` Rules pickup, but only on machines with Claude Code's binding already installed
-   (§2). A real binding should write its own content into `~/.config/devin/AGENTS.md` too, so a
-   Devin-only install (no Claude Code) still gets it — this doesn't need to be live-tested from
-   scratch, since the same Rules mechanism already proven to work for `CLAUDE.md` is documented
-   to work identically for a global `AGENTS.md`, but it hasn't been independently confirmed yet.
-4. **Command invocation.** Needs real work — confirmed NOT free (§2). Likely shape: translate
-   `runtime/commands/*.md` into `~/.config/devin/skills/<name>/SKILL.md`, matching the format
-   Devin's own Skills already use, similar in spirit to what Antigravity's Skills layer needs.
+3. **Standing instruction. Shipped**, via a dedicated global `~/.config/devin/AGENTS.md`
+   block — not reliant on the conditional `CLAUDE.md` pickup, so it works even on a Devin-only
+   machine with no Claude Code binding installed. Both the `AGENTS.md` mechanism itself
+   (`devin rules list` showing `AGENTS [Standard] always-on` once the file exists) and the
+   underlying Rules-injection mechanism (already proven for `CLAUDE.md`, §2) are live-confirmed.
+4. **Command invocation.** Still needs real work — confirmed NOT free (§2), not built (§5 item
+   4). Likely shape: translate `runtime/commands/*.md` into
+   `~/.config/devin/skills/<name>/SKILL.md`, matching the format Devin's own Skills already use,
+   similar in spirit to what Antigravity's Skills layer needs.
 5. **Headless invocation.** **Confirmed** (§2), with two flags (`--respect-workspace-trust
    false`, `--permission-mode`) a scripted caller needs to set explicitly.
 
 Material-shift is what (2) and (3) produce together, not a sixth question — see `SPEC.md` §3.
 
-## 4. Proposed shape (not file-final — a sketch to react to)
+## 4. Shape — as actually shipped
 
 The `detect`/`wire` interface is specified once in
 [`harness-binding-mechanism.md`](./harness-binding-mechanism.md) — not restated here.
@@ -150,43 +152,51 @@ runtime/bindings/devin/
                                  # §2 — NOT .devin/hooks.v1.json, which is project-level and
                                  # would violate invariant 1 if written into an open repo.
                                  # Writes the standing-instruction block into the global
-                                 # ~/.config/devin/AGENTS.md (own file — don't rely solely on
-                                 # the conditional CLAUDE.md pickup, §3.3). Skills/command
-                                 # layer not included yet — see §5.
+                                 # ~/.config/devin/AGENTS.md via a dedicated
+                                 # devin-agents-md-block.md. Skills/command layer not included
+                                 # yet — see §5.
   session-start-hook.sh         # translator: calls session-start.sh, wraps its output as
                                  # {"hookSpecificOutput": {"hookEventName": "SessionStart",
                                  # "additionalContext": <that output>}}
   user-prompt-submit-hook.sh    # translator: calls session-load.sh, same wrapping for
-                                 # UserPromptSubmit's hookSpecificOutput envelope. Stream
-                                 # resolution needs $DEVIN_PROJECT_DIR (env var, not a stdin
+                                 # UserPromptSubmit's hookSpecificOutput envelope. Reads Devin's
+                                 # own session_id off stdin and threads it into a synthetic
+                                 # Claude-Code-shaped payload so session-load.sh's existing
+                                 # once-per-session gate keeps working unchanged. Stream
+                                 # resolution uses $DEVIN_PROJECT_DIR (env var, not a stdin
                                  # field — a different mechanism from both Claude Code's stdin
-                                 # `cwd` and Antigravity's stdin `workspacePaths` — see §5 item 2
-                                 # for the one thing this still needs confirming live).
+                                 # `cwd` and Antigravity's stdin `workspacePaths` — confirmed
+                                 # correct, §5).
 ```
 
-## 5. Must verify before writing any code
+Live-fire verified end-to-end, not just dry I/O: wired for real on this machine, then a real
+`devin -p` session correctly quoted the exact `[perma]` stream-registration line the hook
+injected — the model's own answer, not a log line.
 
-1. **Live-fire `SessionStart`** directly, not just infer from `UserPromptSubmit` working —
-   confirm it fires, confirm its `additionalContext` injection works the same way.
-2. **Confirm `$DEVIN_PROJECT_DIR` live**, not just from the bundled docs — write a throwaway hook
-   that echoes it back, run a real session from a known directory, check the value matches.
-3. **Confirm the global `~/.config/devin/AGENTS.md` Rules pickup live**, the same way `CLAUDE.md`
-   was confirmed — the mechanism is documented as identical, but "documented as identical" is
-   exactly the category of claim that turned out wrong for hooks (§2) on this same product.
-4. **Design and live-fire the command layer** — confirm `~/.config/devin/skills/<name>/SKILL.md`
+## 5. Still open — the command layer only
+
+Everything blocking the read/write half shipped. What's left is narrower, and only item 1 below
+actually blocks more code from being written:
+
+1. **Design and live-fire the command layer** — confirm `~/.config/devin/skills/<name>/SKILL.md`
    is genuinely where global, non-Claude skills belong (the paths output distinguished "User
    skills (global)" including `~/.config/devin/skills/`, `~/.config/cognition/skills/`, and
    `~/.agents/skills/` — three candidate locations, not live-differentiated yet), and confirm
    invocation actually works for a real skill placed there, description-matched or otherwise.
-5. **Worth reporting upstream, not fixable here**: the two bundled docs contradicting each other
+2. **Worth reporting upstream, not fixable here**: the two bundled docs contradicting each other
    on Claude Code hook import (§2) is a real bug in Devin's own documentation, independent of
    anything Permanence does.
+
+Retired by live testing, no longer open: `SessionStart` firing and its `additionalContext`
+injection; `$DEVIN_PROJECT_DIR`'s correctness; the global `~/.config/devin/AGENTS.md` Rules
+pickup.
 
 ## 6. Non-goals
 
 - Not reusing Claude Code's existing hook scripts as Devin's own hooks — confirmed live not to
   work, despite one of the product's own doc pages claiming it does (§2).
-- Not treating the `CLAUDE.md` Rules pickup as sufficient standing-instruction coverage on its
-  own — it's real, but conditional on Claude Code's binding also being installed (§3.3).
-- Not building the command-invocation layer yet — needs its own live-fire test (§5 item 4),
+- Not relying on the conditional `CLAUDE.md` Rules pickup for standing-instruction coverage —
+  real, but conditional on Claude Code's binding also being installed (§3.3), which is exactly
+  why the shipped binding writes its own dedicated `AGENTS.md` instead.
+- Not building the command-invocation layer yet — needs its own live-fire test (§5 item 1),
   matching the same discipline Antigravity's Skills layer is held to.
