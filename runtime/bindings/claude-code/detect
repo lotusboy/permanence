@@ -1,11 +1,13 @@
 #!/bin/bash
-# claude-code/detect — exit 0 iff Claude Code is usable on this machine.
+# claude-code/detect — always exits 0.
 #
 # Claude Code is the one harness every Permanence install already has, by construction — you
-# need some AI tool with shell access just to run install.sh in the first place. Migrating it
-# into runtime/bindings/ (design/harness-binding-mechanism.md §2) is about symmetry with other
-# bindings, not new gatekeeping, so on any machine that got this far, this check will
-# essentially always pass. No side effects, per the detect/wire interface's own contract.
-[ -d "$HOME/.claude" ] && exit 0
-command -v claude >/dev/null 2>&1 && exit 0
-exit 1
+# need some AI tool with shell access just to run install.sh in the first place
+# (design/harness-binding-mechanism.md §2). Unlike Antigravity or any other optional binding,
+# there's nothing meaningful to gate: a heuristic check ("does ~/.claude already exist?", "is a
+# claude binary on PATH?") is circular on a genuinely fresh install, since claude-code/wire
+# itself is what creates ~/.claude in the first place, and many real users drive Claude Code
+# through the desktop app or an IDE extension with no CLI binary on PATH at all. Confirmed the
+# hard way: a real CI run had neither signal present and the whole binding silently, correctly
+# (by its own broken logic) never ran — install.sh reported "done." with nothing actually wired.
+exit 0
