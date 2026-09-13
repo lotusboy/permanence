@@ -101,12 +101,19 @@ tracking `install.sh` already uses, rather than inventing a second failure-repor
 
 Build this mechanism (the loop above, exercised by at least one real `detect`/`wire` pair) before
 either tool-specific binding claims to be "built" — a design that only exists in two independent
-proposals isn't proven, and the cheapest way to prove it is against whichever tool binding has
-fewer open unknowns, not both at once. Per their own docs' verified-facts sections, **Gemini
-CLI has the smaller unknown set** (confirmed hooks, confirmed headless mode, confirmed context
-file — only the command-layer and exact hook-JSON-schema questions remain open) — build that
-binding first, which exercises this mechanism for real, then bring Antigravity's binding in
-against a mechanism already proven rather than merely designed.
+proposals isn't proven, and the cheapest way to prove it is against whichever tool binding is
+actually usable to build against, not just whichever has fewer open design questions on paper.
+
+**Originally recommended Gemini CLI first**, on unknown-count alone. Reversed 2026-09-13 after a
+real, reproduced (twice) usability finding: personal Google-account sign-in to Gemini CLI is
+being actively rejected server-side — *"This client is no longer supported for Gemini Code Assist
+for individuals... migrate to the Antigravity suite"* — even though the same account
+authenticates successfully for other Google products, Antigravity included. Paying for a metered
+API key instead is a real option but a separate cost/product decision, declined for now. Fewer
+open *design* questions doesn't help if the harness can't actually be driven end-to-end on the
+account available. **Antigravity is the priority now** — already installed and working on this
+machine, and the path Google itself is pointing individual users toward. Build its binding first;
+bring Gemini CLI's back in later only if its access situation changes.
 
 ## 6. Non-goals
 
