@@ -1,18 +1,19 @@
 # Design — an Antigravity binding for Permanence
 
-> Status: **proposed, not started.** No code in this repo implements any of this yet — but all
-> five binding-contract questions now have live-verified or authoritatively-documented answers,
-> not open unknowns.
+> Status: **built and shipped, except the command layer.** `runtime/bindings/antigravity/`
+> implements the forcing read + passive orientation (`PreInvocation`) and the standing
+> instruction (`GEMINI.md`) — live-fire tested end-to-end against the real installed product on
+> this machine, not just dry I/O. Skills/command invocation is still deliberately unbuilt — see
+> §5 item 1, unchanged: it needs its own live-fire test before its `wire` shape is committed to.
 > Written 2026-09-13, substantially revised twice the same day after live testing. See
 > [gemini-cli-binding.md](./gemini-cli-binding.md) — Antigravity shares a `~/.gemini/` path
 > prefix with Gemini CLI, which is shared branding, not a shared mechanism for hooks (confirmed
 > below), though the two may genuinely share one standing-instruction file (also below).
 
-**Owner carries, once built: likely nothing on the read/write side.** All five binding-contract
-questions (§3) now have real answers — three live-tested end-to-end (forcing read, standing
-instruction, headless invocation), two confirmed against the actual installed product's own
-bundled documentation (passive orientation by omission, command invocation via Skills). What's
-left is writing the code, not resolving unknowns — see §4 and §5.
+**Owner carries: nothing, for the read/write side that's built.** Four of five binding-contract
+questions (§3) are shipped — forcing read + passive orientation and standing instruction
+live-fire tested against a real `agy --print` session, the model's actual reply demonstrably
+reflecting the injected content. Command invocation (Skills) is the one still open — see §5.
 
 ## 1. Why
 
@@ -144,7 +145,7 @@ ladder. **All five now have real answers.**
 Material-shift is what (2) and (3) produce together, not a sixth question — see `SPEC.md` §3.
 On-commit (guard + refresh) is unaffected: a git hook, not an AI-harness hook, no binding needed.
 
-## 4. Proposed shape
+## 4. Shape — as actually shipped
 
 The `detect`/`wire` interface, and what `install.sh` does with this directory, are specified once
 in [`design/harness-binding-mechanism.md`](./harness-binding-mechanism.md) — not restated here.
@@ -152,40 +153,48 @@ in [`design/harness-binding-mechanism.md`](./harness-binding-mechanism.md) — n
 ```
 runtime/bindings/antigravity/
   detect                   # exit 0 iff `agy` (or ~/.gemini/antigravity-cli) is present
-  wire                     # merges a named hook block into ~/.gemini/config/hooks.json (global,
-                            # not workspace .agents/ — confirmed undiscovered by this version);
-                            # writes/merges the standing-instruction block into ~/.gemini/GEMINI.md
-                            # (shared with the Gemini CLI binding, if that also ships — coordinate
-                            # rather than duplicate); installs the command layer as
-                            # skills/<perma-command>/SKILL.md under the same global config root
+  wire                     # merges two NAMESPACED hook names into ~/.gemini/config/hooks.json
+                            # (global, not workspace .agents/ — confirmed undiscovered by this
+                            # version); writes the standing-instruction block into
+                            # ~/.gemini/GEMINI.md via runtime/gemini-md-block.md (a dedicated
+                            # block, not agents-md-block.md's Tier-2 framing, which doesn't match
+                            # this binding's actual capability). The Skills/command layer is NOT
+                            # in wire yet — see §5 item 1.
   pre-invocation-hook.sh   # reads invocationNum + conversationId off stdin; if this
-                            # conversationId's cursor hasn't fired yet, call session-start.sh +
-                            # session-load.sh's combined logic and return
-                            # {"injectSteps":[{"ephemeralMessage": <that output>}]}; otherwise
-                            # return {} and mark the cursor. Stream resolution uses
-                            # workspacePaths[0] through _meta/REGISTRY.md, the same longest-prefix
-                            # logic resolve-stream.sh already does.
-  pre-tool-use-hook.sh     # must return a real {"decision": "allow", ...} object, not a bare {}
+                            # conversationId's cursor hasn't fired yet, calls session-start.sh +
+                            # session-load.sh's combined output (fed a translated {"cwd": ...}
+                            # payload derived from workspacePaths[0], reusing their existing
+                            # resolve-stream.sh-based stream resolution rather than reimplementing
+                            # it) and returns it as {"injectSteps":[{"ephemeralMessage": ...}]};
+                            # otherwise returns {} and marks the cursor.
+  pre-tool-use-hook.sh     # returns a real {"decision": "allow", ...} object, not a bare {}
                             # — confirmed the latter fails closed and blocks the tool (§2)
 ```
 
-## 5. Must verify before writing any code
+Live-fire verified end-to-end, not just dry I/O: wired for real on this machine, then a real
+`agy --print` session correctly reported the exact `[perma]` stream-registration line the hook
+injected — the model's own answer, not a log line.
 
-Short — everything that blocked a first real milestone is resolved; what's left is narrower.
+## 5. Still open — the command layer only
+
+Everything blocking the read/write half shipped (§4). What's left is narrower, and only item 1
+actually blocks more code from being written:
 
 1. **Live-fire an actual Skill**, not just read the docs on how they work — confirm the
    description-matching invocation behaves as documented, and check whether there's also a
    literal explicit-invocation syntax (a `/name` or `@name` mention) the docs didn't surface.
+   This is the one open item that's still load-bearing — `wire`'s Skills/command-invocation logic
+   isn't written until this is checked.
 2. **Confirm the `.git`-boundary hypothesis for workspace discovery** — does `.agents/hooks.json`
    (or `skills/`) work once the test directory is a real git repo, unlike the non-repo scratch
    folder tested? Matters for whether project-scoped bindings are viable at all, versus
-   global-only.
+   global-only. Not blocking — the shipped binding uses the confirmed global path.
 3. **Whether a project-level `GEMINI.md`/`AGENTS.md` is worth using instead of (or alongside) the
-   global one** — only the global file was live-tested; per-project rules were not.
-4. **Whether a Gemini CLI hook and an Antigravity hook, and a shared `GEMINI.md`, coexist cleanly**
-   on one machine if both bindings ship — lower priority while Gemini CLI's own binding is paused
-   (`harness-binding-mechanism.md` §5), but worth designing for now that a shared file looks
-   plausible rather than assuming conflict.
+   global one** — only the global file was live-tested and shipped; per-project rules were not
+   tried.
+4. **Whether a Gemini CLI hook and an Antigravity hook, and a shared `GEMINI.md`, coexist
+   cleanly** on one machine — moot for now: Gemini CLI's binding is permanently declined
+   (`harness-binding-mechanism.md` §5), not just paused. Revisit only if that changes.
 
 Retired by live testing or authoritative local docs, no longer open: `PreInvocation`'s existence,
 cardinality, and injection mechanism; `PreToolUse`'s fail-closed behavior; `workspacePaths`
@@ -194,9 +203,9 @@ question; the existence (though not yet the exact invocation syntax) of a comman
 
 ## 6. Non-goals
 
-- Not building the full binding in this pass — item 1 (live-firing a real Skill) is worth doing
-  before committing to the exact `wire` shape for the command layer, since the description-match
-  invocation model is confirmed to exist but not yet exercised for real.
+- Not building the command-invocation layer yet — item 1 (live-firing a real Skill) is worth
+  doing before committing to the exact `wire` shape for it, since the description-match
+  invocation model is confirmed to exist but not yet exercised for real. Everything else shipped.
 - Not assuming Antigravity and Gemini CLI's hook engines are related just because of the path
   overlap — confirmed as two separate config files and two separate discovery behaviors. Their
   standing-instruction file may genuinely be shared, which is the opposite finding, and both are

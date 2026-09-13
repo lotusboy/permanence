@@ -15,22 +15,30 @@ below states plainly what its owner carries — what's still done by hand — in
 | Tool | Passive orientation | Forcing read | Standing instruction | Command invocation | Headless invocation | Owner carries |
 |---|---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
+| **Antigravity** | ✅ | ✅ | ✅ | 🔧 | ✅ | Command invocation — Skills need one live-fire test against the real product before `wire`'s command layer is written; see `design/antigravity-binding.md` §5 |
 | **AGENTS.md-reading tools** (Devin, Codex, droid, Amp, Cursor, GitHub Copilot, Aider, Zed, Windsurf, Google Jules, ...) | ❌ | ❌ | ✅ | ❌ | ❓ | Orientation — say "good morning Permanence" (or run `/perma-startup <name-or-path>`) at the start of a session |
 | **Any other tool** (manual fallback) | ❌ | ❌ | ❌ | ❌ | ❓ | Everything — the fallback prompt has to be pasted in at the start of every session |
-| **Antigravity** (designed, not built) | 🔧 | 🔧 | 🔧 | 🔧 | 🔧 | Everything today — the *code* doesn't exist yet, but all five questions are answered, three of them by live-testing a real session, not by reading docs — see `design/antigravity-binding.md` |
-| **Gemini CLI** (designed, paused) | ❓ | 🔧 | 🔧 | ❓ | 🔧 | Everything today, and for longer than Antigravity — personal-account sign-in is currently rejected server-side by Google, reproduced twice 2026-09-13, so building this can't even be live-tested right now — see `design/gemini-cli-binding.md` |
+| **Gemini CLI** (designed, permanently declined) | ❓ | 🔧 | 🔧 | ❓ | 🔧 | Everything, indefinitely — personal-account sign-in is rejected server-side by Google (reproduced twice 2026-09-13); a metered API key would route around it but is a cost decision explicitly declined — see `design/gemini-cli-binding.md` |
 
-**Legend for 🔧**: confirmed real — either live-tested against a genuine session, or confirmed against
-the installed product's own bundled documentation — but no `runtime/bindings/` code exists yet to wire
-it in. Different from ❓, which means genuinely still unknown. Only Claude Code's row reflects a real,
-shipped binding; the other rows describe what's been *verified as buildable*, not what a user gets
-today running either tool — that's still "everything, by hand," same as the manual fallback, until
-`design/harness-binding-mechanism.md` is actually implemented.
+**Legend**: ✅ shipped and verified — real `runtime/bindings/` code, live-fire tested against the actual
+product, not just reasoning about docs. 🔧 confirmed real — either live-tested or confirmed against the
+installed product's own bundled documentation — but no code wires it in yet, and (Gemini CLI only) may
+never, given the access block. ❓ genuinely still unknown.
 
 ## Claude Code
 
 Hooks wire `runtime/session-start.sh` and `runtime/session-load.sh` into every session automatically —
-see `SPEC.md` §3. This is what `runtime/install.sh` sets up. Nothing else to do.
+see `SPEC.md` §3. This is what `runtime/bindings/claude-code/` sets up (still driven by
+`runtime/install.sh`, like every binding). Nothing else to do.
+
+## Antigravity
+
+A `PreInvocation` hook (`runtime/bindings/antigravity/`) carries the forcing read and the passive
+orientation in one — Antigravity has no separate session-start-style event, and doesn't need one, per
+`SPEC.md` §3's "forcing subsumes passive." The standing instruction lands in the global `~/.gemini/GEMINI.md`.
+Live-fire verified: wired for real and tested against an actual `agy` session, not just reasoned about.
+Command invocation (Skills) isn't built yet — see `design/antigravity-binding.md` §5. **Owner carries:
+nothing but the `/perma-*` commands themselves**, which have no home here until that's built.
 
 ## AGENTS.md-reading tools (standing instruction only)
 
@@ -66,16 +74,15 @@ remaining job here is orientation, by hand, every session.
 was written — check its current docs and add it to `runtime/install.sh`'s list once confirmed. Until
 then, use the manual fallback below.
 
-**Gemini CLI and Antigravity are deliberately not on this list — and neither is built yet**, though
-both now have their own row in the capability table above, since "not built" turned out to be a
-separate question from "not understood." Gemini CLI reads `GEMINI.md`, not `AGENTS.md` — confirmed
-directly against its own docs — so this bucket gives it nothing regardless. Antigravity's own hook
-vocabulary is entirely its own, separate from Gemini CLI's despite a shared `~/.gemini/` path prefix —
-but the two may end up sharing the *same* `~/.gemini/GEMINI.md` standing-instruction file, live-tested
-2026-09-13 (`design/antigravity-binding.md` §2). **Priority is Antigravity first**: Gemini CLI's
-personal-account sign-in is currently being rejected server-side, so its binding is paused, not just
-unbuilt (`design/harness-binding-mechanism.md` §5). Until a binding actually ships, both fall under the
-manual fallback below regardless of how well-understood the design is.
+**Gemini CLI and Antigravity are deliberately not on this list.** Neither reads `AGENTS.md` — both
+read `GEMINI.md`, confirmed directly against their own docs, so this bucket gives either nothing
+regardless. Antigravity has its own real binding now (above); Gemini CLI's is permanently declined
+(personal-account sign-in is rejected server-side by Google, reproduced twice 2026-09-13 — a metered
+API key would route around it but is a cost decision explicitly declined, see
+`design/gemini-cli-binding.md`), so it falls under the manual fallback below, same as any
+unimplemented tool. The two may have ended up sharing the *same* `~/.gemini/GEMINI.md`
+standing-instruction file had both shipped, live-tested 2026-09-13 (`design/antigravity-binding.md`
+§2) — moot for now, but worth remembering if Gemini CLI's access situation ever changes.
 
 ## Claude Desktop specifically (for IT/Ops: what to grant)
 

@@ -103,7 +103,48 @@ theirs" on 3 new files, via the existing negotiation flow — rather than either
 (the original bug) or silently completing (which isn't actually achievable here). Every release
 after this one goes fully automatic, proven separately.
 
-No **Migration notes** — nothing in any existing stream changes shape.
+**The harness-binding mechanism is now real, not just designed — and Claude Code is part of it.**
+`design/harness-binding-mechanism.md` originally decided Claude Code's wiring should stay a
+permanent special case in `install.sh`, for real hardening-preservation reasons. That decision
+was reopened and reversed on request: `install.sh` now reduces to one generic loop over
+`runtime/bindings/<harness>/`, Claude Code included, no special case left. All four hardening
+mechanisms (backup-before-edit, refuse-on-mismatched-marker, the cross-install scheduling guard,
+honest failure reporting) moved with it, unchanged. `_perma_block_merge` was extracted into a new
+sourced-only `runtime/lib/block-merge.sh` so both the migrated Claude Code binding and the
+existing AGENTS.md writer (unmoved — confirmed generic, not Claude-Code-specific) share one copy.
+
+**A real bug found live-testing this, not by reasoning:** `_perma_block_merge`'s "no existing
+marker" branch silently never wrote `CLAUDE.md` on a genuinely fresh install (no prior file at
+all) — the branch's own exit code was accidentally poisoned by a harmless `cat` on a nonexistent
+file, which skipped the file rename via `&&`. Fixed with one `|| true`. A second, separate bug
+surfaced the same way: `claude-code/detect`'s heuristic check (`~/.claude` exists, or `claude` is
+on `PATH`) failed on every real CI runner, since neither is true this early in a fresh install —
+`wire` itself is what creates `~/.claude`. Fixed by making `detect` unconditional, matching what
+`design/harness-binding-mechanism.md` §2 already said about Claude Code: it's the one harness
+every install already has, by construction, with nothing left to gate.
+
+**New: Antigravity's binding, shipped for four of five questions.**
+`runtime/bindings/antigravity/` wires the forcing read + passive orientation (one `PreInvocation`
+hook carries both — no separate event exists or is needed) and the standing instruction (a
+managed block in the global `~/.gemini/GEMINI.md`, via a new dedicated `gemini-md-block.md`
+rather than reusing the generic AGENTS.md-tools block, whose "Tier 2, no forcing read" framing
+doesn't match what Antigravity actually does). Verified live, end-to-end, not just with piped
+JSON: wired for real on the machine that built it, then a real `agy --print` session's actual
+reply demonstrably reflected the injected `[perma]` content. Command invocation (Skills) is
+deliberately not built yet — the design doc's own research flagged it as needing one live-fire
+test before its shape is committed to, and this pass didn't include that.
+
+**CI**: a real, previously-silent gap fixed — the lint job's three checks (`bash -n`, an embedded
+Python-heredoc compile check, ShellCheck) all matched `*.sh` only, so the new `detect`/`wire`
+scripts (extensionless, like `.githooks/pre-commit`) were invisible to all three; confirmed by
+deliberately breaking one locally and watching the old glob miss it. New coverage added to
+`install-matrix`: the migrated Claude Code binding's actual content (not just file existence),
+and a real failure-path test that temporarily breaks `claude-code/wire` and confirms
+`INSTALL_FAILED` correctly reaches `install.sh`'s final line — using Claude Code's own real
+binding as the mechanism's test case, exactly as the design doc intended once a synthetic
+Gemini-CLI-shaped test case became unnecessary.
+
+No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step
 

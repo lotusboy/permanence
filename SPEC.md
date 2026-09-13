@@ -73,18 +73,19 @@ read carries current state, the standing instruction carries the rule, and the h
 ordinary file/git tools do the rest. **On-commit and on-schedule are not harness questions at
 all** — git fires the first, the OS scheduler the second; neither consults an AI tool's config.
 
-**A binding beyond Claude Code is a directory**, `runtime/bindings/<harness>/`, discovered and
-wired by `runtime/install.sh` without editing it — the mechanism itself, including why Claude
-Code's own wiring deliberately stays outside it, is specified in
-`design/harness-binding-mechanism.md`, not restated here. The core — `session-start.sh`,
-`session-load.sh`, `runtime/commands/*.md`, the block files — emits harness-neutral text and
-never varies per harness regardless of which binding wires it in.
+**A binding is a directory**, `runtime/bindings/<harness>/`, discovered and wired by
+`runtime/install.sh` without editing it — Claude Code included, no special case. The mechanism
+itself is specified in `design/harness-binding-mechanism.md`, not restated here. The core —
+`session-start.sh`, `session-load.sh`, `runtime/commands/*.md`, the block files — emits
+harness-neutral text and never varies per harness regardless of which binding wires it in.
 
 Numbered tiers are deliberately not used: a tier is ordinal, but these five are a set, so two
 harnesses with opposite failure modes (one reads manually and writes automatically; one reads
 automatically and silently never writes) would collapse to the same label — hiding exactly the
 difference that matters most. Each binding below instead states plainly what the owner carries.
 
-**Claude Code binding (the reference implementation — all five answered).** (1) SessionStart hook in `~/.claude/settings.json` → `runtime/session-start.sh`; (2) UserPromptSubmit hook → `runtime/session-load.sh`, forcing the actual read of PROJECT/QUESTIONS/LOG-tail onto the first message; (3) `CLAUDE.md` carries a managed delimited block (also the fallback for Desktop/Cowork); (4) commands installed from `runtime/commands/` by `runtime/install.sh` (copy-on-install + version marker); (5) the `claude` CLI, called by `runtime/nightly-consolidate.sh` under a cross-platform scheduler (`runtime/schedule-task.sh`: launchd on macOS, cron on Linux/WSL, `schtasks.exe` on native Windows via Git Bash). `permissions.additionalDirectories` includes `~/permanence`. Material-shift writing rides (2) + (3), per the contract above. **Owner carries: nothing.** **Rebuild elsewhere = clone → run `runtime/install.sh`, which wires both hooks and the permission itself — only a machine with no `python3` needs the printed snippet pasted by hand.**
+**Claude Code binding (the reference implementation — all five answered).** Implemented as `runtime/bindings/claude-code/{detect,wire}`, like any other binding. (1) SessionStart hook in `~/.claude/settings.json` → `runtime/session-start.sh`; (2) UserPromptSubmit hook → `runtime/session-load.sh`, forcing the actual read of PROJECT/QUESTIONS/LOG-tail onto the first message; (3) `CLAUDE.md` carries a managed delimited block (also the fallback for Desktop/Cowork); (4) commands installed from `runtime/commands/` (copy-on-install + version marker); (5) the `claude` CLI, called by `runtime/nightly-consolidate.sh` under a cross-platform scheduler (`runtime/schedule-task.sh`: launchd on macOS, cron on Linux/WSL, `schtasks.exe` on native Windows via Git Bash). `permissions.additionalDirectories` includes `~/permanence`. Material-shift writing rides (2) + (3), per the contract above. **Owner carries: nothing.** **Rebuild elsewhere = clone → run `runtime/install.sh`, which wires both hooks and the permission itself — only a machine with no `python3` needs the printed snippet pasted by hand.**
+
+**Antigravity binding (four of five answered).** Implemented as `runtime/bindings/antigravity/`. (1)+(2) a `PreInvocation` hook carries both — no separate passive-orientation event exists, and none is needed (forcing subsumes passive, confirmed live for this binding); (3) a managed delimited block in the global `~/.gemini/GEMINI.md`; (5) `agy`'s headless mode. (4) command invocation via Skills is not yet built — see `design/antigravity-binding.md` §5. **Owner carries: the command layer** (`/perma-*` commands have no home here yet).
 
 **`AGENTS.md`-reading tools (question 3 only).** `runtime/install.sh` also writes a delimited pointer block (`runtime/agents-md-block.md`) into whichever *global*, per-machine `AGENTS.md`-style config paths already exist on the machine — never into a project-committed `AGENTS.md`, which invariant 1 forbids (that file is meant to be shared with every contributor). This answers question 3 and nothing else: the standing rule lands, so the write side works, but there is no forcing read and no command layer. **Owner carries: orientation** — say *"good morning Permanence"* (or run `/perma-startup <name-or-path>`) at the start of a session, since nothing injects it automatically. A tool reading none of these files carries everything: the manual pointer is the whole binding. See `docs/TOOL-SUPPORT.md`.
