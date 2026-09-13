@@ -35,7 +35,7 @@ for f in "$CMD_SRC"/*.md; do
 done
 
 # 2. Executable bits + git hooks path (re-run needed once after any re-clone)
-chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* 2>/dev/null
+chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* "$PERMA/runtime/bindings/"*/detect "$PERMA/runtime/bindings/"*/wire 2>/dev/null
 git -C "$PERMA" config core.hooksPath .githooks
 echo "  hooks: core.hooksPath=.githooks (pre-commit people-guard + post-commit contents refresh)"
 
@@ -143,7 +143,28 @@ else
 SETTINGS
 fi
 
-# 6. Events (cross-project notifications) — OPT-IN. The scripts (emit-event / events-listen /
+# 6. Optional harness bindings — any AI tool beyond Claude Code that has a
+#    runtime/bindings/<harness>/ directory. Each subdirectory is self-contained: its own detect
+#    script decides whether it applies to this machine, its own wire script does the actual
+#    merge. install.sh knows nothing about any specific harness here — adding one is a new
+#    directory, not an edit to this file. See design/harness-binding-mechanism.md.
+for b in "$PERMA/runtime/bindings/"*/; do
+  [ -d "$b" ] || continue
+  name="$(basename "$b")"
+  [ -x "$b/detect" ] || continue
+  if "$b/detect" >/dev/null 2>&1; then
+    if [ -x "$b/wire" ] && "$b/wire"; then
+      echo "  binding: $name wired"
+    elif [ -x "$b/wire" ]; then
+      echo "  binding: $name — FAILED to wire (see above)"
+      INSTALL_FAILED=1
+    else
+      echo "  binding: $name detected, no wire script yet"
+    fi
+  fi
+done
+
+# 7. Events (cross-project notifications) — OPT-IN. The scripts (emit-event / events-listen /
 #    stop-listen / resolve-stream) + the /perma-emit command are installed by steps 1-2. *Emitting*
 #    works now; *receiving* uses two machine-wide hooks we DON'T auto-wire (your call):
 #      • UserPromptSubmit → events-listen.sh  — delivers waiting messages on a session's next prompt
@@ -155,7 +176,7 @@ echo "  events: scripts + /perma-emit installed. To ENABLE delivery (opt-in), ad
 echo "      \"UserPromptSubmit\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"$PERMA/runtime/events-listen.sh\", \"timeout\": 10 } ] } ],"
 echo "      \"Stop\":             [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"$PERMA/runtime/stop-listen.sh\",  \"timeout\": 10 } ] } ]"
 
-# 7. Shutdown nudge (macOS) — OPT-IN. A weekday end-of-day notification reminding you to run
+# 8. Shutdown nudge (macOS) — OPT-IN. A weekday end-of-day notification reminding you to run
 #    /perma-shutdown. Not installed automatically (a desktop ping is a personal choice).
 echo "  shutdown nudge: to get a weekday reminder to run /perma-shutdown, enable it:"
 echo "      $PERMA/runtime/shutdown-nudge.sh --install 17:00   (change the time, or --uninstall to remove)"
