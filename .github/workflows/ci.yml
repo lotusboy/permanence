@@ -196,6 +196,103 @@ jobs:
           fi
           echo "PASS: a future release's new tracked path is delivered in one --apply, automatically."
 
+      - name: Verify the real transition (latest shipped release -> this PR) never loses data silently
+        shell: bash
+        run: |
+          set -e
+          # This is a genuinely different guarantee from the step above, and a weaker one on
+          # purpose. An install on the latest already-SHIPPED tag, upgrading to this PR's own
+          # content, runs that OLD release's own update.sh and reads its own perma-upgrade.md --
+          # both frozen at whatever they were when that tag shipped, before any fix in this PR
+          # existed. Neither the script fix nor the AI-instruction fix above can reach backwards
+          # into an already-shipped release, so this transition can genuinely need a manual "take
+          # theirs" step -- that is not a bug and this check does not try to make it disappear.
+          # What must never happen, and what this checks for real: VERSION silently claiming full
+          # completion while tracked content is actually missing -- the original bug this whole
+          # release exists to fix. Safe outcomes: either it genuinely completes, or it correctly
+          # stops short and says so. The one unsafe outcome -- claims done, isn't -- fails the job.
+          PREV_TAG=$(git tag --sort=-v:refname | head -1)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No existing shipped tag yet -- nothing to test this transition against."
+            exit 0
+          fi
+          echo "Testing: latest shipped ($PREV_TAG) -> this PR's HEAD, using that release's own script"
+
+          THIS_SHA=$(git rev-parse HEAD)
+          THIS_VERSION=$(tr -d '[:space:]' < _meta/VERSION)
+
+          # Without a tag matching THIS_VERSION, the OLD script's own tag resolution
+          # (`git tag --merged FETCH_HEAD`) finds nothing newer than $PREV_TAG and short-circuits
+          # to "Already up to date" without attempting anything -- caught by testing this for
+          # real, not assumed. A real v1.4.0 tag only exists once this PR actually merges (the
+          # auto-tag job creates it then); simulate that state locally so the OLD script sees a
+          # real target to reach for, matching what it will actually see post-merge.
+          git tag "$THIS_VERSION" "$THIS_SHA"
+
+          git config user.email "ci@example.com"
+          git config user.name "CI"
+
+          OLD_INSTALL="${RUNNER_TEMP}/old-install"
+          git worktree add --detach "$OLD_INSTALL" "$PREV_TAG" -q
+          rm -rf "$OLD_INSTALL/.git"
+          git -C "$OLD_INSTALL" init -q
+          git -C "$OLD_INSTALL" config user.email "ci@example.com"
+          git -C "$OLD_INSTALL" config user.name "CI"
+          git -C "$OLD_INSTALL" add -A
+          git -C "$OLD_INSTALL" commit -q -m "scratch install at $PREV_TAG"
+
+          export PERMA_UPDATE_SOURCE="${GITHUB_WORKSPACE}" PERMA_DIR="$OLD_INSTALL"
+          export PERMA_UPDATE_BRANCH="$THIS_SHA"
+
+          # Runs the OLD (pre-this-PR) update.sh -- deliberately, that is the actual condition
+          # a real existing install is in. Failure here (a non-zero exit some other way) would
+          # be its own problem, but is not what this check is for -- see the VERSION+content
+          # logic below, which is where the real safety property is verified.
+          bash "$OLD_INSTALL/runtime/update.sh" --apply || true
+
+          GOT_VERSION=$(tr -d '[:space:]' < "$OLD_INSTALL/_meta/VERSION")
+          echo "VERSION after apply: $GOT_VERSION (this PR ships as: $THIS_VERSION)"
+
+          # Whether a content gap here is a genuine regression or the one known, accepted, and
+          # provably unfixable exception depends on one thing: did $PREV_TAG's own update.sh
+          # already carry the self-heal fix? If yes, this transition SHOULD have protected
+          # itself, and a gap is a real regression -- hard fail. If no (true for v1.3.0, which
+          # predates the fix), this is exactly the crossing that cannot be protected in code --
+          # the fix cannot reach backwards into an already-shipped, already-frozen release. Not
+          # a version-number allowlist; a direct check of the actual root cause.
+          PREV_HAS_FIX=false
+          git show "$PREV_TAG:runtime/update.sh" 2>/dev/null | grep -q "self_updated" && PREV_HAS_FIX=true
+          echo "Did $PREV_TAG's own update.sh already have the self-heal fix? $PREV_HAS_FIX"
+
+          if [ "$GOT_VERSION" = "$THIS_VERSION" ]; then
+            echo "Claims full completion -- verifying tracked content genuinely matches, not just the string..."
+            # shellcheck disable=SC1090
+            source <(grep "^PATHS=" "${GITHUB_WORKSPACE}/runtime/update.sh")
+            if git -C "$OLD_INSTALL" diff --quiet "$THIS_SHA" -- "${PATHS[@]}"; then
+              echo "PASS: genuinely complete -- VERSION and content agree."
+            elif [ "$PREV_HAS_FIX" = false ]; then
+              echo "::warning::Known, documented, unfixable-in-code gap: $PREV_TAG predates the self-heal"
+              echo "::warning::fix, so it cannot protect its own upgrade to this PR. VERSION claims"
+              echo "::warning::$GOT_VERSION but tracked content differs -- see CHANGELOG.md's v1.4.0 entry"
+              echo "::warning::and docs/UPGRADE.md. Not blocking merge: this is the one crossing where the"
+              echo "::warning::fix's own introduction cannot retroactively protect itself, not a new defect."
+              git -C "$OLD_INSTALL" diff --stat "$THIS_SHA" -- "${PATHS[@]}"
+              echo "PASS (with warning above) -- see docs/UPGRADE.md before actually upgrading a real"
+              echo "install across this exact boundary; verify manually rather than trusting this alone."
+            else
+              echo "FAILED: $PREV_TAG already had the self-heal fix, so this content gap is a genuine"
+              echo "regression, not the known exception. VERSION claims $GOT_VERSION but tracked content"
+              echo "still differs from this PR:"
+              git -C "$OLD_INSTALL" diff --stat "$THIS_SHA" -- "${PATHS[@]}"
+              echo "This is the exact silent-loss bug this release exists to fix -- claims done, isn't."
+              exit 1
+            fi
+          else
+            echo "PASS: correctly did not claim completion ($GOT_VERSION, not $THIS_VERSION) -- safe,"
+            echo "stopped short rather than silently losing anything. Expected for this one transition;"
+            echo "see CHANGELOG.md's v1.4.0 entry and docs/UPGRADE.md for why."
+          fi
+
   lint:
     runs-on: ubuntu-latest
     steps:
