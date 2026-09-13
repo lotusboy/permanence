@@ -70,7 +70,11 @@ question 5.
    and confirmed to *not* fall back to `AGENTS.md`. The mechanism exists; what's still open is
    whether Permanence's material-shift rule needs its own written block there at all, or
    whether the forcing read (question 2) alone already carries it every turn — see §5, this is
-   now the first thing to resolve, not the last.
+   now the first thing to resolve, not the last. **Update 2026-09-13**: the global
+   `~/.gemini/GEMINI.md` was live-tested for the Antigravity binding (its own design doc §2) and
+   confirmed working there too, on the same underlying file — the two bindings may be able to
+   share one standing-instruction block instead of each writing a separate one. Worth designing
+   for deliberately once this binding is actually built, not assumed away in either direction.
 4. **Command invocation.** Needed for the human-triggered triggers — `/perma-shutdown`,
    `/perma-upgrade`, and the rest of `runtime/commands/*.md`. Whether Gemini CLI has any
    custom-slash-command mechanism comparable to `~/.claude/commands/*.md` is **unverified** —

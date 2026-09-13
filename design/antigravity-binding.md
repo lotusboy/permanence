@@ -1,128 +1,146 @@
 # Design — an Antigravity binding for Permanence
 
-> Status: **proposed, not started.** No code in this repo implements any of this yet — but the
-> read-side mechanism (§3 question 2) is now live-verified, not just designed.
-> Written 2026-09-13, substantially revised the same day after live testing. See
+> Status: **proposed, not started.** No code in this repo implements any of this yet — but all
+> five binding-contract questions now have live-verified or authoritatively-documented answers,
+> not open unknowns.
+> Written 2026-09-13, substantially revised twice the same day after live testing. See
 > [ROADMAP.md](../ROADMAP.md) for where this sits relative to other work, and
 > [gemini-cli-binding.md](./gemini-cli-binding.md) — Antigravity shares a `~/.gemini/` path
-> prefix with Gemini CLI, which is shared branding, not a shared mechanism (confirmed below,
-> not just assumed): the two need genuinely separate bindings.
+> prefix with Gemini CLI, which is shared branding, not a shared mechanism for hooks (confirmed
+> below), though the two may genuinely share one standing-instruction file (also below).
 
-**Owner carries, as of the live testing below:** likely just command invocation and the
-standing-instruction question, not the whole read/write side. The forcing read (question 2) is
-now proven working end-to-end. Standing instruction (question 3) and command invocation
-(question 4) are still genuinely open — see §3.
+**Owner carries, once built: likely nothing on the read/write side.** All five binding-contract
+questions (§3) now have real answers — three live-tested end-to-end (forcing read, standing
+instruction, headless invocation), two confirmed against the actual installed product's own
+bundled documentation (passive orientation by omission, command invocation via Skills). What's
+left is writing the code, not resolving unknowns — see §4 and §5.
 
 ## 1. Why
 
 Same owner motivation as the Gemini CLI design: Antigravity is on the wish list alongside Claude
-Code/Desktop and Gemini CLI/Mac. Unlike Gemini CLI, Antigravity's hook system is its **own,
-third vocabulary** — not a variant of Gemini CLI's — confirmed by both reading its docs and
-running it for real. That's why this is a separate design doc, not a section of the Gemini CLI
-one. **Priority flipped to Antigravity over Gemini CLI on 2026-09-13** (see
-`design/harness-binding-mechanism.md` §5): personal Google-account sign-in to Gemini CLI is
+Code/Desktop and Gemini CLI/Mac. **Priority flipped to Antigravity over Gemini CLI on 2026-09-13**
+(see `design/harness-binding-mechanism.md` §5): personal Google-account sign-in to Gemini CLI is
 being actively rejected server-side, reproduced twice, with Google's own message pointing
-individual users at Antigravity instead. Antigravity was also already installed and
-authenticated on this machine, which is what made the live testing below possible in the first
-place.
+individual users at Antigravity instead. Antigravity was already installed and authenticated on
+this machine, which is what made all the live testing below possible.
 
 ## 2. What's verified, and against what
 
-**Primary source, as of the 2026-09-13 update below: a file bundled with the actual installed
-product**, not the public web docs — `~/.gemini/antigravity-ide/builtin/skills/agy-customizations/docs/hooks.md`,
-shipped locally with `antigravity-cli` 1.2.2 (installed via `brew install --cask antigravity-cli`).
-This is more authoritative than `antigravity.google/docs/hooks/` (the original source for this
-doc's first pass) because it's the literal spec the installed binary implements — but it's
-version-pinned to 1.2.2, not guaranteed to match any other version. Where the two sources
-differ, the local one wins below, and the difference is called out.
+**Primary source: files bundled with the actual installed product**
+(`~/.gemini/antigravity-ide/builtin/skills/agy-customizations/`), not the public web docs. This
+is the literal spec the installed binary (`antigravity-cli` 1.2.2, via
+`brew install --cask antigravity-cli`) implements, discovered by browsing the install rather than
+re-reading the public site harder. Version-pinned to 1.2.2, not guaranteed to match any other
+version. The bundle's own overview (`SKILL.md`) states the full customization system precisely
+enough that most of what follows is *read*, not inferred — the live tests exist to confirm the
+docs match reality, and in every case here, they did (after correcting one schema error, itself
+also caught by the binary's own error message, not by guessing).
 
-**Original pass, against the public docs (still true):**
+**Discovery locations, per the bundle's own overview — three, each with a distinct scope:**
 
-- **Hook events**: `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`. No
-  `SessionStart` event exists.
-- **The shared `~/.gemini/` path is branding, not a shared engine** — confirmed further below:
-  Gemini CLI and Antigravity use different config files (`settings.json` vs `hooks.json`) and,
-  now confirmed live, different discovery behavior even within Antigravity's own two candidate
-  locations (see next section).
+1. **Workspace** (`.agents/`, or `.agent/`/`_agents/`/`_agent/`) — walked from cwd up to the
+   repository root (the `.git` boundary). Covers skills, plugins, and — per the generic docs,
+   though **live-tested and not observed working for hooks specifically in 1.2.2** (see below).
+2. **Directory & Project Rules** (`GEMINI.md`, `AGENTS.md`, `.agents/rules/*.md`) — a *separate*
+   walk, from the current file's directory up to the repository root. This is the standing-
+   instruction mechanism (§3 question 3).
+3. **Global** (`~/.gemini/config/`) — machine-wide, applies to every project. Confirmed by
+   testing to be where `hooks.json` actually lives for this version, contradicting the generic
+   docs' workspace-first framing.
 
-**2026-09-13 — live-tested against the real, already-authenticated install, not simulated:**
+Priority when names collide: workspace > workspace-declared JSON config > global > built-in >
+global-declared JSON config.
 
-- **Config location: the global `~/.gemini/config/hooks.json` is confirmed correct** — proven
-  by a real Go parse error from the binary itself (`hooks_manager.go`) on a wrong schema, then a
-  real "loaded N named hooks" success line once corrected. **The workspace-local `.agents/hooks.json`
-  path the docs present as the primary example was tried and NOT discovered at all** by this CLI
-  version — "loaded 0 named hooks from 0 hooks.json file(s)," even with a file genuinely present
-  there. A real discrepancy between the generic docs and this specific installed version, not
-  assumed away.
-- **The real schema has one more layer than either doc source states plainly**: the top level of
-  `hooks.json` is **arbitrary hook *names*** (e.g. `"perma-binding"`), each optionally carrying
-  `"enabled"` plus the event names as sub-keys — not event names directly at the top level.
-  `PreToolUse`/`PostToolUse` are **grouped**: `[{"matcher": "...", "hooks": [{"command": ...}]}]`.
-  `PreInvocation`/`PostInvocation`/`Stop` are **flat**: `[{"command": ..., "timeout": ...}]` — an
-  array of handler objects directly, no `matcher`, no extra `hooks` wrapper.
-- **`PreInvocation` genuinely fires, live-confirmed, and its context-injection mechanism
-  genuinely works.** A real test: registered a `PreInvocation` hook returning
-  `{"injectSteps":[{"ephemeralMessage":"...say the word BANANA..."}]}`, then asked `agy --print`
-  for a one-sentence greeting. **The model's real reply contained the word "BANANA."** This is
-  not a config-loading confirmation — it's proof the actual forcing-read mechanism Permanence
-  needs (inject an instruction, have the model act on it) works end-to-end on this harness.
+**Hooks (`hooks.json`) — live-tested, config confirmed by the binary's own error messages:**
+
+- **Location: the global `~/.gemini/config/hooks.json` is what this version actually reads** —
+  proven by a real Go parse error from the binary (`hooks_manager.go`) on a wrong schema, then a
+  real "loaded N named hooks" line once corrected. **Workspace-local `.agents/hooks.json` was
+  tried and not discovered at all** — "loaded 0 named hooks from 0 hooks.json file(s)," despite a
+  file genuinely present there. Plausible explanation, not yet confirmed: the test directory
+  wasn't a git repository, and location 1's walk-up needs a `.git` boundary to anchor on — a real
+  registered Permanence project normally would be one, so this may not matter in practice, but
+  it's a real gap between the generic docs and what was observed, not assumed away.
+- **Schema, precisely**: the top level of `hooks.json` is **arbitrary hook *names***, each
+  optionally carrying `"enabled"` plus event names as sub-keys — not event names directly at the
+  top level. `PreToolUse`/`PostToolUse` are **grouped**: `[{"matcher": "...", "hooks":
+  [{"command": ...}]}]`. `PreInvocation`/`PostInvocation`/`Stop` are **flat**: `[{"command": ...,
+  "timeout": ...}]`.
+- **`PreInvocation` fires, and its context-injection mechanism genuinely works — live-proven, not
+  just config-loading confirmed.** A hook returning
+  `{"injectSteps":[{"ephemeralMessage":"...say the word BANANA..."}]}` caused the model's real
+  reply to actually contain "BANANA." This is the literal forcing-read mechanism Permanence needs.
 - **`PreInvocation` fires more than once per turn** — captured payloads carried
-  `"invocationNum":0` then `"invocationNum":1` within a single simple exchange. Cardinality
-  question resolved: **not** once per turn, so a once-per-conversation cursor is required before
-  this is a real binding, not just a proof of concept. `conversationId` is present in every
-  payload and is the natural cursor key — same role `session-load.sh`'s
-  `/tmp/.perma-loaded-<session-id>` plays for Claude Code.
-- **`PreToolUse` genuinely fires too, and fails closed correctly**: a hook returning a bare `{}`
-  (not a valid `{"decision": "allow"|"deny"|"ask"|"force_ask", ...}`) caused the tool call to be
-  denied automatically — a real, sensible safety default, and a concrete reminder that a real
-  `wire` script must return a proper decision object, not just acknowledge receipt.
-- **The earlier "headless mode excludes hooks" finding (this doc's first pass, same day) was
-  wrong, and now traceably so**: at the time, both the schema (missing the hook-name wrapper)
-  and the tested location (`.agents/`, never discovered) were wrong simultaneously. Once both
-  were corrected, hooks fired correctly inside plain `agy --print` (headless) sessions — headless
-  and hook-carrying are **not** mutually exclusive on this harness. That concern is retired.
-- **`workspacePaths` resolved, and the two surfaces behave oppositely.** Plain `agy --print` run
-  from inside a real directory left it empty — needs the explicit `--add-dir <path>` flag, which
-  then populates it correctly (live-confirmed). **The GUI IDE populates it automatically**, no
-  flag needed: opening a real project folder (`File → Open Folder`) and sending one message
-  produced `"workspacePaths":["/Users/lotusboy/workspaces/modo"]` — the actual real folder,
-  correctly, with zero configuration. Since opening a folder in the IDE is how this harness is
-  actually used day to day, stream resolution (mapping `workspacePaths[0]` through
-  `_meta/REGISTRY.md`, the same longest-prefix logic `resolve-stream.sh` already does) is now
-  confirmed buildable on the realistic path. The CLI path only matters if a headless/scripted use
-  case needs it later — `--add-dir` is the fix if so.
-- **No context-file convention confirmed either way still** — no `CLAUDE.md`/`GEMINI.md`/
-  `AGENTS.md` equivalent found in the local hooks doc or elsewhere checked so far. Genuinely open,
-  not just under-researched — the local doc that resolved everything else above doesn't mention
-  one.
+  `"invocationNum":0` then `"invocationNum":1` within one simple exchange. A once-per-conversation
+  cursor is required; `conversationId` is present in every payload and is the natural key, the
+  same role `session-load.sh`'s `/tmp/.perma-loaded-<session-id>` plays for Claude Code.
+- **`PreToolUse` fires and fails closed correctly**: a hook returning a bare `{}` (not a valid
+  `{"decision": "allow"|"deny"|"ask"|"force_ask", ...}`) caused the tool call to be denied
+  automatically — a real, sensible safety default.
+- **Headless mode (`agy --print`) does carry hooks** — an earlier same-day finding that it didn't
+  was wrong, traced to the schema and location bugs above being simultaneously wrong, not a real
+  product limitation. Retested clean once both were fixed.
+
+**Rules (`GEMINI.md`/`AGENTS.md`) — the standing-instruction question, live-tested and
+confirmed:**
+
+- The bundle's `rules.md` states plainly: these files are discovered walking up from the current
+  file's directory to the repository root, no frontmatter needed, always active for their scope.
+- **Live-tested at the global level, and it works.** `~/.gemini/GEMINI.md` already exists on this
+  machine (empty, pre-existing). Wrote a test instruction into it ("end every reply with the word
+  ZUCCHINI"), ran a real `agy --print` session with **no hooks involved at all** — the reply
+  genuinely ended in "ZUCCHINI." Restored the file to empty immediately after.
+- **This is the same file Gemini CLI reads** (confirmed independently in that design doc's own
+  research: `GEMINI.md`, discovered upward from cwd to `.git`, not `AGENTS.md`). One global file
+  may be able to carry the standing instruction for both bindings at once — worth designing for
+  deliberately rather than writing two separate blocks that could drift apart.
+- Not yet tested: a project-level `GEMINI.md`/`AGENTS.md` (only the global one was tried) — the
+  mechanism doc's own precedence order says workspace would win if both existed, consistent with
+  Claude Code's own CLAUDE.md-block pattern.
+
+**Skills (`skills/<name>/SKILL.md`) — the command-invocation question, confirmed against the
+bundled docs, not yet live-tested:**
+
+- A skill is a directory (`skills/<name>/`) containing `SKILL.md` with YAML frontmatter (`name`,
+  `description`) plus the procedure body — structurally very close to what
+  `runtime/commands/*.md` already are, minus the frontmatter.
+- **Invocation is description-matched, not literal slash syntax.** Per the bundle's overview:
+  "Skills are not loaded into the context window by default. Only their names and descriptions
+  are injected. The full content of a skill is only loaded if the model (or the user) explicitly
+  decides to activate it." This is a genuinely different invocation model from Claude Code's
+  `/perma-shutdown` — no confirmed literal command syntax was found — but it's functionally
+  equivalent for the human-triggered triggers: saying something matching a skill's description
+  (e.g. "wind down for the day") should activate it, the same job a slash command does.
+- Discovery follows the same workspace/global split as hooks (§ above) — `skills/` under
+  `.agents/` in a workspace, or under `~/.gemini/config/` globally; `skills.json` exists for
+  registering non-standard locations (e.g. pointing at a shared, version-controlled skills
+  directory), per `json_configs.md`.
 
 ## 3. Trigger mapping — the five binding-contract questions
 
 Per `SPEC.md` §3's binding contract, these five questions are answered independently, not as a
-ladder.
+ladder. **All five now have real answers.**
 
 1. **Passive orientation.** No `SessionStart`-equivalent event exists, and none is needed:
    `PreInvocation` fires reliably (§2), so per `SPEC.md` §3's "forcing subsumes passive," this
-   question is correctly answered by omission — confirmed, not just assumed.
-2. **Forcing read.** **Confirmed working, live-tested, not just designed.** `PreInvocation`
-   fires on every model call within a conversation (`invocationNum` 0, 1, 2...), and its
-   `injectSteps`/`ephemeralMessage` field demonstrably steers the model's real output (§2's
-   BANANA test). Building this for real needs one addition beyond the proof of concept: a
-   once-per-conversation cursor keyed on `conversationId`, so the orientation/forcing text is
-   injected once per session, not on every single model call within it.
-3. **Standing instruction.** Still genuinely unresolved — no context-file convention found.
-   This is the question whose absence is silent (`SPEC.md` §3: nothing errors, the model just
-   never learns to update the stream unprompted, and the gap only shows up as an empty `LOG.md`
-   weeks later) — now the clear top priority for further verification, since question 2 no
-   longer is.
-4. **Command invocation.** Still unverified: does Antigravity have a custom-slash-command layer
-   for `/perma-*` to live in? Not checked in this round of live testing.
-5. **Headless invocation.** Confirmed real (`agy --print`), **and confirmed to carry hooks
-   correctly** — the earlier concern that headless and hook-carrying might be separate
-   capabilities was live-tested and retired (§2). `workspacePaths` needs the explicit `--add-dir`
-   flag in this mode (confirmed working once added) — relevant only to a future headless/
-   scripted use case like the nightly consolidate, not to the forcing-read mechanism, which is
-   confirmed working with or without it.
+   question is correctly answered by omission — confirmed, not assumed.
+2. **Forcing read.** **Live-confirmed.** `PreInvocation` + `ephemeralMessage` injection
+   demonstrably steers model output (§2's BANANA test). Needs a once-per-conversation cursor
+   keyed on `conversationId` before it's a real binding, not just a proof of concept.
+3. **Standing instruction.** **Live-confirmed**, and the one question whose absence would have
+   been silent (`SPEC.md` §3) — verified rather than assumed for exactly that reason. Global
+   `~/.gemini/GEMINI.md` genuinely works (§2's ZUCCHINI test), and is very plausibly shareable
+   with the Gemini CLI binding rather than needing its own separate file.
+4. **Command invocation.** Confirmed to exist via **Skills** (§2), against the bundled docs —
+   not yet live-tested with a real skill firing. Different invocation model from Claude Code
+   (description-matched, not literal `/command`), but structurally close to
+   `runtime/commands/*.md` already and functionally does the same job.
+5. **Headless invocation.** Confirmed real (`agy --print`), and confirmed to carry hooks
+   correctly — live-tested, the earlier same-day concern that it might not was wrong (§2).
+   `workspacePaths` needs the explicit `--add-dir` flag in headless mode; **the GUI IDE
+   populates it automatically** just from opening a real folder (live-tested: opening
+   `~/workspaces/modo` produced `"workspacePaths":["/Users/lotusboy/workspaces/modo"]`) — the
+   realistic day-to-day case works with zero configuration.
 
 Material-shift is what (2) and (3) produce together, not a sixth question — see `SPEC.md` §3.
 On-commit (guard + refresh) is unaffected: a git hook, not an AI-harness hook, no binding needed.
@@ -135,39 +153,52 @@ in [`design/harness-binding-mechanism.md`](./harness-binding-mechanism.md) — n
 ```
 runtime/bindings/antigravity/
   detect                   # exit 0 iff `agy` (or ~/.gemini/antigravity-cli) is present
-  wire                     # merges a named hook block into ~/.gemini/config/hooks.json —
-                            # NOT workspace .agents/, confirmed undiscovered by this version (§2)
-  pre-invocation-hook.sh   # real job now known precisely (§2/§3): read the invocationNum +
-                            # conversationId off stdin; if this conversationId's cursor
-                            # (~/.gemini/perma-test-style per-conversation marker) hasn't fired
-                            # yet, call session-start.sh + session-load.sh's combined logic and
-                            # return {"injectSteps":[{"ephemeralMessage": <that output>}]};
-                            # otherwise return {} and mark the cursor
+  wire                     # merges a named hook block into ~/.gemini/config/hooks.json (global,
+                            # not workspace .agents/ — confirmed undiscovered by this version);
+                            # writes/merges the standing-instruction block into ~/.gemini/GEMINI.md
+                            # (shared with the Gemini CLI binding, if that also ships — coordinate
+                            # rather than duplicate); installs the command layer as
+                            # skills/<perma-command>/SKILL.md under the same global config root
+  pre-invocation-hook.sh   # reads invocationNum + conversationId off stdin; if this
+                            # conversationId's cursor hasn't fired yet, call session-start.sh +
+                            # session-load.sh's combined logic and return
+                            # {"injectSteps":[{"ephemeralMessage": <that output>}]}; otherwise
+                            # return {} and mark the cursor. Stream resolution uses
+                            # workspacePaths[0] through _meta/REGISTRY.md, the same longest-prefix
+                            # logic resolve-stream.sh already does.
+  pre-tool-use-hook.sh     # must return a real {"decision": "allow", ...} object, not a bare {}
+                            # — confirmed the latter fails closed and blocks the tool (§2)
 ```
 
 ## 5. Must verify before writing any code
 
-Sharply shorter than before this round of live testing — most of what blocked a first milestone
-is now resolved.
+Short — everything that blocked a first real milestone is resolved; what's left is narrower.
 
-1. **Does Antigravity read any global standing-instructions file** — the one remaining question
-   with the same weight as before: its absence is silent, so it's the priority.
-2. **Does a custom-slash-command mechanism exist** for the `/perma-*` command layer — unchanged,
-   still open, checked independently since there's no reason to assume Antigravity and Gemini
-   CLI answer it the same way.
-3. **Whether a Gemini CLI hook and an Antigravity hook can coexist on one machine** without
-   collision — lower priority now that Gemini CLI's own binding is paused (see
-   `harness-binding-mechanism.md` §5), but still relevant if that pauses ends.
+1. **Live-fire an actual Skill**, not just read the docs on how they work — confirm the
+   description-matching invocation behaves as documented, and check whether there's also a
+   literal explicit-invocation syntax (a `/name` or `@name` mention) the docs didn't surface.
+2. **Confirm the `.git`-boundary hypothesis for workspace discovery** — does `.agents/hooks.json`
+   (or `skills/`) work once the test directory is a real git repo, unlike the non-repo scratch
+   folder tested? Matters for whether project-scoped bindings are viable at all, versus
+   global-only.
+3. **Whether a project-level `GEMINI.md`/`AGENTS.md` is worth using instead of (or alongside) the
+   global one** — only the global file was live-tested; per-project rules were not.
+4. **Whether a Gemini CLI hook and an Antigravity hook, and a shared `GEMINI.md`, coexist cleanly**
+   on one machine if both bindings ship — lower priority while Gemini CLI's own binding is paused
+   (`harness-binding-mechanism.md` §5), but worth designing for now that a shared file looks
+   plausible rather than assuming conflict.
 
-Retired by live testing, no longer open: `PreInvocation`'s existence and cardinality,
-`workspacePaths` resolution (confirmed automatic in the GUI, the realistic case), whether
-headless mode excludes hooks, the exact I/O schema for `PreInvocation`/`PreToolUse`.
+Retired by live testing or authoritative local docs, no longer open: `PreInvocation`'s existence,
+cardinality, and injection mechanism; `PreToolUse`'s fail-closed behavior; `workspacePaths`
+resolution on both CLI and GUI; whether headless mode excludes hooks; the standing-instruction
+question; the existence (though not yet the exact invocation syntax) of a command layer.
 
 ## 6. Non-goals
 
-- Not building the full binding yet — items 1–2 above still block a real `wire` script that
-  correctly resolves which stream a session belongs to. But a minimal proof-of-concept
-  `pre-invocation-hook.sh` (inject a fixed test string once per conversation) is now buildable
-  today if useful as a next step, unlike before this round of testing.
-- Not assuming Antigravity and Gemini CLI can share one binding just because of the path overlap
-  — confirmed as two separate config files and, now, two separate discovery behaviors.
+- Not building the full binding in this pass — item 1 (live-firing a real Skill) is worth doing
+  before committing to the exact `wire` shape for the command layer, since the description-match
+  invocation model is confirmed to exist but not yet exercised for real.
+- Not assuming Antigravity and Gemini CLI's hook engines are related just because of the path
+  overlap — confirmed as two separate config files and two separate discovery behaviors. Their
+  standing-instruction file may genuinely be shared, which is the opposite finding, and both are
+  now evidence-based rather than assumed either way.
