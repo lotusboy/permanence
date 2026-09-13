@@ -5,8 +5,9 @@
 > reversed after being written). Verified on real GitHub Actions across all three OS legs,
 > including a real broken-`wire` failure path.
 > Written 2026-09-13. Read this *before*
-> [gemini-cli-binding.md](./gemini-cli-binding.md) or [antigravity-binding.md](./antigravity-binding.md)
-> — both assume the mechanism this doc specifies, rather than each defining their own.
+> [claude-code-binding.md](./claude-code-binding.md), [antigravity-binding.md](./antigravity-binding.md),
+> [devin-binding.md](./devin-binding.md), or [gemini-cli-binding.md](./gemini-cli-binding.md)
+> — all four assume the mechanism this doc specifies, rather than each defining their own.
 
 ## 1. Why this needed its own doc
 
