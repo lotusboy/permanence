@@ -17,7 +17,7 @@ below states plainly what its owner carries — what's still done by hand — in
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Antigravity** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Devin CLI** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
-| **Cursor** | ✅ | ✅ | ❌ | ✅ | ✅ | Standing instruction — confirmed real, permanent gap: no working global rules/`AGENTS.md` file, and a real mid-session write test came back negative too; see `design/cursor-binding.md` §3.3 |
+| **Cursor** | ✅ | ✅ | ❌ | ✅ | ✅ | Standing instruction — a confirmed, likely structural limitation: seven real tests (three file locations, four write-side mechanisms including a forceful wording and `postToolUse` reinforcement) all came back negative; see `design/cursor-binding.md` §3.3 |
 | **AGENTS.md-reading tools** (Codex, droid, Amp, GitHub Copilot, Aider, Zed, Windsurf, Google Jules, ...) | ❌ | ❌ | ✅ | ❌ | ❓ | Orientation — say "good morning Permanence" (or run `/perma-startup <name-or-path>`) at the start of a session |
 | **Any other tool** (manual fallback) | ❌ | ❌ | ❌ | ❌ | ❓ | Everything — the fallback prompt has to be pasted in at the start of every session |
 | **Gemini CLI** (designed, permanently declined) | ❓ | 🔧 | 🔧 | ❓ | 🔧 | Everything, indefinitely — personal-account sign-in is rejected server-side by Google (reproduced twice 2026-09-13); a metered API key would route around it but is a cost decision explicitly declined — see `design/gemini-cli-binding.md` |
@@ -65,12 +65,14 @@ never mentioned Permanence at all still caused the agent to spontaneously read a
 real stream content, purely because the injected instruction told it to. Command invocation is fully
 shipped too — commands translate into `~/.cursor/skills/<name>/SKILL.md`, confirmed invokable by literal
 `/name` syntax from a completely unrelated project, the cleanest command-invocation result of any
-binding built so far. **The standing instruction is a confirmed, permanent gap, not an open question**:
-no working global rules or `AGENTS.md` file was found for Cursor despite three separate live attempts —
-"User Rules" appear to be account-synced through Cursor's own UI, not a local file — and a real
-mid-session test settled the other possibility too: a material fact mentioned mid-conversation was
-acknowledged in the reply but never written back to the stream, unprompted. See `design/cursor-binding.md`
-§3.3. **Owner carries: the standing instruction** — updating the stream when something shifts mid-session
+binding built so far. **The standing instruction is a confirmed, likely structural limitation, not an
+open question**: no working global rules or `AGENTS.md` file was found for Cursor despite three separate
+live attempts — "User Rules" appear to be account-synced through Cursor's own UI, not a local file — and
+seven real tests across two rounds settled the write-side question too: normal wording, a forceful
+imperative wording, the `stop` hook (which turns out not to fire in headless mode at all), and
+`postToolUse` reinforcement all produced the same result — the material fact gets acknowledged in the
+reply, never written back, unprompted. See `design/cursor-binding.md` §3.3. **Owner carries: the standing
+instruction** — updating the stream when something shifts mid-session
 needs doing by hand, confirmed, not just suspected.
 
 ## AGENTS.md-reading tools (standing instruction only)

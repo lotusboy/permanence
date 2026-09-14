@@ -1,23 +1,26 @@
 # Design — a Cursor binding for Permanence
 
-> Status: **built and shipped, four of five — the standing instruction is a confirmed, permanent
-> gap, not an open question.** `runtime/bindings/cursor/` implements passive orientation + the
-> forcing read (one `sessionStart` hook, per §2) and command invocation (Skills) — both live-fire
-> tested end-to-end against the real installed product, including a real `/perma-help` invocation
-> that executed its full logic correctly. One finding reversed an initial, docs-based worry; the
-> standing instruction was tested four separate ways (three file locations, plus a real mid-session
-> write test 2026-09-14) and failed all four — see §5.
-> Written 2026-09-14. See [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the
-> `detect`/`wire` interface this implements rather than re-deriving.
+> Status: **built and shipped, four of five — the standing instruction is a confirmed, likely
+> structural limitation, not an open question.** `runtime/bindings/cursor/` implements passive
+> orientation + the forcing read (one `sessionStart` hook, per §2) and command invocation
+> (Skills) — both live-fire tested end-to-end against the real installed product, including a real
+> `/perma-help` invocation that executed its full logic correctly. One finding reversed an initial,
+> docs-based worry; the standing instruction was tested **seven** separate ways across two rounds
+> (three file locations, a real mid-session write test, a much stronger imperative wording, the
+> `stop` hook, and `postToolUse` reinforcement) and failed all seven — see §5.
+> Written 2026-09-14, extended the same day after a second round of live testing. See
+> [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the `detect`/`wire` interface
+> this implements rather than re-deriving.
 
-**Owner carries: the standing instruction, confirmed, not just suspected.** Four of five
-binding-contract questions are shipped and live-fire tested — `sessionStart` answering passive
-orientation *and* the forcing read at once, simpler than every other binding built so far, not
-more complex, and command invocation confirmed via a real `/perma-help` run that executed its
-actual logic (checked scheduled tasks, read real registry data) rather than just echoing text.
-**A real mid-session test settled the standing-instruction question with a clean negative**: a
-material fact mentioned mid-conversation was acknowledged in the reply but never written back to
-the stream, unprompted — see §5.
+**Owner carries: the standing instruction, confirmed across seven real tests, not just
+suspected.** Four of five binding-contract questions are shipped and live-fire tested —
+`sessionStart` answering passive orientation *and* the forcing read at once, simpler than every
+other binding built so far, not more complex, and command invocation confirmed via a real
+`/perma-help` run that executed its actual logic (checked scheduled tasks, read real registry
+data) rather than just echoing text. **Every mechanism tried for the write side came back
+negative, consistently**: a material fact mentioned mid-conversation is reliably acknowledged in
+the reply but never written back to the stream, unprompted — true whether the instruction is
+worded normally, worded as a forceful imperative, or repeated after every tool call. See §5.
 
 ## 1. Why
 
@@ -60,9 +63,10 @@ live:**
   docs-based worry from §1. Per `SPEC.md` §3's "forcing subsumes passive," `sessionStart` alone
   plausibly answers both question 1 and question 2, and no second hook was needed to prove it.
 - `postToolUse` **also** genuinely injects `additional_context`, confirmed live (a
-  read-a-file-then-summarize prompt reliably ended in an injected word) — a viable secondary
-  reinforcement mechanism if `sessionStart` alone ever proves insufficient in practice, but not
-  required by anything confirmed so far.
+  read-a-file-then-summarize prompt reliably ended in an injected word) — reliably steers replies,
+  but tested later as a reinforcement mechanism for the standing instruction specifically and
+  found *not* to help there either (§3.3) — the injection mechanism works, it just doesn't solve
+  this particular problem.
 - `beforeSubmitPrompt` **confirmed via docs to be genuinely read-only** (`continue` boolean only,
   no context field) — not live-tested further since it turned out unnecessary, not because the
   docs claim went unchecked.
@@ -99,11 +103,33 @@ including literal slash syntax:**
   decided to deprecate the old export-to-CSV feature entirely") without asking Permanence to be
   updated. The agent acknowledged the fact in its reply ("Noted on the CSV export deprecation")
   but never touched `PROJECT.md` or `LOG.md` — confirmed by file checksums before and after,
-  unchanged. `sessionStart`'s content is genuinely read and acted on for orientation (§2), but not
-  for the ongoing write side, at least not on the freshest possible turn, when the injected
-  instruction is closest in context and easiest to act on. This settles the question rather than
-  leaving it open: the standing instruction is a real, permanent gap for Cursor as currently
-  bound, not an untested maybe.
+  unchanged.
+- **Second round, same day: three more mechanisms tried, three more negatives, applying Seesaw
+  first (is this my content's fault, or the platform's?) before building anything new.**
+  - **A much stronger, imperative wording** ("you MUST update... before you finish replying... Do
+    not just acknowledge it") prepended ahead of the real orientation content — same result,
+    unchanged files. This rules out weak wording as the cause: it's not that the instruction was
+    too soft, since a maximally direct version failed identically.
+  - **The `stop` hook** (fires when the agent is about to end its turn; can return
+    `followup_message` to auto-submit an additional turn) looked like the most targeted candidate
+    — a forced extra turn dedicated to "check and update," not a hope that a buried instruction
+    gets noticed. **It never fired at all in headless (`-p`) mode** — confirmed directly with a
+    debug-instrumented hook that logs to a file on every invocation: zero log entries across a
+    real test run. This matches a real bug report found during initial research (§1) claiming the
+    CLI omits `stop` and other hooks. Genuinely untested: whether `stop` fires in *interactive*
+    use, which this sandboxed environment has no way to test (no real terminal available) — this
+    finding is specific to headless mode, not a claim about Cursor generally.
+  - **`postToolUse` reinforcement** — wired alongside `sessionStart`, injecting the same
+    "check and update" reminder after every tool call within the turn, confirmed to actually fire
+    (§2 above already proved `postToolUse` injects correctly). Same result again: the fact was
+    acknowledged conversationally, files unchanged.
+  - **What this pattern means**: `sessionStart`- and `postToolUse`-injected `additional_context`
+    consistently and reliably shapes what the model *says* — every single test's reply correctly
+    referenced the material fact — but never once caused it to *act* by running a write command
+    unprompted, across three different content strategies and two different injection points.
+    That consistency across genuinely different approaches is itself the finding: this reads as a
+    structural property of how Cursor's agent decides when to use tools on its own initiative, not
+    a fixable wording or placement problem on Permanence's side.
 
 **Headless invocation — confirmed:**
 
@@ -118,10 +144,12 @@ Per `SPEC.md` §3's binding contract, independent questions, not a ladder.
 2. **Forcing read. Live-confirmed, decisively** (§2) — the one finding that reverses this
    binding's original docs-based worry. `sessionStart` alone demonstrably causes unprompted,
    accurate action on real Permanence content, not just passive availability.
-3. **Standing instruction. A confirmed gap, not an unknown.** No working global rules file was
-   found despite three real attempts, and a real mid-session write test came back negative too —
-   a material fact was acknowledged in conversation but never written back, unprompted (§2). Four
-   separate tests, four negatives. See §5.
+3. **Standing instruction. A confirmed, likely structural limitation, not an unknown.** No working
+   global rules file was found despite three real attempts, and four separate write-side
+   mechanisms all came back negative too — normal wording, a forceful imperative wording, the
+   `stop` hook (which turned out not to fire headlessly at all), and `postToolUse` reinforcement
+   (§2). Seven tests, seven negatives, consistent enough to read as a real property of how
+   Cursor's agent decides when to act versus merely acknowledge. See §5.
 4. **Command invocation. Live-confirmed**, including literal `/name` syntax from a genuinely
    global path (§2) — the cleanest result of any binding built this session.
 5. **Headless invocation. Confirmed** (§2), needing `--trust` for non-interactive use.
@@ -140,9 +168,9 @@ runtime/bindings/cursor/
   wire                   # merges a sessionStart hook into the GLOBAL ~/.cursor/hooks.json
                           # "hooks" object — NOT the project-level .cursor/hooks.json, which
                           # would violate invariant 1 if written into an open repo. No second
-                          # hook wired — the standing-instruction gap is real and confirmed
-                          # (§3.3), and a postToolUse-based fix for it is still just a candidate,
-                          # not yet designed (§5 item 1).
+                          # hook wired — seven attempts at the standing-instruction gap all came
+                          # back negative (§3.3), including postToolUse reinforcement, so there's
+                          # currently no known mechanism left to wire for it (§5 item 1).
                           # Command invocation: translates runtime/commands/*.md into the global
                           # ~/.cursor/skills/<name>/SKILL.md, reusing each command's own existing
                           # `description:` frontmatter field directly rather than re-deriving it
@@ -166,13 +194,22 @@ had to guard against.
 
 ## 5. Still open — none of these block anything shipped
 
-1. **A real fix for the standing-instruction gap** — confirmed real and permanent (§2, §3.3),
-   not yet solved. `postToolUse` — confirmed live to genuinely inject `additional_context` (§2) —
-   is the most promising untried mechanism: since it fires after every tool call, wiring it to
-   periodically re-inject the standing-rule reminder (rather than relying on one injection at
-   session start that fades from context) might succeed where `sessionStart` alone didn't. Not
-   attempted yet — a real design decision (how often, what content) is needed first, not just a
-   quick test.
+1. **A real fix for the standing-instruction gap** — still unsolved after seven real attempts
+   (§2, §3.3). What's left, roughly in order of promise:
+   - **`stop` in genuinely interactive use** — confirmed dead in headless `-p` mode, but never
+     tested interactively, since this sandboxed environment has no real terminal. If it fires
+     interactively, `followup_message` is still the most structurally direct mechanism tried (a
+     forced extra turn, not a hope that injected context gets acted on) — worth a real terminal
+     test before ruling it out entirely.
+   - **A tool-based approach instead of context injection** — every test so far relied on
+     `additional_context`, which reliably shapes replies but never once triggered unprompted tool
+     use. `preToolUse`'s `updated_input` (rewriting a tool call's arguments before it runs) or
+     `PermissionRequest`'s auto-approve mechanism weren't tried — genuinely different levers from
+     "inject text and hope," not yet explored.
+   - Otherwise, this may be a real, permanent limitation for Cursor's `additional_context`
+     mechanism specifically, not a solvable wiring problem — worth accepting as documented rather
+     than continuing to try wording variations, since three different ones already failed
+     identically.
 2. **Whether `~/.agents/skills/` (the documented cross-tool alternative global skills path) is
    worth using instead of or alongside `~/.cursor/skills/`** — only the Cursor-specific path was
    live-tested and shipped.
@@ -185,14 +222,17 @@ had to guard against.
 
 Retired by live testing, no longer open: whether `sessionStart` alone answers the forcing read;
 whether the standing instruction might turn out free the same surprising way the forcing read
-did — tested directly, it doesn't (§2, §3.3).
+did — tested directly, it doesn't (§2, §3.3); whether weak wording, `stop`, or `postToolUse`
+reinforcement fix the write side — all three tried and all three failed (§2, §3.3).
 
 ## 6. Non-goals
 
 - Not building a `postToolUse` or `beforeSubmitPrompt`-based mechanism for the *forcing-read*
   question — confirmed unnecessary (the former) or genuinely incapable (the latter) there, since
-  `sessionStart` alone already answers it. `postToolUse` remains a live candidate for the
-  *standing-instruction* question specifically (§5 item 1) — a different job.
-- Not treating the standing-instruction gap as merely unresearched — a real mid-session test ran
-  and came back negative (§2, §3.3). It's a confirmed limitation of the shipped binding, not an
-  open question waiting on more investigation.
+  `sessionStart` alone already answers it.
+- Not treating `postToolUse` as an untried candidate for the *standing-instruction* question
+  anymore — it was tried, wired alongside `sessionStart` with a real reinforcement message, and
+  came back negative just like every other context-injection approach (§3.3).
+- Not treating the standing-instruction gap as merely unresearched — seven real tests ran and all
+  seven came back negative (§2, §3.3). It's a confirmed, likely structural limitation of the
+  shipped binding, not an open question waiting on more investigation via the same approach.

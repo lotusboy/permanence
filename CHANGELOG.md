@@ -214,9 +214,21 @@ mentioned mid-conversation get written back to the stream unprompted, purely bec
 `sessionStart`'s injected content told the model to at session start? It doesn't — the agent
 acknowledged the fact in its reply but never touched `PROJECT.md` or `LOG.md`, confirmed by file
 checksums before and after. Four separate tests now agree: three global-file locations that don't
-exist, and a real write test that came back negative. `postToolUse` — already confirmed live to
-inject context correctly — is the most promising untried fix, since it fires repeatedly rather
-than once, but designing it is new work, not something this pass attempted.
+exist, and a real write test that came back negative.
+
+**Same day, a second round: three more real attempts at a fix, applying Seesaw before building
+anything new — is this Permanence's content, or Cursor's platform?** A much stronger, imperative
+wording ("you MUST update... before you finish replying") produced the same negative, ruling out
+weak wording as the cause. The `stop` hook's `followup_message` — the most structurally direct
+candidate, since it forces an actual extra turn rather than hoping injected context gets noticed —
+turned out not to fire at all in headless mode, confirmed with a debug-instrumented hook logging
+zero invocations across a real test run, matching a community bug report found during initial
+research. `postToolUse` reinforcement, wired alongside `sessionStart` and confirmed to actually
+fire, produced the same negative as everything else. Seven tests, seven negatives, consistent
+enough to read as a real property of how Cursor's agent decides when to act versus merely
+acknowledge — not a wording or placement problem on Permanence's side. Untried and worth a real
+terminal: whether `stop` fires in genuinely interactive use, which this session's sandboxed
+environment has no way to test.
 
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
