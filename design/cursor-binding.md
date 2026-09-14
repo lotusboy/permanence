@@ -1,20 +1,23 @@
 # Design — a Cursor binding for Permanence
 
-> Status: **built and shipped, except the ongoing half of the standing instruction.**
-> `runtime/bindings/cursor/` implements passive orientation + the forcing read (one `sessionStart`
-> hook, per §2) and command invocation (Skills) — both live-fire tested end-to-end against the
-> real installed product, including a real `/perma-help` invocation that executed its full logic
-> correctly. One finding reversed an initial, docs-based worry; one real gap (no working global
-> standing-instruction file) survived three separate live tests and stayed a gap — see §5.
+> Status: **built and shipped, four of five — the standing instruction is a confirmed, permanent
+> gap, not an open question.** `runtime/bindings/cursor/` implements passive orientation + the
+> forcing read (one `sessionStart` hook, per §2) and command invocation (Skills) — both live-fire
+> tested end-to-end against the real installed product, including a real `/perma-help` invocation
+> that executed its full logic correctly. One finding reversed an initial, docs-based worry; the
+> standing instruction was tested four separate ways (three file locations, plus a real mid-session
+> write test 2026-09-14) and failed all four — see §5.
 > Written 2026-09-14. See [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the
 > `detect`/`wire` interface this implements rather than re-deriving.
 
-**Owner carries: possibly just the ongoing half of the standing instruction.** Four of five
+**Owner carries: the standing instruction, confirmed, not just suspected.** Four of five
 binding-contract questions are shipped and live-fire tested — `sessionStart` answering passive
 orientation *and* the forcing read at once, simpler than every other binding built so far, not
 more complex, and command invocation confirmed via a real `/perma-help` run that executed its
 actual logic (checked scheduled tasks, read real registry data) rather than just echoing text.
-The standing instruction is the one genuinely open question — see §3.3.
+**A real mid-session test settled the standing-instruction question with a clean negative**: a
+material fact mentioned mid-conversation was acknowledged in the reply but never written back to
+the stream, unprompted — see §5.
 
 ## 1. Why
 
@@ -88,12 +91,19 @@ including literal slash syntax:**
   and `~/.config/agents/AGENTS.md` (the path Permanence's own existing generic `AGENTS.md` writer
   already targets, for the "emerging unifying standard"). None of the three caused an injected
   test string to appear in a reply. This is a real, tested-away gap, not an unresearched one.
-- **A real mitigating factor**: `session-start.sh`'s own output already carries the standing-rule
-  instruction ("Update it whenever something material shifts... without being asked") as part of
-  the same content already proven to be genuinely acted upon for the *read* side (§2 above). Not
-  yet confirmed whether that carries through to the *write* side mid-session (does the model
-  actually update the stream later, unprompted, purely because `sessionStart` told it to at the
-  very beginning) — that needs a longer, multi-turn live test this pass didn't include. See §5.
+- **The mid-session write test, run 2026-09-14 — a clean negative, not a maybe.** A disposable
+  test stream and a scratch project were registered temporarily (backed up and restored
+  afterward). `session-start.sh`'s own output — which already carries the standing-rule
+  instruction ("Update it whenever something material shifts... without being asked") — was wired
+  in for real. A fresh session's very first turn mentioned a genuinely material fact ("we've
+  decided to deprecate the old export-to-CSV feature entirely") without asking Permanence to be
+  updated. The agent acknowledged the fact in its reply ("Noted on the CSV export deprecation")
+  but never touched `PROJECT.md` or `LOG.md` — confirmed by file checksums before and after,
+  unchanged. `sessionStart`'s content is genuinely read and acted on for orientation (§2), but not
+  for the ongoing write side, at least not on the freshest possible turn, when the injected
+  instruction is closest in context and easiest to act on. This settles the question rather than
+  leaving it open: the standing instruction is a real, permanent gap for Cursor as currently
+  bound, not an untested maybe.
 
 **Headless invocation — confirmed:**
 
@@ -108,10 +118,10 @@ Per `SPEC.md` §3's binding contract, independent questions, not a ladder.
 2. **Forcing read. Live-confirmed, decisively** (§2) — the one finding that reverses this
    binding's original docs-based worry. `sessionStart` alone demonstrably causes unprompted,
    accurate action on real Permanence content, not just passive availability.
-3. **Standing instruction. The one genuinely open question.** `session-start.sh`'s existing
-   content already carries this instruction and is proven read/acted-on once; whether it's
-   acted on for updates *mid-session*, unprompted, is unconfirmed — no working global rules file
-   was found despite three real attempts (§2). See §5.
+3. **Standing instruction. A confirmed gap, not an unknown.** No working global rules file was
+   found despite three real attempts, and a real mid-session write test came back negative too —
+   a material fact was acknowledged in conversation but never written back, unprompted (§2). Four
+   separate tests, four negatives. See §5.
 4. **Command invocation. Live-confirmed**, including literal `/name` syntax from a genuinely
    global path (§2) — the cleanest result of any binding built this session.
 5. **Headless invocation. Confirmed** (§2), needing `--trust` for non-interactive use.
@@ -130,8 +140,9 @@ runtime/bindings/cursor/
   wire                   # merges a sessionStart hook into the GLOBAL ~/.cursor/hooks.json
                           # "hooks" object — NOT the project-level .cursor/hooks.json, which
                           # would violate invariant 1 if written into an open repo. No second
-                          # hook needed — §5's mid-session write question stayed open, but
-                          # nothing found so far suggests a second hook would answer it either.
+                          # hook wired — the standing-instruction gap is real and confirmed
+                          # (§3.3), and a postToolUse-based fix for it is still just a candidate,
+                          # not yet designed (§5 item 1).
                           # Command invocation: translates runtime/commands/*.md into the global
                           # ~/.cursor/skills/<name>/SKILL.md, reusing each command's own existing
                           # `description:` frontmatter field directly rather than re-deriving it
@@ -153,16 +164,15 @@ file** — `sessionStart` fires exactly once per session by its own nature, unli
 `PreInvocation` (fires multiple times per turn) or the general pattern the other two bindings
 had to guard against.
 
-## 5. Still open — none of these blocked shipping §4
+## 5. Still open — none of these block anything shipped
 
-1. **The mid-session standing-instruction question** — does the model actually update Permanence
-   stream files later in a session, unprompted, purely because `sessionStart`'s injected content
-   told it to at the start? This needs a real multi-turn session with something material
-   happening partway through, not a single `-p` one-shot. If this turns out to work, question 3
-   may be free, the same surprising way question 2 turned out to be. If not, a genuine gap
-   remains and needs its own mechanism — worth checking `postToolUse` as a periodic reinforcement
-   channel before assuming a dead end. The one item here that would change `wire`'s shape if
-   resolved negatively.
+1. **A real fix for the standing-instruction gap** — confirmed real and permanent (§2, §3.3),
+   not yet solved. `postToolUse` — confirmed live to genuinely inject `additional_context` (§2) —
+   is the most promising untried mechanism: since it fires after every tool call, wiring it to
+   periodically re-inject the standing-rule reminder (rather than relying on one injection at
+   session start that fades from context) might succeed where `sessionStart` alone didn't. Not
+   attempted yet — a real design decision (how often, what content) is needed first, not just a
+   quick test.
 2. **Whether `~/.agents/skills/` (the documented cross-tool alternative global skills path) is
    worth using instead of or alongside `~/.cursor/skills/`** — only the Cursor-specific path was
    live-tested and shipped.
@@ -173,11 +183,16 @@ had to guard against.
    Worth confirming precisely (e.g. logging the raw stdin during a real session) before relying on
    it for a workspace that differs from the hook subprocess's own working directory.
 
+Retired by live testing, no longer open: whether `sessionStart` alone answers the forcing read;
+whether the standing instruction might turn out free the same surprising way the forcing read
+did — tested directly, it doesn't (§2, §3.3).
+
 ## 6. Non-goals
 
-- Not building a `postToolUse` or `beforeSubmitPrompt`-based mechanism — confirmed unnecessary
-  (the former) or genuinely incapable (the latter) for the forcing-read question, which
-  `sessionStart` alone already answers.
-- Not assuming the standing-instruction gap is unfixable — `sessionStart`'s own content already
-  carries the instruction and was proven to work for the read side; §5 item 1 is what decides
-  whether that's the whole answer or only half of one.
+- Not building a `postToolUse` or `beforeSubmitPrompt`-based mechanism for the *forcing-read*
+  question — confirmed unnecessary (the former) or genuinely incapable (the latter) there, since
+  `sessionStart` alone already answers it. `postToolUse` remains a live candidate for the
+  *standing-instruction* question specifically (§5 item 1) — a different job.
+- Not treating the standing-instruction gap as merely unresearched — a real mid-session test ran
+  and came back negative (§2, §3.3). It's a confirmed limitation of the shipped binding, not an
+  open question waiting on more investigation.

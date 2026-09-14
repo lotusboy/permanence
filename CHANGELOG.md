@@ -207,6 +207,17 @@ logic already shared with Cursor's and Antigravity's bindings. Verified via a re
 invocation that executed its full actual logic. Devin is now the third binding, after Claude Code
 and Antigravity, with nothing left for the owner to carry.
 
+**Cursor's standing-instruction question settled — a real, confirmed gap, not an open one.** A
+disposable test stream and scratch project were registered temporarily (backed up and restored
+afterward) to run the one test the design doc had flagged as still needed: does a material fact
+mentioned mid-conversation get written back to the stream unprompted, purely because
+`sessionStart`'s injected content told the model to at session start? It doesn't — the agent
+acknowledged the fact in its reply but never touched `PROJECT.md` or `LOG.md`, confirmed by file
+checksums before and after. Four separate tests now agree: three global-file locations that don't
+exist, and a real write test that came back negative. `postToolUse` — already confirmed live to
+inject context correctly — is the most promising untried fix, since it fires repeatedly rather
+than once, but designing it is new work, not something this pass attempted.
+
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step
