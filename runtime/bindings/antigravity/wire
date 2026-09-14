@@ -35,26 +35,30 @@ pre_invocation_cmd = f"{binding_dir}/pre-invocation-hook.sh"
 pre_tool_use_cmd = f"{binding_dir}/pre-tool-use-hook.sh"
 changed = False
 
-pi = data.get("perma-pre-invocation") or {}
-pi_handlers = pi.get("PreInvocation") or []
-if not any(isinstance(h, dict) and h.get("command") == pre_invocation_cmd for h in pi_handlers):
-    pi["PreInvocation"] = [{"type": "command", "command": pre_invocation_cmd, "timeout": 10}]
-    data["perma-pre-invocation"] = pi
-    changed = True
+try:
+    pi = data.get("perma-pre-invocation") or {}
+    pi_handlers = pi.get("PreInvocation") or []
+    if not any(isinstance(h, dict) and h.get("command") == pre_invocation_cmd for h in pi_handlers):
+        pi["PreInvocation"] = [{"type": "command", "command": pre_invocation_cmd, "timeout": 10}]
+        data["perma-pre-invocation"] = pi
+        changed = True
 
-pt = data.get("perma-pre-tool-use") or {}
-pt_groups = pt.get("PreToolUse") or []
-present = any(
-    isinstance(g, dict) and any(
-        isinstance(h, dict) and h.get("command") == pre_tool_use_cmd
-        for h in g.get("hooks", [])
+    pt = data.get("perma-pre-tool-use") or {}
+    pt_groups = pt.get("PreToolUse") or []
+    present = any(
+        isinstance(g, dict) and any(
+            isinstance(h, dict) and h.get("command") == pre_tool_use_cmd
+            for h in g.get("hooks", [])
+        )
+        for g in pt_groups
     )
-    for g in pt_groups
-)
-if not present:
-    pt["PreToolUse"] = [{"matcher": "*", "hooks": [{"type": "command", "command": pre_tool_use_cmd, "timeout": 10}]}]
-    data["perma-pre-tool-use"] = pt
-    changed = True
+    if not present:
+        pt["PreToolUse"] = [{"matcher": "*", "hooks": [{"type": "command", "command": pre_tool_use_cmd, "timeout": 10}]}]
+        data["perma-pre-tool-use"] = pt
+        changed = True
+except (AttributeError, TypeError):
+    print("  hooks.json: present but has an unexpected shape under an existing perma-* key — NOT touched. Add the hooks by hand.")
+    sys.exit(1)
 
 if changed:
     if os.path.exists(path):
@@ -86,7 +90,7 @@ fi
 CMD_SRC="$PERMA/runtime/commands"
 SKILLS_DST="$HOME/.gemini/config/skills"
 if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
-import json, os, re, sys
+import json, os, re, shutil, sys
 
 cmd_src, skills_dst = sys.argv[1], sys.argv[2]
 
@@ -116,15 +120,17 @@ for fname in sorted(os.listdir(cmd_src)):
         continue
     name = fname[:-3]
     src_path = os.path.join(cmd_src, fname)
-    content = open(src_path).read()
-    description = extract_description(content)
-
     skill_dir = os.path.join(skills_dst, name)
     try:
+        content = open(src_path).read()
+        description = extract_description(content)
         os.makedirs(skill_dir, exist_ok=True)
         fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
         body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
-        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        skill_md = os.path.join(skill_dir, "SKILL.md")
+        if os.path.exists(skill_md):
+            shutil.copy(skill_md, skill_md + ".perma-bak")
+        with open(skill_md, "w") as f:
             f.write("\n".join(fm_lines) + body)
         print(f"  skill: {name}")
     except Exception as e:

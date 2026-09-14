@@ -11,7 +11,10 @@
 
 _perma_block_merge() {  # _perma_block_merge <target-file> <block-source-file>
   local dst="$1" src="$2" begins ends begin_line end_line
-  [ -f "$src" ] || return 0
+  if [ ! -f "$src" ]; then
+    echo "  WARN — block source file $src is missing; $dst was NOT touched. This usually means a stale/partial Permanence checkout — re-run runtime/update.sh or re-clone."
+    return 1
+  fi
   mkdir -p "$(dirname "$dst")"
   if [ -f "$dst" ] && grep -q '<!-- perma:begin' "$dst" 2>/dev/null; then
     begins=$(grep -c '<!-- perma:begin' "$dst")
@@ -28,13 +31,27 @@ _perma_block_merge() {  # _perma_block_merge <target-file> <block-source-file>
       /<!-- perma:end -->/ {skip=0; next}
       !skip {print}' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
   else
-    # No existing marker: this can only ever ADD content (prepend), never destroy any — no
-    # backup needed, because nothing here can lose data.
-    # `cat "$dst" 2>/dev/null || true` on a truly fresh install ($dst doesn't exist yet): the
-    # redirect hides cat's error message but NOT its exit code, and that code is what the `{ }`
-    # group reports — left unguarded, it silently skipped the `mv` below via `&&`, leaving a
-    # correctly-written `.tmp` file that never became the real file. Found live-testing this
-    # extraction (2026-09-13), reproduced against the original unmodified code too.
-    { cat "$src"; echo; cat "$dst" 2>/dev/null || true; } > "$dst.tmp" && mv "$dst.tmp" "$dst"
+    # No existing marker: this only ever prepends content. If $dst doesn't exist yet (a fresh
+    # install), there's nothing to lose. If it DOES exist, back it up first and fail closed on a
+    # read failure instead of silently treating it as empty — `cat "$dst" 2>/dev/null || true`
+    # used to swallow ANY read failure (a permission oddity, a transient I/O glitch, a same-second
+    # race with a concurrent writer) as "the file was empty," discarding real content with no
+    # backup and no recovery. Found by adversarial testing, not by reading the code (the comment
+    # this replaced asserted "nothing here can lose data" and that assumption was false) — Two-Pass
+    # review, 2026-09-14, Pass 2 CRITICAL finding.
+    if [ -f "$dst" ]; then
+      if ! cp "$dst" "$dst.perma-bak" 2>/dev/null; then
+        echo "  WARN — $dst exists but could not be backed up before merging into it. Left COMPLETELY UNTOUCHED. Investigate the permission/read issue, then re-run install.sh."
+        return 1
+      fi
+      if ! { cat "$src"; echo; cat "$dst"; } > "$dst.tmp" 2>/dev/null; then
+        rm -f "$dst.tmp"
+        echo "  WARN — $dst exists but could not be read while merging into it. Left COMPLETELY UNTOUCHED (backup already saved to $dst.perma-bak). Investigate the read failure, then re-run install.sh."
+        return 1
+      fi
+    else
+      { cat "$src"; echo; } > "$dst.tmp"
+    fi
+    mv "$dst.tmp" "$dst"
   fi
 }

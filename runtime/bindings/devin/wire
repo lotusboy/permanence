@@ -38,33 +38,37 @@ session_start_cmd = f"{binding_dir}/session-start-hook.sh"
 prompt_submit_cmd = f"{binding_dir}/user-prompt-submit-hook.sh"
 changed = False
 
-hooks = data.setdefault("hooks", {})
+try:
+    hooks = data.setdefault("hooks", {})
 
-ss = hooks.get("SessionStart") or []
-present = any(
-    isinstance(g, dict) and any(
-        isinstance(h, dict) and h.get("command") == session_start_cmd
-        for h in g.get("hooks", [])
+    ss = hooks.get("SessionStart") or []
+    present = any(
+        isinstance(g, dict) and any(
+            isinstance(h, dict) and h.get("command") == session_start_cmd
+            for h in g.get("hooks", [])
+        )
+        for g in ss
     )
-    for g in ss
-)
-if not present:
-    ss.append({"matcher": "", "hooks": [{"type": "command", "command": session_start_cmd, "timeout": 10}]})
-    hooks["SessionStart"] = ss
-    changed = True
+    if not present:
+        ss.append({"matcher": "", "hooks": [{"type": "command", "command": session_start_cmd, "timeout": 10}]})
+        hooks["SessionStart"] = ss
+        changed = True
 
-ups = hooks.get("UserPromptSubmit") or []
-present = any(
-    isinstance(g, dict) and any(
-        isinstance(h, dict) and h.get("command") == prompt_submit_cmd
-        for h in g.get("hooks", [])
+    ups = hooks.get("UserPromptSubmit") or []
+    present = any(
+        isinstance(g, dict) and any(
+            isinstance(h, dict) and h.get("command") == prompt_submit_cmd
+            for h in g.get("hooks", [])
+        )
+        for g in ups
     )
-    for g in ups
-)
-if not present:
-    ups.insert(0, {"matcher": "", "hooks": [{"type": "command", "command": prompt_submit_cmd, "timeout": 10}]})
-    hooks["UserPromptSubmit"] = ups
-    changed = True
+    if not present:
+        ups.insert(0, {"matcher": "", "hooks": [{"type": "command", "command": prompt_submit_cmd, "timeout": 10}]})
+        hooks["UserPromptSubmit"] = ups
+        changed = True
+except (AttributeError, TypeError):
+    print("  config.json: present but has an unexpected shape under an existing \"hooks\" key — NOT touched. Add the hooks by hand.")
+    sys.exit(1)
 
 if changed:
     if os.path.exists(path):
@@ -98,7 +102,7 @@ fi
 CMD_SRC="$PERMA/runtime/commands"
 SKILLS_DST="$HOME/.config/devin/skills"
 if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
-import json, os, re, sys
+import json, os, re, shutil, sys
 
 cmd_src, skills_dst = sys.argv[1], sys.argv[2]
 
@@ -128,15 +132,17 @@ for fname in sorted(os.listdir(cmd_src)):
         continue
     name = fname[:-3]
     src_path = os.path.join(cmd_src, fname)
-    content = open(src_path).read()
-    description = extract_description(content)
-
     skill_dir = os.path.join(skills_dst, name)
     try:
+        content = open(src_path).read()
+        description = extract_description(content)
         os.makedirs(skill_dir, exist_ok=True)
         fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
         body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
-        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        skill_md = os.path.join(skill_dir, "SKILL.md")
+        if os.path.exists(skill_md):
+            shutil.copy(skill_md, skill_md + ".perma-bak")
+        with open(skill_md, "w") as f:
             f.write("\n".join(fm_lines) + body)
         print(f"  skill: {name}")
     except Exception as e:

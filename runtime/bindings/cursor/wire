@@ -32,22 +32,26 @@ session_start_cmd = f"{binding_dir}/session-start-hook.sh"
 stop_cmd = f"{binding_dir}/stop-hook.sh"
 changed = False
 
-data.setdefault("version", 1)
-hooks = data.setdefault("hooks", {})
+try:
+    data.setdefault("version", 1)
+    hooks = data.setdefault("hooks", {})
 
-ss = hooks.get("sessionStart") or []
-present = any(isinstance(h, dict) and h.get("command") == session_start_cmd for h in ss)
-if not present:
-    ss.append({"command": session_start_cmd, "type": "command", "timeout": 10})
-    hooks["sessionStart"] = ss
-    changed = True
+    ss = hooks.get("sessionStart") or []
+    present = any(isinstance(h, dict) and h.get("command") == session_start_cmd for h in ss)
+    if not present:
+        ss.append({"command": session_start_cmd, "type": "command", "timeout": 10})
+        hooks["sessionStart"] = ss
+        changed = True
 
-sp = hooks.get("stop") or []
-present = any(isinstance(h, dict) and h.get("command") == stop_cmd for h in sp)
-if not present:
-    sp.append({"command": stop_cmd, "type": "command", "timeout": 10})
-    hooks["stop"] = sp
-    changed = True
+    sp = hooks.get("stop") or []
+    present = any(isinstance(h, dict) and h.get("command") == stop_cmd for h in sp)
+    if not present:
+        sp.append({"command": stop_cmd, "type": "command", "timeout": 10})
+        hooks["stop"] = sp
+        changed = True
+except (AttributeError, TypeError):
+    print("  hooks.json: present but has an unexpected shape under an existing key (e.g. \"hooks.sessionStart\" isn't a list) — NOT touched. Add the hooks by hand.")
+    sys.exit(1)
 
 if changed:
     if os.path.exists(path):
@@ -69,7 +73,7 @@ fi
 CMD_SRC="$PERMA/runtime/commands"
 SKILLS_DST="$HOME/.cursor/skills"
 if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
-import json, os, re, sys
+import json, os, re, shutil, sys
 
 cmd_src, skills_dst = sys.argv[1], sys.argv[2]
 
@@ -99,16 +103,18 @@ for fname in sorted(os.listdir(cmd_src)):
         continue
     name = fname[:-3]
     src_path = os.path.join(cmd_src, fname)
-    content = open(src_path).read()
-    description = extract_description(content)
-
     skill_dir = os.path.join(skills_dst, name)
     try:
+        content = open(src_path).read()
+        description = extract_description(content)
         os.makedirs(skill_dir, exist_ok=True)
         fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
         # Body: drop the source file's own frontmatter block if present, keep everything else.
         body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
-        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+        skill_md = os.path.join(skill_dir, "SKILL.md")
+        if os.path.exists(skill_md):
+            shutil.copy(skill_md, skill_md + ".perma-bak")
+        with open(skill_md, "w") as f:
             f.write("\n".join(fm_lines) + body)
         print(f"  skill: {name}")
     except Exception as e:

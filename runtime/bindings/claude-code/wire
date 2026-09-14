@@ -24,6 +24,7 @@ WIRE_FAILED=0
 mkdir -p "$CMD_DST"
 for f in "$CMD_SRC"/*.md; do
   name=$(basename "$f")
+  [ -f "$CMD_DST/$name" ] && cp "$CMD_DST/$name" "$CMD_DST/$name.perma-bak"
   if cp "$f" "$CMD_DST/$name"; then
     printf '\n<!-- installed-from: ~/permanence/runtime/commands/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$CMD_DST/$name"
     echo "  command: $name"
@@ -57,20 +58,24 @@ if os.path.exists(path):
         sys.exit(1)
 cmd = f"{perma}/runtime/session-start.sh"
 changed = False
-ad = data.setdefault("permissions", {}).setdefault("additionalDirectories", [])
-if perma not in ad:
-    ad.append(perma); changed = True
-ss = data.setdefault("hooks", {}).setdefault("SessionStart", [])
-present = any(isinstance(e, dict) and any(h.get("command") == cmd for h in e.get("hooks", [])) for e in ss)
-if not present:
-    ss.append({"hooks": [{"type": "command", "command": cmd, "timeout": 10}]}); changed = True
-# UserPromptSubmit: session-load — RELIABLE per-session context auto-load (SessionStart context is
-# passive; this fires on the user's first prompt so the model actually reads the stream). Core, so
-# auto-wired (unlike events, which is opt-in).
-cmd_load = f"{perma}/runtime/session-load.sh"
-ups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
-if not any(isinstance(e, dict) and any(h.get("command") == cmd_load for h in e.get("hooks", [])) for e in ups):
-    ups.insert(0, {"hooks": [{"type": "command", "command": cmd_load, "timeout": 10}]}); changed = True
+try:
+    ad = data.setdefault("permissions", {}).setdefault("additionalDirectories", [])
+    if perma not in ad:
+        ad.append(perma); changed = True
+    ss = data.setdefault("hooks", {}).setdefault("SessionStart", [])
+    present = any(isinstance(e, dict) and any(h.get("command") == cmd for h in e.get("hooks", [])) for e in ss)
+    if not present:
+        ss.append({"hooks": [{"type": "command", "command": cmd, "timeout": 10}]}); changed = True
+    # UserPromptSubmit: session-load — RELIABLE per-session context auto-load (SessionStart context
+    # is passive; this fires on the user's first prompt so the model actually reads the stream).
+    # Core, so auto-wired (unlike events, which is opt-in).
+    cmd_load = f"{perma}/runtime/session-load.sh"
+    ups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+    if not any(isinstance(e, dict) and any(h.get("command") == cmd_load for h in e.get("hooks", [])) for e in ups):
+        ups.insert(0, {"hooks": [{"type": "command", "command": cmd_load, "timeout": 10}]}); changed = True
+except (AttributeError, TypeError):
+    print("  settings.json: present but has an unexpected shape under an existing key (e.g. \"hooks.SessionStart\" isn't a list) — NOT touched. Add the hook + permission by hand.")
+    sys.exit(1)
 if changed:
     if os.path.exists(path): shutil.copy(path, path + ".perma-bak")
     json.dump(data, open(path, "w"), indent=2)
