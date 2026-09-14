@@ -5,11 +5,12 @@
 # design/harness-binding-mechanism.md §2 for why Claude Code's wiring now lives here like any
 # other binding instead of staying a permanent special case.
 #
-# Exit code: only the settings.json merge failing is treated as a real wire failure (the one
-# genuine hard-failure path install.sh already tracked before this migration). A command-copy
-# failure is reported but historically wasn't fatal to the overall install either — preserved
-# as-is rather than tightening behavior nobody asked for. A mismatched-marker CLAUDE.md WARN
-# (see block-merge.sh) is a deliberate soft warning, never a wire failure.
+# Exit code: settings.json merge failure and a command-copy failure are both real wire failures.
+# (Command-copy used to be non-fatal here while the newer bindings' analogous Skills-translation
+# step was fatal — a real inconsistency the design doc's own "non-zero on a real failure" contract
+# didn't allow; found by the 2026-09-14 Two-Pass review, harmonized to match.) A mismatched-marker
+# CLAUDE.md WARN (see block-merge.sh) stays a deliberate soft warning, never a wire failure — but
+# install.sh's own summary now surfaces it separately (see PERMA_ATTENTION_FILE).
 set -u
 PERMA="${PERMA_DIR:-$HOME/permanence}"
 CMD_SRC="$PERMA/runtime/commands"
@@ -30,6 +31,21 @@ for f in "$CMD_SRC"/*.md; do
     echo "  command: $name"
   else
     echo "  command: $name — FAILED to copy"
+    WIRE_FAILED=1
+  fi
+done
+
+# Cleanup: remove a previously-installed command with no matching source anymore, but ONLY if it
+# carries Permanence's own "installed-from" marker — never touch a user's own same-named file.
+# Without this, a renamed/removed command stayed installed forever on every machine that had
+# already run wire once (Two-Pass review, 2026-09-14).
+for existing in "$CMD_DST"/*.md; do
+  [ -f "$existing" ] || continue
+  bn=$(basename "$existing")
+  [ -f "$CMD_SRC/$bn" ] && continue
+  if grep -q 'installed-from: ~/permanence/runtime/commands/' "$existing" 2>/dev/null; then
+    rm -f "$existing"
+    echo "  command: $bn — removed (no longer in runtime/commands/)"
   fi
 done
 

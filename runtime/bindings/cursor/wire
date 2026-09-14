@@ -15,6 +15,7 @@ WIRE_FAILED=0
 # hooks.json: safely MERGE the sessionStart hook (add only if absent; preserve everything else;
 # back up before writing) — same idempotent-merge idiom every other binding's wire script uses.
 HOOKS_JSON="$HOME/.cursor/hooks.json"
+if command -v python3 >/dev/null 2>&1; then
 if ! python3 - "$HOOKS_JSON" "$BINDING_DIR" <<'PY'
 import json, sys, os, shutil
 
@@ -65,6 +66,16 @@ then
   echo "  hooks.json: FAILED to configure automatically — add the hooks by hand (see message above)"
   WIRE_FAILED=1
 fi
+else
+  cat <<HOOKS
+  hooks.json: python3 not found — add these by hand to $HOOKS_JSON (MERGE, don't overwrite):
+      "version": 1,
+      "hooks": {
+        "sessionStart": [ { "command": "$BINDING_DIR/session-start-hook.sh", "type": "command", "timeout": 10 } ],
+        "stop": [ { "command": "$BINDING_DIR/stop-hook.sh", "type": "command", "timeout": 10 } ]
+      }
+HOOKS
+fi
 
 # Skills: translate runtime/commands/*.md into ~/.cursor/skills/<name>/SKILL.md — confirmed
 # real, confirmed globally invokable by literal /name syntax. Each command already carries a
@@ -72,6 +83,7 @@ fi
 # without frontmatter (perma-contents.md) falls back to its first heading/line.
 CMD_SRC="$PERMA/runtime/commands"
 SKILLS_DST="$HOME/.cursor/skills"
+if command -v python3 >/dev/null 2>&1; then
 if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
 import json, os, re, shutil, sys
 
@@ -93,7 +105,7 @@ def extract_description(content):
         line = line.strip()
         if line.startswith('#'):
             return line.lstrip('#').strip()
-        if line:
+        if line and line != '---':
             return line
     return "A Permanence command."
 
@@ -114,12 +126,34 @@ for fname in sorted(os.listdir(cmd_src)):
         skill_md = os.path.join(skill_dir, "SKILL.md")
         if os.path.exists(skill_md):
             shutil.copy(skill_md, skill_md + ".perma-bak")
+        marker = f"\n<!-- installed-from: ~/permanence/runtime/commands/{fname} -->\n"
         with open(skill_md, "w") as f:
-            f.write("\n".join(fm_lines) + body)
+            f.write("\n".join(fm_lines) + body + marker)
         print(f"  skill: {name}")
     except Exception as e:
         print(f"  skill: {name} — FAILED to write ({e})")
         failed.append(name)
+
+# Cleanup: remove a previously-installed skill with no matching source anymore, but ONLY if it
+# carries Permanence's own "installed-from" marker — never touch a user's own same-named skill.
+# Without this, a renamed/removed command stayed installed forever on every machine that had
+# already run wire once (Two-Pass review, 2026-09-14).
+current_names = {fn[:-3] for fn in os.listdir(cmd_src) if fn.endswith(".md")}
+if os.path.isdir(skills_dst):
+    for entry in sorted(os.listdir(skills_dst)):
+        if entry in current_names:
+            continue
+        entry_path = os.path.join(skills_dst, entry)
+        if not os.path.isdir(entry_path):
+            continue
+        try:
+            existing = open(os.path.join(entry_path, "SKILL.md")).read()
+        except Exception:
+            continue
+        if "installed-from: ~/permanence/runtime/commands/" not in existing:
+            continue
+        shutil.rmtree(entry_path)
+        print(f"  skill: {entry} — removed (no longer in runtime/commands/)")
 
 if failed:
     sys.exit(1)
@@ -127,6 +161,9 @@ PY
 then
   echo "  skills: FAILED to translate one or more commands (see messages above)"
   WIRE_FAILED=1
+fi
+else
+  echo "  skills: python3 not found — Permanence's commands were NOT translated into ~/.cursor/skills/. Install python3, then re-run install.sh."
 fi
 
 exit "$WIRE_FAILED"

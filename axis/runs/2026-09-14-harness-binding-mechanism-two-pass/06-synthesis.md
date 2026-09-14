@@ -1,5 +1,51 @@
 # Synthesis — harness-binding-mechanism Two-Pass review
 
+## Outcome (2026-09-14, later) — every finding addressed
+
+CRITICAL and HIGH (C1, H1–H4) were fixed and pushed first, in their own commit, before this note
+was added. The owner then asked for the full remaining list (MEDIUM + LOW) to be addressed too.
+All eleven are now fixed:
+
+- **C1, H1–H4** — fixed in commit `4fa28ea` (see that commit message for detail).
+- **M1** (stale docs) — `README.md`, `design/harness-binding-mechanism.md`, and
+  `docs/TOOL-SUPPORT.md`'s Cursor table row all corrected.
+- **M2** (`python3` guards) — added to all three newer bindings' `wire` scripts (both call sites
+  each, matching `claude-code/wire`'s existing fallback pattern) and to the final JSON-emit step of
+  every runtime hook script that lacked one (falls back to a real `{}` rather than empty stdout).
+- **M3** (`detect` ambiguity) — `install.sh`'s loop now logs a missing/non-executable `detect`
+  explicitly and treats any exit code other than 0/1 as a reportable failure.
+- **M4** (inconsistent failure propagation) — resolved by making it consistent, not by picking a
+  side arbitrarily: Claude Code's command-copy failure is now fatal too, matching the other three
+  bindings' Skills-translation behavior and the design doc's own stated contract.
+- **M5** (orphaned Skills/commands) — every binding's command/Skills write now stamps an
+  `installed-from:` marker; a cleanup pass after each `wire` run removes any previously-installed
+  entry with no matching current source, but only if it carries that marker (a user's own
+  same-named file is never touched — verified both directions).
+- **M6** (overlapping marker duplication, corrects Pass 1's Finding 7) — the marker-validation
+  guard now requires exactly one begin/end pair, not just equal counts, rejecting the overlapping
+  case outright rather than trying to validate nesting.
+- **L1** (mismatched-marker WARN invisible in the final summary) — `install.sh` now collects these
+  via a shared `PERMA_ATTENTION_FILE` (exported to every binding's `wire` subprocess) and prints an
+  explicit "NEEDS ATTENTION: N standing-instruction file(s)..." line — still a soft warning, not a
+  failure, just no longer buried.
+- **L2** (malformed frontmatter → literal `"---"` description) — the plain-text fallback now skips
+  a bare `---` line, matching the same fix already needed for the other blank/`#`-line skips.
+- **L3** (Antigravity `PreInvocation` TOCTOU race) — the check-then-touch marker replaced with
+  `mkdir` (atomic create-if-absent).
+- **L4** (CI has zero coverage of the actual `wire` success path for 3 of 5 bindings) — a new
+  `install-matrix` step (ubuntu-latest) shims `agy`/`devin`/`cursor-agent` as no-ops so `detect`
+  passes and `wire` genuinely runs, then asserts on the real resulting config/skills content plus
+  an idempotency re-run.
+- **L5** (single-generation backups) — no code change. Pass 2 itself only flagged this as "worth
+  knowing," not a defect with a proposed fix; multi-generation backup rotation would be new scope
+  beyond what either pass asked for. Left as documented, intentional behavior.
+
+Every fix was verified against a live reproduction of the scenario the corresponding finding
+described (not just re-read), plus a full scratch `install.sh` run across all four bindings
+(idempotent, no regressions) and the exact new CI assertions run locally before trusting CI to be
+the first place they're exercised. See the commit that pairs with this note for the verification
+detail per fix.
+
 PR #13 (`add-roadmap-and-adapter-designs` vs `main`, 33 files, ~2,700 insertions, 41 commits).
 Merged per the Merge Contract in `03-synthesis-prompt.md` from `04-pass1-output.md` (analytical,
 structural read) and `05-pass2-output.md` (adversarial, live-reproduced against a scratch

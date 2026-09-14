@@ -15,6 +15,15 @@ SHA=$(git -C "$PERMA" rev-parse --short HEAD 2>/dev/null || echo "unversioned")
 # concrete cases most likely to leave hooks unwired.
 INSTALL_FAILED=0
 
+# Collects standing-instruction files block-merge.sh refused to touch (a mismatched perma:begin/end
+# marker) — a deliberate soft warning, never a wire failure, but easy to miss scrolling past a long
+# install log otherwise. Exported so every binding's wire subprocess (a separate process) can
+# append to the same file as install.sh's own direct block-merge.sh calls (step 3 below).
+PERMA_ATTENTION_FILE="$(mktemp 2>/dev/null || echo "/tmp/.perma-attention-$$")"
+export PERMA_ATTENTION_FILE
+: > "$PERMA_ATTENTION_FILE" 2>/dev/null
+trap 'rm -f "$PERMA_ATTENTION_FILE"' EXIT
+
 echo "Permanence install — runtime @ $SHA"
 
 # 1. Executable bits + git hooks path (re-run needed once after any re-clone)
@@ -74,8 +83,13 @@ merge_agents_block "$HOME/.config/agents/AGENTS.md"                 # emerging u
 for b in "$PERMA/runtime/bindings/"*/; do
   [ -d "$b" ] || continue
   name="$(basename "$b")"
-  [ -x "$b/detect" ] || continue
-  if "$b/detect" >/dev/null 2>&1; then
+  if [ ! -x "$b/detect" ]; then
+    echo "  binding: $name — no executable detect script, skipping (step 1's chmod should have covered this; check the file exists and is committed with the executable bit set)"
+    continue
+  fi
+  "$b/detect" >/dev/null 2>&1
+  detect_rc=$?
+  if [ "$detect_rc" -eq 0 ]; then
     if [ -x "$b/wire" ] && "$b/wire"; then
       echo "  binding: $name wired"
     elif [ -x "$b/wire" ]; then
@@ -84,6 +98,12 @@ for b in "$PERMA/runtime/bindings/"*/; do
     else
       echo "  binding: $name detected, no wire script yet"
     fi
+  elif [ "$detect_rc" -ne 1 ]; then
+    # The detect contract is exit 0 (present) or 1 (absent) — anything else means detect itself
+    # is broken (a crash, a typo, a missing intermediate command), not a clean "not installed"
+    # signal, and was previously indistinguishable from one.
+    echo "  binding: $name — detect exited with unexpected code $detect_rc (expected 0 or 1) — treating as broken, not absent"
+    INSTALL_FAILED=1
   fi
 done
 
@@ -104,6 +124,11 @@ echo "      \"Stop\":             [ { \"hooks\": [ { \"type\": \"command\", \"co
 #    /perma-shutdown. Not installed automatically (a desktop ping is a personal choice).
 echo "  shutdown nudge: to get a weekday reminder to run /perma-shutdown, enable it:"
 echo "      $PERMA/runtime/shutdown-nudge.sh --install 17:00   (change the time, or --uninstall to remove)"
+
+if [ -s "$PERMA_ATTENTION_FILE" ]; then
+  n=$(wc -l < "$PERMA_ATTENTION_FILE" | tr -d ' ')
+  echo "  NEEDS ATTENTION: $n standing-instruction file(s) have a malformed perma:begin/end marker and were left untouched — see the WARN line(s) above for which file(s) and how to fix."
+fi
 
 if [ "$INSTALL_FAILED" -eq 0 ]; then
   echo "done."

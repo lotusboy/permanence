@@ -27,7 +27,10 @@ if [ -z "$LOAD" ]; then
   exit 0
 fi
 
-python3 -c '
+RESPONSE="$(python3 -c '
 import json, sys
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": sys.stdin.read()}}))
-' <<< "$LOAD"
+' <<< "$LOAD" 2>/dev/null)"
+# Fall back to a real {} if python3 is unavailable at this final step, rather than empty stdout
+# (Two-Pass review, 2026-09-14, Pass 2 Finding 9).
+[ -n "$RESPONSE" ] && printf '%s\n' "$RESPONSE" || echo '{}'

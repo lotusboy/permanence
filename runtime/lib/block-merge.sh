@@ -21,8 +21,20 @@ _perma_block_merge() {  # _perma_block_merge <target-file> <block-source-file>
     ends=$(grep -c '<!-- perma:end -->' "$dst")
     begin_line=$(grep -n '<!-- perma:begin' "$dst" | head -1 | cut -d: -f1)
     end_line=$(grep -n '<!-- perma:end -->' "$dst" | head -1 | cut -d: -f1)
-    if [ "$begins" -ne "$ends" ] || [ -z "$end_line" ] || [ "$end_line" -le "$begin_line" ]; then
-      echo "  WARN — $dst has a perma:begin marker with no matching perma:end after it (or a mismatched count). Left COMPLETELY UNTOUCHED — writing here would delete everything after the marker. Fix or remove the marker(s) by hand, then re-run install.sh."
+    # Require EXACTLY one begin and one end, not just equal counts — the splice below reacts to
+    # every begin/end line it sees (a single boolean `skip` flag, not a counter), so two or more
+    # pairs (even cleanly-separated, well-formed ones) duplicate the injected block, and
+    # overlapping/nested pairs do too. Refuse anything but the single-pair case rather than trying
+    # to validate nesting. Found by adversarial testing (Two-Pass review, 2026-09-14, Pass 2
+    # Finding 10) — a mismatched-count-only check let a malformed overlapping pair through.
+    if [ "$begins" -ne 1 ] || [ "$ends" -ne 1 ] || [ -z "$end_line" ] || [ "$end_line" -le "$begin_line" ]; then
+      echo "  WARN — $dst has $begins perma:begin marker(s) and $ends perma:end marker(s); expected exactly one matched pair. Left COMPLETELY UNTOUCHED — writing here could delete real content or duplicate the injected block. Fix or remove the marker(s) by hand, then re-run install.sh."
+      # A deliberate soft warning, never a wire failure (see claude-code/wire's header) — but
+      # still real and easy to miss scrolling past a long install log, so surface it in
+      # install.sh's own final summary too. PERMA_ATTENTION_FILE is exported by install.sh and
+      # inherited by every binding's wire subprocess; harmless no-op if unset (e.g. this function
+      # called standalone, outside install.sh).
+      [ -n "${PERMA_ATTENTION_FILE:-}" ] && echo "$dst" >> "$PERMA_ATTENTION_FILE" 2>/dev/null
       return 1
     fi
     cp "$dst" "$dst.perma-bak"

@@ -117,8 +117,8 @@ tracking `install.sh` already uses, rather than inventing a second failure-repor
 
 Built in order: the loop itself (verified as a true no-op with `runtime/bindings/` empty), then
 Claude Code's migration (§2) — which, per §6 below, turned out to double as the mechanism's real
-test case — then Antigravity's binding (hooks.json + `GEMINI.md`; its Skills/command layer is
-still deliberately unbuilt, see its own design doc). Each step verified against real GitHub
+test case — then Antigravity's binding (hooks.json + `GEMINI.md`, later joined by its Skills/command
+layer — see its own design doc for the full sequencing). Each step verified against real GitHub
 Actions logs before the next was built on top of it, not just local success.
 
 **Gemini CLI first was the original plan, on unknown-count alone.** Reversed 2026-09-13 after a

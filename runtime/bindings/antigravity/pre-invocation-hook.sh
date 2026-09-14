@@ -22,12 +22,14 @@ print(d.get("conversationId") or "noconv")
 [ -n "$CONV_ID" ] || CONV_ID="noconv"
 
 if [ "$CONV_ID" != "noconv" ]; then
+  # mkdir is atomic create-if-absent — unlike `[ -f "$MARKER" ]` then `touch`, two PreInvocation
+  # firings for the same conversationId close enough together can't both observe the marker
+  # absent and both proceed (Two-Pass review, 2026-09-14, Pass 2 Finding 8).
   MARKER="/tmp/.perma-loaded-agy-$(printf '%s' "$CONV_ID" | tr -c 'A-Za-z0-9' _)"
-  if [ -f "$MARKER" ]; then
+  if ! mkdir "$MARKER" 2>/dev/null; then
     echo '{}'
     exit 0
   fi
-  touch "$MARKER"
 fi
 
 # Translate Antigravity's payload (workspacePaths[]) into the "cwd" field session-start.sh and
@@ -54,7 +56,10 @@ if [ -z "$MESSAGE" ]; then
   exit 0
 fi
 
-python3 -c '
+RESPONSE="$(python3 -c '
 import json, sys
 print(json.dumps({"injectSteps": [{"ephemeralMessage": sys.stdin.read()}]}))
-' <<< "$MESSAGE"
+' <<< "$MESSAGE" 2>/dev/null)"
+# Fall back to a real {} if python3 is unavailable at this final step, rather than empty stdout
+# (Two-Pass review, 2026-09-14, Pass 2 Finding 9).
+[ -n "$RESPONSE" ] && printf '%s\n' "$RESPONSE" || echo '{}'

@@ -43,7 +43,7 @@ if [ -z "$STREAM" ] || [ "$STREAM" = "perma-meta" ]; then
 fi
 
 STREAM_DIR="$PERMA/$STREAM"
-python3 -c '
+RESPONSE="$(python3 -c '
 import json, sys
 stream_dir = sys.argv[1]
 msg = (
@@ -53,4 +53,9 @@ msg = (
     "material came up, just say so in one line."
 )
 print(json.dumps({"followup_message": msg}))
-' "$STREAM_DIR"
+' "$STREAM_DIR" 2>/dev/null)"
+# If python3 is unavailable here despite the earlier calls above succeeding (uninstalled mid-
+# session, a PATH change, a differently-sandboxed hook execution environment), fall back to a
+# real {} rather than empty stdout — an untested condition until the 2026-09-14 Two-Pass review
+# flagged it (Pass 2, Finding 9).
+[ -n "$RESPONSE" ] && printf '%s\n' "$RESPONSE" || echo '{}'

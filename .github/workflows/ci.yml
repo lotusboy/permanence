@@ -421,6 +421,74 @@ jobs:
           fi
           echo "cursor/detect: correctly reports absent (proves the gate itself works, not a mocked cursor-agent)"
 
+      - name: Verify Antigravity/Devin/Cursor wire scripts actually succeed when the tool is present
+        # No-op shim binaries so detect passes and wire genuinely runs — the JSON-merge and
+        # Skills-translation logic otherwise had zero automated regression coverage (only the
+        # correct detect-absent path was ever exercised). Not testing against the real tools'
+        # actual hook payloads (that's the live-fire testing described in each design doc) — this
+        # only covers wire's own idempotent-merge and file-write correctness. ubuntu-latest only,
+        # matching the failure-path test below (Two-Pass review, 2026-09-14, Pass 1 Finding 9).
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -e
+          SHIM_DIR="${RUNNER_TEMP}/perma-shims"
+          mkdir -p "$SHIM_DIR"
+          for name in agy devin cursor-agent; do
+            printf '#!/bin/bash\nexit 0\n' > "$SHIM_DIR/$name"
+            chmod +x "$SHIM_DIR/$name"
+          done
+          export PATH="$SHIM_DIR:$PATH"
+
+          bash "${PERMA_DIR}/runtime/bindings/antigravity/detect" && echo "antigravity/detect: OK (shim present)"
+          bash "${PERMA_DIR}/runtime/bindings/devin/detect" && echo "devin/detect: OK (shim present)"
+          bash "${PERMA_DIR}/runtime/bindings/cursor/detect" && echo "cursor/detect: OK (shim present)"
+
+          bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"
+          bash "${PERMA_DIR}/runtime/bindings/devin/wire"
+          bash "${PERMA_DIR}/runtime/bindings/cursor/wire"
+
+          python3 - "$HOME/.gemini/config/hooks.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          assert "PreInvocation" in d.get("perma-pre-invocation", {}), "PreInvocation missing"
+          assert "PreToolUse" in d.get("perma-pre-tool-use", {}), "PreToolUse missing"
+          print("antigravity hooks.json: OK")
+          PY
+          grep -q "perma:begin" "$HOME/.gemini/GEMINI.md" && echo "GEMINI.md: perma block present"
+          test -f "$HOME/.gemini/config/skills/perma-startup/SKILL.md" && echo "antigravity skills: OK"
+
+          python3 - "$HOME/.config/devin/config.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          assert any(h.get("command", "").endswith("session-start-hook.sh") for g in d["hooks"]["SessionStart"] for h in g.get("hooks", [])), "SessionStart hook missing"
+          assert any(h.get("command", "").endswith("user-prompt-submit-hook.sh") for g in d["hooks"]["UserPromptSubmit"] for h in g.get("hooks", [])), "UserPromptSubmit hook missing"
+          print("devin config.json: OK")
+          PY
+          grep -q "perma:begin" "$HOME/.config/devin/AGENTS.md" && echo "devin AGENTS.md: perma block present"
+          test -f "$HOME/.config/devin/skills/perma-startup/SKILL.md" && echo "devin skills: OK"
+
+          python3 - "$HOME/.cursor/hooks.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          assert any(h.get("command", "").endswith("session-start-hook.sh") for h in d["hooks"]["sessionStart"]), "sessionStart hook missing"
+          assert any(h.get("command", "").endswith("stop-hook.sh") for h in d["hooks"]["stop"]), "stop hook missing"
+          print("cursor hooks.json: OK")
+          PY
+          test -f "$HOME/.cursor/skills/perma-startup/SKILL.md" && echo "cursor skills: OK"
+
+          # Idempotency: re-run all three and confirm no error and no duplicate entries.
+          bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"
+          bash "${PERMA_DIR}/runtime/bindings/devin/wire"
+          bash "${PERMA_DIR}/runtime/bindings/cursor/wire"
+          python3 - "$HOME/.cursor/hooks.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          n = sum(1 for h in d["hooks"]["sessionStart"] if h.get("command", "").endswith("session-start-hook.sh"))
+          assert n == 1, f"expected exactly 1 sessionStart entry after re-run, found {n}"
+          print("idempotency: OK — re-running wire did not duplicate entries")
+          PY
+
       - name: Verify the scheduled task actually exists (real backend for this OS)
         shell: bash
         run: |

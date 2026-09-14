@@ -17,7 +17,7 @@ below states plainly what its owner carries — what's still done by hand — in
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Antigravity** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Devin CLI** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
-| **Cursor** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing in interactive use — the standing instruction (a `stop` hook) only reaches headless (`-p`) sessions with no coverage; see `design/cursor-binding.md` §3.3.1 |
+| **Cursor** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing in interactive use — the standing instruction (a `stop` hook) never fires in headless (`-p`) sessions, which get no coverage; see `design/cursor-binding.md` §3.3.1 |
 | **AGENTS.md-reading tools** (Codex, droid, Amp, GitHub Copilot, Aider, Zed, Windsurf, Google Jules, ...) | ❌ | ❌ | ✅ | ❌ | ❓ | Orientation — say "good morning Permanence" (or run `/perma-startup <name-or-path>`) at the start of a session |
 | **Any other tool** (manual fallback) | ❌ | ❌ | ❌ | ❌ | ❓ | Everything — the fallback prompt has to be pasted in at the start of every session |
 | **Gemini CLI** (designed, permanently declined) | ❓ | 🔧 | 🔧 | ❓ | 🔧 | Everything, indefinitely — personal-account sign-in is rejected server-side by Google (reproduced twice 2026-09-13); a metered API key would route around it but is a cost decision explicitly declined — see `design/gemini-cli-binding.md` |

@@ -249,6 +249,32 @@ Cursor now answers all five binding-contract questions, joining Claude Code, Ant
 Devin — with one caveat carried forward, not closed: headless (`-p`) sessions still get no
 standing-instruction coverage, since `stop` is confirmed to never fire there at all.
 
+**A Two-Pass Axis Engineering review of the whole harness-binding mechanism, then every finding
+fixed.** Before merging this branch, ran a real Two-Pass review (two genuinely isolated fresh
+agents — Pass 1 analytical, Pass 2 adversarial and blind to Pass 1) against the full diff:
+`install.sh`'s generic discovery loop, the shared `block-merge.sh` helper, and all five bindings'
+`detect`/`wire` scripts. Pass 1's structural read concluded there was no critical finding; Pass 2
+live-executed the code against a scratch directory and found one Pass 1 missed — `block-merge.sh`'s
+"no existing marker" branch could silently destroy an existing `CLAUDE.md`/`AGENTS.md`/`GEMINI.md`
+with zero backup if reading it failed at write time, despite its own comment asserting "nothing
+here can lose data." Fixed, along with three more real correctness bugs (an uncaught crash on a
+wrong-shaped config file, one bad command file aborting Skills translation for every other command,
+unbacked-up skill/command overwrites on a name collision) and — after being asked to address the
+full remaining list too — seven more real findings: missing `python3` fallbacks (both at install
+time and in the runtime hooks' final output step), `install.sh` unable to tell a broken `detect`
+script from an absent tool, an inconsistency where Claude Code's own command-copy failure was
+silently non-fatal while the newer bindings' analogous step wasn't, orphaned Skills/commands never
+getting cleaned up on rename/removal, an overlapping-marker case that slipped past the
+marker-validation guard, a mismatched-marker WARN invisible in `install.sh`'s final summary, a
+malformed-frontmatter edge case producing a literal `"---"` Skill description, a non-atomic
+check-then-touch race in Antigravity's dedup marker, and zero CI coverage of the actual `wire`
+success path for three of the five bindings (now covered via no-op tool shims in a new
+`install-matrix` step). Every fix verified against a live reproduction of the exact scenario the
+finding described, not just re-read. Full detail, both raw review passes, and the merge contract
+that reconciled one genuine disagreement between them (a theoretical Pass 1 claim that didn't hold
+up under Pass 2's live test of the same scenario):
+`axis/runs/2026-09-14-harness-binding-mechanism-two-pass/`.
+
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step
