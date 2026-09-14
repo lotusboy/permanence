@@ -1,18 +1,20 @@
 # Design — a Cursor binding for Permanence
 
-> Status: **proposed, not started.** No code in this repo implements any of this yet — but every
-> claim below is live-verified against the real installed product (Cursor Agent CLI
-> 2026.09.10-fd3934a), not read from docs alone. One finding reverses an initial, docs-based
-> worry; one real gap (no working global standing-instruction file) survived three separate live
-> tests and stayed a gap.
+> Status: **built and shipped, except the ongoing half of the standing instruction.**
+> `runtime/bindings/cursor/` implements passive orientation + the forcing read (one `sessionStart`
+> hook, per §2) and command invocation (Skills) — both live-fire tested end-to-end against the
+> real installed product, including a real `/perma-help` invocation that executed its full logic
+> correctly. One finding reversed an initial, docs-based worry; one real gap (no working global
+> standing-instruction file) survived three separate live tests and stayed a gap — see §5.
 > Written 2026-09-14. See [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the
-> `detect`/`wire` interface this assumes rather than re-deriving.
+> `detect`/`wire` interface this implements rather than re-deriving.
 
-**Owner carries, once built: possibly just the ongoing half of the standing instruction.** Three
-of five binding-contract questions have real, live-tested answers, one of them (`sessionStart`)
-answering passive orientation *and* the forcing read at once — simpler than every other binding
-built so far, not more complex. Command invocation is fully confirmed working. The standing
-instruction is the one genuinely open question — see §3.3.
+**Owner carries: possibly just the ongoing half of the standing instruction.** Four of five
+binding-contract questions are shipped and live-fire tested — `sessionStart` answering passive
+orientation *and* the forcing read at once, simpler than every other binding built so far, not
+more complex, and command invocation confirmed via a real `/perma-help` run that executed its
+actual logic (checked scheduled tasks, read real registry data) rather than just echoing text.
+The standing instruction is the one genuinely open question — see §3.3.
 
 ## 1. Why
 
@@ -116,34 +118,42 @@ Per `SPEC.md` §3's binding contract, independent questions, not a ladder.
 
 Material-shift is what (2) and (3) produce together, not a sixth question — see `SPEC.md` §3.
 
-## 4. Proposed shape (not file-final — a sketch to react to)
+## 4. Shape — as actually shipped
 
 The `detect`/`wire` interface is specified once in
 [`harness-binding-mechanism.md`](./harness-binding-mechanism.md) — not restated here.
 
 ```
 runtime/bindings/cursor/
-  detect                 # exit 0 iff `agent` (Cursor's CLI binary) is on PATH
+  detect                 # exit 0 iff `cursor-agent` (the specific binary name, not the generic
+                          # `agent` symlink it also installs) is on PATH
   wire                   # merges a sessionStart hook into the GLOBAL ~/.cursor/hooks.json
                           # "hooks" object — NOT the project-level .cursor/hooks.json, which
                           # would violate invariant 1 if written into an open repo. No second
-                          # hook needed unless §5's mid-session write question comes back
-                          # negative. Command invocation: writes runtime/commands/*.md,
-                          # translated to Skill frontmatter, into the global
-                          # ~/.cursor/skills/<name>/SKILL.md — confirmed real, confirmed
-                          # globally invokable by literal /name syntax.
-  session-start-hook.sh  # translator: reads workspace_roots off stdin (present on every hook
-                          # payload per Cursor's own docs), calls session-start.sh with a
-                          # translated {"cwd": ...} payload, wraps its output as
+                          # hook needed — §5's mid-session write question stayed open, but
+                          # nothing found so far suggests a second hook would answer it either.
+                          # Command invocation: translates runtime/commands/*.md into the global
+                          # ~/.cursor/skills/<name>/SKILL.md, reusing each command's own existing
+                          # `description:` frontmatter field directly rather than re-deriving it
+                          # (one file, perma-contents.md, has none — falls back to its first
+                          # heading).
+  session-start-hook.sh  # translator: reads workspace_roots off stdin, calls session-start.sh
+                          # with a translated {"cwd": ...} payload, wraps its output as
                           # {"additional_context": <that output>}
 ```
 
-Unlike Antigravity's and Devin's bindings, this one has **no confirmed need for a once-per-
-conversation cursor file** — `sessionStart` fires exactly once per session by its own nature,
-unlike Antigravity's `PreInvocation` (fires multiple times per turn) or the general pattern the
-other two bindings had to guard against.
+Live-fire verified end-to-end, not just dry I/O: wired for real on this machine, then a real
+`agent -p` session (a prompt that never mentioned Permanence) spontaneously read and accurately
+reported real stream content — including noticing this very binding's own code was still
+untracked in git — and a real `/perma-help` invocation executed its full logic correctly
+(checked actual scheduled tasks, read real registry data).
 
-## 5. Must verify before writing any code
+Unlike Antigravity's and Devin's bindings, this one has **no once-per-conversation cursor
+file** — `sessionStart` fires exactly once per session by its own nature, unlike Antigravity's
+`PreInvocation` (fires multiple times per turn) or the general pattern the other two bindings
+had to guard against.
+
+## 5. Still open — none of these blocked shipping §4
 
 1. **The mid-session standing-instruction question** — does the model actually update Permanence
    stream files later in a session, unprompted, purely because `sessionStart`'s injected content
@@ -151,13 +161,17 @@ other two bindings had to guard against.
    happening partway through, not a single `-p` one-shot. If this turns out to work, question 3
    may be free, the same surprising way question 2 turned out to be. If not, a genuine gap
    remains and needs its own mechanism — worth checking `postToolUse` as a periodic reinforcement
-   channel before assuming a dead end.
+   channel before assuming a dead end. The one item here that would change `wire`'s shape if
+   resolved negatively.
 2. **Whether `~/.agents/skills/` (the documented cross-tool alternative global skills path) is
    worth using instead of or alongside `~/.cursor/skills/`** — only the Cursor-specific path was
-   live-tested.
-3. **Confirm `workspace_roots` is genuinely present on `sessionStart`'s own stdin payload**, not
-   just on the generic "every hook receives" list — the live tests so far fed a synthetic payload
-   rather than inspecting Cursor's own real stdin directly.
+   live-tested and shipped.
+3. **Whether `workspace_roots` is genuinely present on `sessionStart`'s own real stdin payload**,
+   not just the generic "every hook receives" list — the live end-to-end test (§4) succeeded, but
+   couldn't distinguish between the real payload carrying it and the hook's own `$PWD` fallback
+   silently doing the work instead, since both would resolve to the same directory in that test.
+   Worth confirming precisely (e.g. logging the raw stdin during a real session) before relying on
+   it for a workspace that differs from the hook subprocess's own working directory.
 
 ## 6. Non-goals
 
