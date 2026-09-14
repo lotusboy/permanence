@@ -17,7 +17,8 @@ below states plainly what its owner carries — what's still done by hand — in
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Antigravity** | ✅ | ✅ | ✅ | 🔧 | ✅ | Command invocation — Skills need one live-fire test against the real product before `wire`'s command layer is written; see `design/antigravity-binding.md` §5 |
 | **Devin CLI** | ✅ | ✅ | ✅ | 🔧 | ✅ | Command invocation — Skills need one live-fire test before `wire`'s command layer is written; see `design/devin-binding.md` §5 |
-| **AGENTS.md-reading tools** (Codex, droid, Amp, Cursor, GitHub Copilot, Aider, Zed, Windsurf, Google Jules, ...) | ❌ | ❌ | ✅ | ❌ | ❓ | Orientation — say "good morning Permanence" (or run `/perma-startup <name-or-path>`) at the start of a session |
+| **Cursor** | ✅ | ✅ | ❌ | ✅ | ✅ | Standing instruction — no working global rules/`AGENTS.md` file exists for Cursor despite three real attempts; see `design/cursor-binding.md` §5 |
+| **AGENTS.md-reading tools** (Codex, droid, Amp, GitHub Copilot, Aider, Zed, Windsurf, Google Jules, ...) | ❌ | ❌ | ✅ | ❌ | ❓ | Orientation — say "good morning Permanence" (or run `/perma-startup <name-or-path>`) at the start of a session |
 | **Any other tool** (manual fallback) | ❌ | ❌ | ❌ | ❌ | ❓ | Everything — the fallback prompt has to be pasted in at the start of every session |
 | **Gemini CLI** (designed, permanently declined) | ❓ | 🔧 | 🔧 | ❓ | 🔧 | Everything, indefinitely — personal-account sign-in is rejected server-side by Google (reproduced twice 2026-09-13); a metered API key would route around it but is a cost decision explicitly declined — see `design/gemini-cli-binding.md` |
 
@@ -54,6 +55,21 @@ actual `devin -p` session, not just reasoned about. Command invocation (Skills) 
 `design/devin-binding.md` §5. **Owner carries: nothing but the `/perma-*` commands themselves**, which
 have no home here until that's built.
 
+## Cursor
+
+A single `sessionStart` hook (`runtime/bindings/cursor/`) answers both the passive orientation and the
+forcing read — live-confirmed the more surprising way round from the other bindings: a prompt that
+never mentioned Permanence at all still caused the agent to spontaneously read and accurately report
+real stream content, purely because the injected instruction told it to. Command invocation is fully
+shipped too — commands translate into `~/.cursor/skills/<name>/SKILL.md`, confirmed invokable by literal
+`/name` syntax from a completely unrelated project, the cleanest command-invocation result of any
+binding built so far. **The standing instruction is the one real gap**: no working global rules or
+`AGENTS.md` file was found for Cursor despite three separate live attempts — "User Rules" appear to be
+account-synced through Cursor's own UI, not a local file. See `design/cursor-binding.md` §5. **Owner
+carries: the ongoing half of the standing instruction** — whether unprompted mid-session stream updates
+happen is still unconfirmed, so updating the stream when something shifts mid-session may need doing by
+hand.
+
 ## AGENTS.md-reading tools (standing instruction only)
 
 `AGENTS.md` is a cross-tool standard (donated to the Agentic AI Foundation, a Linux Foundation project,
@@ -84,14 +100,15 @@ question 3, the model can still update a stream once told to look, but nothing t
 own. Either way, nothing errors — the only symptom is an empty `LOG.md` weeks later. The owner's
 remaining job here is orientation, by hand, every session.
 
-**Gemini CLI, Antigravity, and Devin CLI are deliberately not on this list.** Antigravity and Devin
-both have their own real binding now (above) — Devin does read `AGENTS.md`, but through its own
-binding's dedicated global file, not this generic mechanism. Gemini CLI reads `GEMINI.md`, not
-`AGENTS.md`, confirmed directly against its own docs, and its binding is permanently declined
-(personal-account sign-in is rejected server-side by Google, reproduced twice 2026-09-13 — a metered
-API key would route around it but is a cost decision explicitly declined, see
-`design/gemini-cli-binding.md`), so it falls under the manual fallback below, same as any
-unimplemented tool.
+**Gemini CLI, Antigravity, Devin CLI, and Cursor are deliberately not on this list.** Antigravity,
+Devin, and Cursor all have their own real binding now (above) — Devin does read `AGENTS.md`, but
+through its own binding's dedicated global file, not this generic mechanism; Cursor's real
+binding doesn't use `AGENTS.md` at all, since no working global path was found for it (see the
+Cursor section above). Gemini CLI reads `GEMINI.md`, not `AGENTS.md`, confirmed directly against
+its own docs, and its binding is permanently declined (personal-account sign-in is rejected
+server-side by Google, reproduced twice 2026-09-13 — a metered API key would route around it but
+is a cost decision explicitly declined, see `design/gemini-cli-binding.md`), so it falls under
+the manual fallback below, same as any unimplemented tool.
 
 ## Claude Desktop specifically (for IT/Ops: what to grant)
 

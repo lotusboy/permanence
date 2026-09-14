@@ -173,6 +173,22 @@ change in what was already documented.
 the original, most-hardened one that predates `design/` as a convention — is documented to the
 same standard.
 
+**New: Cursor's binding, shipped for four of five questions — the cleanest result of any binding
+this session.** A docs-based worry started this one: Cursor's own hook documentation says
+`beforeSubmitPrompt` (the closest analogue to every other binding's forcing-read hook) is
+read-only, and a real community bug report claims the CLI omits it and others. Live testing
+reversed the worry instead of confirming it: `sessionStart`'s context injection is real, and —
+proven with a prompt that never mentioned Permanence at all — the agent spontaneously read the
+real `PROJECT.md`/`LOG.md` content and reported it accurately, including noticing this very
+binding's own code was still untracked in git, purely because the injected instruction told it
+to. One hook, firing exactly once per session, answers both passive orientation and the forcing
+read — simpler than every other binding built this session, not more complex. Command invocation
+is fully shipped too: commands translate into `~/.cursor/skills/<name>/SKILL.md`, confirmed
+invokable by literal `/name` syntax from a completely unrelated project — a real `/perma-help`
+run executed its full actual logic (checked real scheduled tasks, read real registry data), not
+just echoed text. The one real gap: no working global standing-instruction file was found for
+Cursor despite three separate live attempts — a tested-away gap, not an unresearched one.
+
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step
