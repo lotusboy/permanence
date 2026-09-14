@@ -8,9 +8,9 @@
 # .devin/hooks.v1.json, which lives inside whatever project repo is open and would violate
 # invariant 1 if Permanence-referencing content landed there.
 #
-# The command-invocation (Skills) layer is deliberately NOT built here yet —
-# design/devin-binding.md §5 item 4 says that needs its own live-fire test first, which this
-# pass didn't include.
+# Also translates Permanence's commands into Devin's own global Skills directory (command
+# invocation) — live-fire tested 2026-09-14, both literal /name syntax and description-matched
+# invocation confirmed working.
 set -u
 PERMA="${PERMA_DIR:-$HOME/permanence}"
 BINDING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -88,6 +88,67 @@ DEVIN_AGENTS_MD="$HOME/.config/devin/AGENTS.md"
 BLOCK_SRC="$PERMA/runtime/devin-agents-md-block.md"
 if _perma_block_merge "$DEVIN_AGENTS_MD" "$BLOCK_SRC"; then
   echo "  AGENTS.md: Permanence block refreshed at $DEVIN_AGENTS_MD"
+fi
+
+# Skills: translate runtime/commands/*.md into ~/.config/devin/skills/<name>/SKILL.md —
+# confirmed real, confirmed invokable both by literal /name syntax and description-matching.
+# Each command already carries a `description:` frontmatter field; reused directly rather than
+# re-derived. The one command without frontmatter (perma-contents.md) falls back to its first
+# heading/line.
+CMD_SRC="$PERMA/runtime/commands"
+SKILLS_DST="$HOME/.config/devin/skills"
+if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
+import json, os, re, sys
+
+cmd_src, skills_dst = sys.argv[1], sys.argv[2]
+
+def extract_description(content):
+    m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    if m:
+        dm = re.search(r'^description:\s*(.*)$', m.group(1), re.MULTILINE)
+        if dm:
+            raw = dm.group(1).strip()
+            if raw.startswith('"') and raw.endswith('"'):
+                try:
+                    return json.loads(raw)
+                except Exception:
+                    pass
+            return raw
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith('#'):
+            return line.lstrip('#').strip()
+        if line:
+            return line
+    return "A Permanence command."
+
+failed = []
+for fname in sorted(os.listdir(cmd_src)):
+    if not fname.endswith(".md"):
+        continue
+    name = fname[:-3]
+    src_path = os.path.join(cmd_src, fname)
+    content = open(src_path).read()
+    description = extract_description(content)
+
+    skill_dir = os.path.join(skills_dst, name)
+    try:
+        os.makedirs(skill_dir, exist_ok=True)
+        fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
+        body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+            f.write("\n".join(fm_lines) + body)
+        print(f"  skill: {name}")
+    except Exception as e:
+        print(f"  skill: {name} — FAILED to write ({e})")
+        failed.append(name)
+
+if failed:
+    sys.exit(1)
+PY
+then
+  echo "  skills: FAILED to translate one or more commands (see messages above)"
+  WIRE_FAILED=1
 fi
 
 exit "$WIRE_FAILED"

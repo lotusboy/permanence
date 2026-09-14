@@ -197,6 +197,16 @@ bundled docs undersold this, describing only the former. `wire` now translates
 `/perma-help` invocation that executed its full actual logic. Antigravity is now the second
 binding (after Claude Code) with nothing left for the owner to carry by hand.
 
+**Devin's command layer, closed out — all five binding-contract questions now answered.** A real
+test skill fired correctly two ways from a completely unrelated scratch project: literal
+`/perma-devin-test` syntax and a natural-language request matching its description. `~/.claude/skills/`
+never covered Permanence's own commands, but `~/.config/devin/skills/<name>/SKILL.md` does —
+confirmed via `devin skills list` showing the test skill tagged `[user,model]` immediately.
+`wire` now translates `runtime/commands/*.md` there, reusing the same description-extraction
+logic already shared with Cursor's and Antigravity's bindings. Verified via a real `/perma-help`
+invocation that executed its full actual logic. Devin is now the third binding, after Claude Code
+and Antigravity, with nothing left for the owner to carry.
+
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step

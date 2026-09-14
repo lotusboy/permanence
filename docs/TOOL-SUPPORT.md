@@ -16,7 +16,7 @@ below states plainly what its owner carries — what's still done by hand — in
 |---|---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Antigravity** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
-| **Devin CLI** | ✅ | ✅ | ✅ | 🔧 | ✅ | Command invocation — Skills need one live-fire test before `wire`'s command layer is written; see `design/devin-binding.md` §5 |
+| **Devin CLI** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Cursor** | ✅ | ✅ | ❌ | ✅ | ✅ | Standing instruction — no working global rules/`AGENTS.md` file exists for Cursor despite three real attempts; see `design/cursor-binding.md` §5 |
 | **AGENTS.md-reading tools** (Codex, droid, Amp, GitHub Copilot, Aider, Zed, Windsurf, Google Jules, ...) | ❌ | ❌ | ✅ | ❌ | ❓ | Orientation — say "good morning Permanence" (or run `/perma-startup <name-or-path>`) at the start of a session |
 | **Any other tool** (manual fallback) | ❌ | ❌ | ❌ | ❌ | ❓ | Everything — the fallback prompt has to be pasted in at the start of every session |
@@ -52,9 +52,10 @@ and the forcing read — the same event names Claude Code uses, but a genuinely 
 The standing instruction lands in a dedicated global `~/.config/devin/AGENTS.md` — written directly
 rather than relying on Devin's separate (real, but conditional on Claude Code's binding also being
 installed) pickup of `~/.claude/CLAUDE.md`. Live-fire verified: wired for real and tested against an
-actual `devin -p` session, not just reasoned about. Command invocation (Skills) isn't built yet — see
-`design/devin-binding.md` §5. **Owner carries: nothing but the `/perma-*` commands themselves**, which
-have no home here until that's built.
+actual `devin -p` session, not just reasoned about. Command invocation (Skills) is shipped too —
+`~/.claude/skills/` doesn't cover Permanence's commands, but `~/.config/devin/skills/<name>/SKILL.md`
+does, confirmed invokable both by literal `/name` syntax and description-matching. **Owner carries:
+nothing.**
 
 ## Cursor
 

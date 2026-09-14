@@ -1,18 +1,19 @@
 # Design — a Devin CLI binding for Permanence
 
-> Status: **built and shipped, except the command layer.** `runtime/bindings/devin/` implements
-> the forcing read + passive orientation (`SessionStart` + `UserPromptSubmit`) and the standing
-> instruction (global `AGENTS.md`) — live-fire tested end-to-end against the real installed
-> product on this machine. Skills/command invocation is still deliberately unbuilt — see §5 item
-> 4, unchanged: it needs its own live-fire test before its `wire` shape is committed to.
-> Written 2026-09-13. See [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the
-> `detect`/`wire` interface this implements rather than re-deriving.
+> Status: **built and shipped, all five questions answered.** `runtime/bindings/devin/` implements
+> the forcing read + passive orientation (`SessionStart` + `UserPromptSubmit`), the standing
+> instruction (global `AGENTS.md`), and command invocation (Skills) — all live-fire tested
+> end-to-end against the real installed product on this machine. §5's live-fire test is done:
+> both literal `/name` syntax and description-matched invocation confirmed working, 2026-09-14.
+> Written 2026-09-13, revised 2026-09-14 once Skills shipped. See
+> [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the `detect`/`wire` interface
+> this implements rather than re-deriving.
 
-**Owner carries: the command layer.** Four of five binding-contract questions are shipped and
-live-fire tested — forcing read + passive orientation demonstrably steer a real `devin -p`
-session's actual reply, and the standing instruction writes to a dedicated global `AGENTS.md`
-rather than relying solely on the conditional `CLAUDE.md` pickup described in §3.3. Command
-invocation (Skills) is the one still open — see §5.
+**Owner carries: nothing.** All five binding-contract questions are shipped and live-fire
+tested — forcing read + passive orientation demonstrably steer a real `devin -p` session's actual
+reply, the standing instruction writes to a dedicated global `AGENTS.md` rather than relying
+solely on the conditional `CLAUDE.md` pickup described in §3.3, and command invocation via a real
+`/perma-help` run that executed its full actual logic, not just echoed text.
 
 ## 1. Why
 
@@ -94,7 +95,8 @@ condition attached:**
   yet live-tested standalone): `~/.config/devin/AGENTS.md`, for "global rules that apply to every
   project" — independent of Claude Code entirely.
 
-**Skills (`~/.claude/skills/`) — confirmed live, but doesn't cover Permanence's own commands:**
+**Skills — `~/.claude/skills/` doesn't cover Permanence's own commands, but
+`~/.config/devin/skills/` does, live-fire confirmed 2026-09-14, both invocation modes:**
 
 - `devin skills list` showed several of the owner's real `~/.claude/skills/*/SKILL.md` files,
   confirming that import path works for real, unprompted.
@@ -104,6 +106,14 @@ condition attached:**
   unlike the Rules row which spells out both the project and global path separately — empirically,
   only the project-level form works, if either does. A real binding needs to write Permanence's
   commands into a location Devin actually reads as skills, not assume this import covers them.
+- **`~/.config/devin/skills/<name>/SKILL.md` — the candidate this binding actually uses —
+  confirmed real, twice.** A test skill placed there immediately appeared in `devin skills list`
+  tagged `[user,model]`. Fired correctly two separate ways, from a completely unrelated scratch
+  project: the literal string `/perma-devin-test` as the whole prompt, and a natural-language
+  request matching its description ("please run the perma devin test skill"). The other two
+  candidate global paths the `skills paths` output also listed
+  (`~/.config/cognition/skills/`, `~/.agents/skills/`) were not tested — this one already worked,
+  so there was no need to differentiate between them.
 
 **Headless invocation — confirmed:**
 
@@ -130,10 +140,9 @@ Per `SPEC.md` §3's binding contract, independent questions, not a ladder.
    machine with no Claude Code binding installed. Both the `AGENTS.md` mechanism itself
    (`devin rules list` showing `AGENTS [Standard] always-on` once the file exists) and the
    underlying Rules-injection mechanism (already proven for `CLAUDE.md`, §2) are live-confirmed.
-4. **Command invocation.** Still needs real work — confirmed NOT free (§2), not built (§5 item
-   4). Likely shape: translate `runtime/commands/*.md` into
-   `~/.config/devin/skills/<name>/SKILL.md`, matching the format Devin's own Skills already use,
-   similar in spirit to what Antigravity's Skills layer needs.
+4. **Command invocation. Live-confirmed**, both ways — literal `/name` syntax and
+   description-matched. `~/.claude/skills/` doesn't cover Permanence's commands, but
+   `~/.config/devin/skills/<name>/SKILL.md` does, and is now what `wire` writes to.
 5. **Headless invocation.** **Confirmed** (§2), with two flags (`--respect-workspace-trust
    false`, `--permission-mode`) a scripted caller needs to set explicitly.
 
@@ -153,8 +162,10 @@ runtime/bindings/devin/
                                  # would violate invariant 1 if written into an open repo.
                                  # Writes the standing-instruction block into the global
                                  # ~/.config/devin/AGENTS.md via a dedicated
-                                 # devin-agents-md-block.md. Skills/command layer not included
-                                 # yet — see §5.
+                                 # devin-agents-md-block.md. Also translates
+                                 # runtime/commands/*.md into
+                                 # ~/.config/devin/skills/<name>/SKILL.md, reusing each command's
+                                 # own existing `description:` frontmatter field directly.
   session-start-hook.sh         # translator: calls session-start.sh, wraps its output as
                                  # {"hookSpecificOutput": {"hookEventName": "SessionStart",
                                  # "additionalContext": <that output>}}
@@ -171,25 +182,24 @@ runtime/bindings/devin/
 
 Live-fire verified end-to-end, not just dry I/O: wired for real on this machine, then a real
 `devin -p` session correctly quoted the exact `[perma]` stream-registration line the hook
-injected — the model's own answer, not a log line.
+injected, and a real `/perma-help` invocation executed its full actual logic (checked real
+scheduled tasks, read real registry data) — not just echoed text.
 
-## 5. Still open — the command layer only
+## 5. Still open — nothing blocking
 
-Everything blocking the read/write half shipped. What's left is narrower, and only item 1 below
-actually blocks more code from being written:
+Every item that could have blocked shipping (§4) is resolved. What's left is optional:
 
-1. **Design and live-fire the command layer** — confirm `~/.config/devin/skills/<name>/SKILL.md`
-   is genuinely where global, non-Claude skills belong (the paths output distinguished "User
-   skills (global)" including `~/.config/devin/skills/`, `~/.config/cognition/skills/`, and
-   `~/.agents/skills/` — three candidate locations, not live-differentiated yet), and confirm
-   invocation actually works for a real skill placed there, description-matched or otherwise.
+1. **The other two candidate global skills paths** (`~/.config/cognition/skills/`,
+   `~/.agents/skills/`) were never tested, since `~/.config/devin/skills/` already worked — worth
+   understanding if they ever diverge (e.g. a future Devin version deprecating one path), but not
+   blocking anything today.
 2. **Worth reporting upstream, not fixable here**: the two bundled docs contradicting each other
    on Claude Code hook import (§2) is a real bug in Devin's own documentation, independent of
    anything Permanence does.
 
 Retired by live testing, no longer open: `SessionStart` firing and its `additionalContext`
 injection; `$DEVIN_PROJECT_DIR`'s correctness; the global `~/.config/devin/AGENTS.md` Rules
-pickup.
+pickup; Skills' invocation mechanism (both literal `/name` syntax and description-matching).
 
 ## 6. Non-goals
 
@@ -198,5 +208,3 @@ pickup.
 - Not relying on the conditional `CLAUDE.md` Rules pickup for standing-instruction coverage —
   real, but conditional on Claude Code's binding also being installed (§3.3), which is exactly
   why the shipped binding writes its own dedicated `AGENTS.md` instead.
-- Not building the command-invocation layer yet — needs its own live-fire test (§5 item 1),
-  matching the same discipline Antigravity's Skills layer is held to.
