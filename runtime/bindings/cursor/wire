@@ -1,14 +1,11 @@
 #!/bin/bash
 # cursor/wire — connects Permanence to Cursor: a sessionStart hook in the global
 # ~/.cursor/hooks.json "hooks" key (answers both passive orientation and the forcing read at
-# once — live-confirmed, design/cursor-binding.md §2), and Permanence's commands translated into
-# Cursor's own global Skills directory (command invocation — confirmed live, including literal
-# /name syntax). See design/cursor-binding.md for the confirmed mechanics this implements.
-#
-# The standing-instruction question is deliberately NOT answered by a second mechanism here — no
-# working global rules/AGENTS.md file was found despite three real attempts, and whether
-# sessionStart's own content (which already carries the standing-rule instruction) is acted on
-# for unprompted mid-session updates is still open. See design/cursor-binding.md §5 item 1.
+# once — live-confirmed, design/cursor-binding.md §2), a stop hook (the standing instruction —
+# live-fire confirmed 2026-09-14, interactive mode only; see stop-hook.sh's own header for why),
+# and Permanence's commands translated into Cursor's own global Skills directory (command
+# invocation — confirmed live, including literal /name syntax). See design/cursor-binding.md for
+# the confirmed mechanics this implements.
 set -u
 PERMA="${PERMA_DIR:-$HOME/permanence}"
 BINDING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,6 +29,7 @@ if os.path.exists(path):
         sys.exit(1)
 
 session_start_cmd = f"{binding_dir}/session-start-hook.sh"
+stop_cmd = f"{binding_dir}/stop-hook.sh"
 changed = False
 
 data.setdefault("version", 1)
@@ -44,16 +42,23 @@ if not present:
     hooks["sessionStart"] = ss
     changed = True
 
+sp = hooks.get("stop") or []
+present = any(isinstance(h, dict) and h.get("command") == stop_cmd for h in sp)
+if not present:
+    sp.append({"command": stop_cmd, "type": "command", "timeout": 10})
+    hooks["stop"] = sp
+    changed = True
+
 if changed:
     if os.path.exists(path):
         shutil.copy(path, path + ".perma-bak")
     json.dump(data, open(path, "w"), indent=2)
-    print("  hooks.json: sessionStart hook merged in (backup: hooks.json.perma-bak)")
+    print("  hooks.json: sessionStart + stop hooks merged in (backup: hooks.json.perma-bak)")
 else:
-    print("  hooks.json: hook already present")
+    print("  hooks.json: hooks already present")
 PY
 then
-  echo "  hooks.json: FAILED to configure automatically — add the hook by hand (see message above)"
+  echo "  hooks.json: FAILED to configure automatically — add the hooks by hand (see message above)"
   WIRE_FAILED=1
 fi
 

@@ -173,8 +173,9 @@ change in what was already documented.
 the original, most-hardened one that predates `design/` as a convention — is documented to the
 same standard.
 
-**New: Cursor's binding, shipped for four of five questions — the cleanest result of any binding
-this session.** A docs-based worry started this one: Cursor's own hook documentation says
+**New: Cursor's binding, initially shipped for four of five questions — the cleanest result of any
+binding this session. (The fifth, the standing instruction, was closed out later the same day —
+see below.)** A docs-based worry started this one: Cursor's own hook documentation says
 `beforeSubmitPrompt` (the closest analogue to every other binding's forcing-read hook) is
 read-only, and a real community bug report claims the CLI omits it and others. Live testing
 reversed the worry instead of confirming it: `sessionStart`'s context injection is real, and —
@@ -229,6 +230,24 @@ enough to read as a real property of how Cursor's agent decides when to act vers
 acknowledge — not a wording or placement problem on Permanence's side. Untried and worth a real
 terminal: whether `stop` fires in genuinely interactive use, which this session's sandboxed
 environment has no way to test.
+
+**Cursor's standing instruction, reversed the same day — the seven-negative conclusion above
+turned out to be specific to headless mode, not Cursor generally.** The one thing this session
+couldn't test itself — `stop` in genuinely interactive use — the owner tested directly, in their
+own terminal. First run looped indefinitely on an ungated test script (a test-script bug, not a
+platform or Permanence defect) but proved `stop` fires repeatedly in interactive mode. A properly
+gated follow-up succeeded completely: a material fact stated mid-conversation, no instruction
+given to record it, and the agent's turn ended, then — unprompted — a second automatic turn began
+on its own and ran a real shell command that wrote an accurate LOG.md entry, then confirmed what
+it wrote. `runtime/bindings/cursor/stop-hook.sh` ships this for real: gated on `loop_count == 0` so
+it fires once per real user turn rather than re-triggering itself, resolves the real stream via
+`resolve-stream.sh`, and asks the model to check for material shifts and write if anything came up.
+`wire` now installs it alongside the existing `sessionStart` hook. Confirmed end-to-end against
+this machine's real, production Permanence stream (not a disposable test stream): a genuine
+unprompted write landed in the real `LOG.md`, immediately reverted since it was only a test fact.
+Cursor now answers all five binding-contract questions, joining Claude Code, Antigravity, and
+Devin — with one caveat carried forward, not closed: headless (`-p`) sessions still get no
+standing-instruction coverage, since `stop` is confirmed to never fire there at all.
 
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 

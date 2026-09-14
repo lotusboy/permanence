@@ -1,26 +1,28 @@
 # Design — a Cursor binding for Permanence
 
-> Status: **built and shipped, four of five — the standing instruction is a confirmed, likely
-> structural limitation, not an open question.** `runtime/bindings/cursor/` implements passive
-> orientation + the forcing read (one `sessionStart` hook, per §2) and command invocation
-> (Skills) — both live-fire tested end-to-end against the real installed product, including a real
-> `/perma-help` invocation that executed its full logic correctly. One finding reversed an initial,
-> docs-based worry; the standing instruction was tested **seven** separate ways across two rounds
-> (three file locations, a real mid-session write test, a much stronger imperative wording, the
-> `stop` hook, and `postToolUse` reinforcement) and failed all seven — see §5.
-> Written 2026-09-14, extended the same day after a second round of live testing. See
+> Status: **built and shipped, five of five.** `runtime/bindings/cursor/` implements passive
+> orientation + the forcing read (one `sessionStart` hook, per §2), command invocation (Skills),
+> and the standing instruction (a `stop` hook, per §3.3.1) — all live-fire tested end-to-end
+> against the real installed product, including a real `/perma-help` invocation that executed its
+> full logic correctly and a real, unprompted `stop`-hook write to the real production stream.
+> Two findings reversed initial, docs-based or negative-testing-based worries: the forcing read
+> (§2) and, after seven straight negative tests, the standing instruction itself — the `stop`
+> hook that was confirmed dead in headless mode turned out to work in genuinely interactive use,
+> the normal way most people actually run Cursor (§3.3.1).
+> Written 2026-09-14, extended the same day after two further rounds of live testing — the second
+> reversing the first's conclusion. See
 > [harness-binding-mechanism.md](./harness-binding-mechanism.md) for the `detect`/`wire` interface
 > this implements rather than re-deriving.
 
-**Owner carries: the standing instruction, confirmed across seven real tests, not just
-suspected.** Four of five binding-contract questions are shipped and live-fire tested —
-`sessionStart` answering passive orientation *and* the forcing read at once, simpler than every
-other binding built so far, not more complex, and command invocation confirmed via a real
-`/perma-help` run that executed its actual logic (checked scheduled tasks, read real registry
-data) rather than just echoing text. **Every mechanism tried for the write side came back
-negative, consistently**: a material fact mentioned mid-conversation is reliably acknowledged in
-the reply but never written back to the stream, unprompted — true whether the instruction is
-worded normally, worded as a forceful imperative, or repeated after every tool call. See §5.
+**Owner carries: nothing outstanding on the binding-contract questions.** All five are shipped
+and live-fire tested — `sessionStart` answering passive orientation *and* the forcing read at
+once, simpler than every other binding built so far, not more complex; command invocation
+confirmed via a real `/perma-help` run that executed its actual logic (checked scheduled tasks,
+read real registry data) rather than just echoing text; and the standing instruction confirmed via
+a real interactive session where the `stop` hook fired unprompted and wrote a genuine LOG.md entry
+to the real production stream, with no user instruction to do so. The one caveat: this only
+reaches interactive use — `stop` is separately confirmed to never fire at all in headless (`-p`)
+mode, so a headless/scripted Cursor session still gets no standing-instruction coverage. See §3.3.1.
 
 ## 1. Why
 
@@ -128,8 +130,37 @@ including literal slash syntax:**
     referenced the material fact — but never once caused it to *act* by running a write command
     unprompted, across three different content strategies and two different injection points.
     That consistency across genuinely different approaches is itself the finding: this reads as a
-    structural property of how Cursor's agent decides when to use tools on its own initiative, not
-    a fixable wording or placement problem on Permanence's side.
+    structural property of how Cursor's agent decides when to use tools on its own initiative
+    from injected context alone — reversed one layer up, though, by forcing an actual extra turn
+    instead of injecting context into the current one (§3.3.1).
+
+### 3.3.1 Reversal: `stop` works, in interactive mode
+
+The owner ran the genuinely-untested case from §5 item 1 — `stop` in real interactive Cursor use,
+which this session has no TTY to test itself. Two runs:
+
+- **First run: an ungated test script looped indefinitely.** A bug in the test script, not a
+  Cursor or Permanence defect — it had no `loop_count` gate, so the `followup_message` it returned
+  triggered another `stop` firing, which fired again, and so on. Notable on its own terms, though:
+  it proved `stop` fires repeatedly and reliably in interactive mode, the opposite of headless.
+- **Second run, gated on `loop_count == 0`: complete success.** A fresh interactive session, a
+  material throwaway fact stated in the first turn, no instruction to update anything. The agent
+  replied once, then — unprompted, with nothing typed by the user — a second automatic turn
+  appeared: `stop`'s `followup_message` had fired, the agent recognized it, and ran a real shell
+  command that wrote an accurate LOG.md entry describing the fact, then confirmed what it wrote.
+  Genuine forced action, not shaped conversation — the first time any write-side mechanism tried
+  for this binding produced one.
+- **Production confirmation, same day**: the shipped `stop-hook.sh` (§4) was wired for real
+  against this machine's actual `~/.cursor/hooks.json` and the real production Permanence stream
+  (not a disposable test stream) — same result, a real unprompted LOG.md write, immediately
+  reverted since it was only a test fact.
+- **What changed the conclusion**: every earlier test injected `additional_context` and hoped the
+  model would act on it unprompted within the turn it was already in — that never worked. `stop`
+  doesn't inject context into the current turn; it ends the turn and forces a **new** one, with
+  the model explicitly told to check for material shifts and write if needed. That's a
+  structurally different lever from everything tried in §3.3, and it's the one that worked.
+  Headless mode's `stop` is still separately, definitively dead (confirmed via debug logging,
+  §3.3) — this reversal is specific to interactive use.
 
 **Headless invocation — confirmed:**
 
@@ -144,12 +175,13 @@ Per `SPEC.md` §3's binding contract, independent questions, not a ladder.
 2. **Forcing read. Live-confirmed, decisively** (§2) — the one finding that reverses this
    binding's original docs-based worry. `sessionStart` alone demonstrably causes unprompted,
    accurate action on real Permanence content, not just passive availability.
-3. **Standing instruction. A confirmed, likely structural limitation, not an unknown.** No working
-   global rules file was found despite three real attempts, and four separate write-side
-   mechanisms all came back negative too — normal wording, a forceful imperative wording, the
-   `stop` hook (which turned out not to fire headlessly at all), and `postToolUse` reinforcement
-   (§2). Seven tests, seven negatives, consistent enough to read as a real property of how
-   Cursor's agent decides when to act versus merely acknowledge. See §5.
+3. **Standing instruction. Live-confirmed, interactive mode only.** Seven straight negatives from
+   every context-injection approach (normal wording, a forceful imperative wording, `postToolUse`
+   reinforcement, and `stop` in headless mode — §2, §3.3) were reversed by an eighth test: the
+   `stop` hook's `followup_message`, run in genuinely interactive use, forces a real extra turn
+   that causes an unprompted, accurate write to the stream — confirmed both in an isolated test
+   and against the real production stream (§3.3.1). Headless (`-p`) sessions still get no
+   coverage here — `stop` is confirmed to never fire there at all.
 4. **Command invocation. Live-confirmed**, including literal `/name` syntax from a genuinely
    global path (§2) — the cleanest result of any binding built this session.
 5. **Headless invocation. Confirmed** (§2), needing `--trust` for non-interactive use.
@@ -165,12 +197,9 @@ The `detect`/`wire` interface is specified once in
 runtime/bindings/cursor/
   detect                 # exit 0 iff `cursor-agent` (the specific binary name, not the generic
                           # `agent` symlink it also installs) is on PATH
-  wire                   # merges a sessionStart hook into the GLOBAL ~/.cursor/hooks.json
+  wire                   # merges sessionStart + stop hooks into the GLOBAL ~/.cursor/hooks.json
                           # "hooks" object — NOT the project-level .cursor/hooks.json, which
-                          # would violate invariant 1 if written into an open repo. No second
-                          # hook wired — seven attempts at the standing-instruction gap all came
-                          # back negative (§3.3), including postToolUse reinforcement, so there's
-                          # currently no known mechanism left to wire for it (§5 item 1).
+                          # would violate invariant 1 if written into an open repo.
                           # Command invocation: translates runtime/commands/*.md into the global
                           # ~/.cursor/skills/<name>/SKILL.md, reusing each command's own existing
                           # `description:` frontmatter field directly rather than re-deriving it
@@ -179,13 +208,22 @@ runtime/bindings/cursor/
   session-start-hook.sh  # translator: reads workspace_roots off stdin, calls session-start.sh
                           # with a translated {"cwd": ...} payload, wraps its output as
                           # {"additional_context": <that output>}
+  stop-hook.sh            # the standing-instruction fix (§3.3.1). Gated on loop_count == 0 so it
+                          # fires once per real user turn, not on the follow-up turn it itself
+                          # triggers. Resolves the real stream via resolve-stream.sh and returns
+                          # {"followup_message": ...} asking the model to check for material
+                          # shifts and write to PROJECT.md/LOG.md if anything came up, or say so
+                          # if not. Returns {} (no-op) for an unregistered/perma-meta path, or when
+                          # loop_count != 0.
 ```
 
 Live-fire verified end-to-end, not just dry I/O: wired for real on this machine, then a real
 `agent -p` session (a prompt that never mentioned Permanence) spontaneously read and accurately
 reported real stream content — including noticing this very binding's own code was still
 untracked in git — and a real `/perma-help` invocation executed its full logic correctly
-(checked actual scheduled tasks, read real registry data).
+(checked actual scheduled tasks, read real registry data). The `stop` hook was additionally
+live-fired in a real interactive session, wired against the real production stream: an unprompted
+follow-up turn correctly wrote a (test) LOG.md entry, immediately reverted.
 
 Unlike Antigravity's and Devin's bindings, this one has **no once-per-conversation cursor
 file** — `sessionStart` fires exactly once per session by its own nature, unlike Antigravity's
@@ -194,22 +232,12 @@ had to guard against.
 
 ## 5. Still open — none of these block anything shipped
 
-1. **A real fix for the standing-instruction gap** — still unsolved after seven real attempts
-   (§2, §3.3). What's left, roughly in order of promise:
-   - **`stop` in genuinely interactive use** — confirmed dead in headless `-p` mode, but never
-     tested interactively, since this sandboxed environment has no real terminal. If it fires
-     interactively, `followup_message` is still the most structurally direct mechanism tried (a
-     forced extra turn, not a hope that injected context gets acted on) — worth a real terminal
-     test before ruling it out entirely.
-   - **A tool-based approach instead of context injection** — every test so far relied on
-     `additional_context`, which reliably shapes replies but never once triggered unprompted tool
-     use. `preToolUse`'s `updated_input` (rewriting a tool call's arguments before it runs) or
-     `PermissionRequest`'s auto-approve mechanism weren't tried — genuinely different levers from
-     "inject text and hope," not yet explored.
-   - Otherwise, this may be a real, permanent limitation for Cursor's `additional_context`
-     mechanism specifically, not a solvable wiring problem — worth accepting as documented rather
-     than continuing to try wording variations, since three different ones already failed
-     identically.
+1. **Headless (`-p`) sessions get no standing-instruction coverage** — `stop` is confirmed dead
+   there (§3.3), and no other mechanism was found across seven tries (§2, §3.3). Not currently
+   pursued further: headless use is the minority case for Cursor, and every context-injection
+   lever available in headless mode was already tried and failed. Would need a genuinely
+   different mechanism (e.g. `preToolUse`'s `updated_input`, or `PermissionRequest`'s auto-approve)
+   to revisit.
 2. **Whether `~/.agents/skills/` (the documented cross-tool alternative global skills path) is
    worth using instead of or alongside `~/.cursor/skills/`** — only the Cursor-specific path was
    live-tested and shipped.
@@ -218,12 +246,14 @@ had to guard against.
    couldn't distinguish between the real payload carrying it and the hook's own `$PWD` fallback
    silently doing the work instead, since both would resolve to the same directory in that test.
    Worth confirming precisely (e.g. logging the raw stdin during a real session) before relying on
-   it for a workspace that differs from the hook subprocess's own working directory.
+   it for a workspace that differs from the hook subprocess's own working directory. `stop-hook.sh`
+   inherits the same open question via the same `workspace_roots`-with-`$PWD`-fallback pattern.
 
 Retired by live testing, no longer open: whether `sessionStart` alone answers the forcing read;
-whether the standing instruction might turn out free the same surprising way the forcing read
-did — tested directly, it doesn't (§2, §3.3); whether weak wording, `stop`, or `postToolUse`
-reinforcement fix the write side — all three tried and all three failed (§2, §3.3).
+whether weak wording, headless `stop`, or `postToolUse` reinforcement fix the write side — all
+three tried and all three failed (§2, §3.3); whether `stop` in interactive use fixes the write
+side — tried and confirmed working (§3.3.1), reversing the standing-instruction conclusion this
+doc held earlier the same day.
 
 ## 6. Non-goals
 
@@ -233,6 +263,9 @@ reinforcement fix the write side — all three tried and all three failed (§2, 
 - Not treating `postToolUse` as an untried candidate for the *standing-instruction* question
   anymore — it was tried, wired alongside `sessionStart` with a real reinforcement message, and
   came back negative just like every other context-injection approach (§3.3).
-- Not treating the standing-instruction gap as merely unresearched — seven real tests ran and all
-  seven came back negative (§2, §3.3). It's a confirmed, likely structural limitation of the
-  shipped binding, not an open question waiting on more investigation via the same approach.
+- Not treating the standing-instruction question as unsolved anymore for interactive use — `stop`
+  is shipped and live-fire confirmed against the real production stream (§3.3.1, §4). Not
+  building a second, redundant write-side mechanism on top of it.
+- Not claiming standing-instruction coverage for headless (`-p`) sessions — `stop` is confirmed
+  dead there, and no other lever was found; §5 item 1 tracks this honestly rather than papering
+  over it.
