@@ -1,0 +1,6 @@
+#!/bin/bash
+# antigravity/detect — exit 0 iff Antigravity is usable on this machine. No side effects, per
+# the detect/wire interface's own contract.
+command -v agy >/dev/null 2>&1 && exit 0
+[ -e "$HOME/.gemini/antigravity-cli" ] && exit 0
+exit 1

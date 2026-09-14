@@ -46,6 +46,50 @@ Any harness operating this Permanence must honour six triggers:
 
 A separate, divergent pass — `/perma-orchestrate` — is **event/human-triggered, never scheduled** (an automatic trigger would need the pressure gauge noted above, which doesn't exist yet): it proposes cross-stream emergent hypotheses into `_meta/emergent.md` and never edits source streams.
 
-**Claude Code binding (current implementation, Tier 1 — fully automated):** SessionStart hook in `~/.claude/settings.json` → `runtime/session-start.sh` (puts a passive orientation note into context) and UserPromptSubmit hook → `runtime/session-load.sh` (the reliable trigger — forces the actual read of PROJECT/QUESTIONS/LOG-tail onto the first message, since the passive SessionStart note alone is easy for a model to skim past); `permissions.additionalDirectories` includes `~/permanence`; commands installed from `runtime/commands/` by `runtime/install.sh` (copy-on-install + version marker); CLAUDE.md carries a managed delimited block (fallback for Desktop/Cowork); nightly consolidate via a cross-platform scheduler (`runtime/schedule-task.sh`: launchd on macOS, cron on Linux/WSL, `schtasks.exe` on native Windows via Git Bash) → `runtime/nightly-consolidate.sh`; material-shift writing rides the session-start instruction + this spec. **Rebuild elsewhere = clone → run `runtime/install.sh`, which wires both hooks and the permission itself — only a machine with no `python3` needs the printed snippet pasted by hand.**
+### The binding contract
 
-**Other AI tools (Tier 2 — automated where the tool supports it, manual otherwise):** `runtime/install.sh` also writes a delimited pointer block (`runtime/agents-md-block.md`) into whichever *global*, per-machine `AGENTS.md`-style config paths already exist on the machine — never into a project-committed `AGENTS.md`, which invariant 1 forbids (that file is meant to be shared with every contributor). Any tool honouring a global `AGENTS.md` picks this up automatically; a tool with no such mechanism falls back to a manual pointer (tell it to read the mapped stream at session start). See `docs/TOOL-SUPPORT.md`.
+A harness is bound by answering five questions. They are **not a ladder** — each is answered
+independently, and the answers determine only one thing worth reporting to the owner: *what
+they still have to do by hand.*
+
+1. **Passive orientation.** Is there a point at session open where text can be placed into
+   context?
+2. **Forcing read.** Is there a point *before the model answers* where text can be placed into
+   context? This is the reliable one — a passive note at session open is easy for a model to
+   skim past. **Forcing subsumes passive**: a harness with only one usable injection point
+   binds it here and omits (1) entirely. That is a complete binding, not a degraded one.
+3. **Standing instruction.** Is there a persistent, per-machine file the harness always reads
+   (`CLAUDE.md`, `GEMINI.md`, an `AGENTS.md`-style global) into which the material-shift rule
+   can be written once? **This is the capability whose absence is silent.** Without it the
+   model never learns to update the stream unprompted, nothing raises an error, and the failure
+   surfaces only as an empty `LOG.md` weeks later. Verify this one first, not last.
+4. **Command invocation.** Can the owner invoke a named procedure (`/perma-shutdown`)? Required
+   only for the human-triggered triggers; the ambient ones ride (2) and (3).
+5. **Headless invocation.** Is there a non-interactive CLI (`<tool> -p "<prompt>"`) the
+   scheduler can call? A capability check and one config value — not a translator.
+
+**Material-shift is not a sixth question.** It is what (2) and (3) produce together: the forcing
+read carries current state, the standing instruction carries the rule, and the harness's
+ordinary file/git tools do the rest. **On-commit and on-schedule are not harness questions at
+all** — git fires the first, the OS scheduler the second; neither consults an AI tool's config.
+
+**A binding is a directory**, `runtime/bindings/<harness>/`, discovered and wired by
+`runtime/install.sh` without editing it — Claude Code included, no special case. The mechanism
+itself is specified in `design/harness-binding-mechanism.md`, not restated here. The core —
+`session-start.sh`, `session-load.sh`, `runtime/commands/*.md`, the block files — emits
+harness-neutral text and never varies per harness regardless of which binding wires it in.
+
+Numbered tiers are deliberately not used: a tier is ordinal, but these five are a set, so two
+harnesses with opposite failure modes (one reads manually and writes automatically; one reads
+automatically and silently never writes) would collapse to the same label — hiding exactly the
+difference that matters most. Each binding below instead states plainly what the owner carries.
+
+**Claude Code binding (the reference implementation — all five answered).** Implemented as `runtime/bindings/claude-code/{detect,wire}`, like any other binding. (1) SessionStart hook in `~/.claude/settings.json` → `runtime/session-start.sh`; (2) UserPromptSubmit hook → `runtime/session-load.sh`, forcing the actual read of PROJECT/QUESTIONS/LOG-tail onto the first message; (3) `CLAUDE.md` carries a managed delimited block (also the fallback for Desktop/Cowork); (4) commands installed from `runtime/commands/` (copy-on-install + version marker); (5) the `claude` CLI, called by `runtime/nightly-consolidate.sh` under a cross-platform scheduler (`runtime/schedule-task.sh`: launchd on macOS, cron on Linux/WSL, `schtasks.exe` on native Windows via Git Bash). `permissions.additionalDirectories` includes `~/permanence`. Material-shift writing rides (2) + (3), per the contract above. **Owner carries: nothing.** **Rebuild elsewhere = clone → run `runtime/install.sh`, which wires both hooks and the permission itself — only a machine with no `python3` needs the printed snippet pasted by hand.**
+
+**Antigravity binding (all five answered).** Implemented as `runtime/bindings/antigravity/`. (1)+(2) a `PreInvocation` hook carries both — no separate passive-orientation event exists, and none is needed (forcing subsumes passive, confirmed live for this binding); (3) a managed delimited block in the global `~/.gemini/GEMINI.md`; (4) commands translated into `~/.gemini/config/skills/<name>/SKILL.md`, confirmed invokable both by description-matching and literal `/name` syntax; (5) `agy`'s headless mode. **Owner carries: nothing.**
+
+**Devin CLI binding (all five answered).** Implemented as `runtime/bindings/devin/`. (1) a `SessionStart` hook; (2) a `UserPromptSubmit` hook, forcing the actual read; (3) a managed delimited block in the global `~/.config/devin/AGENTS.md`, written directly rather than relying on Devin's own (confirmed, but conditional on Claude Code's binding also being present) pickup of `~/.claude/CLAUDE.md`; (4) commands translated into `~/.config/devin/skills/<name>/SKILL.md`, confirmed invokable both by literal `/name` syntax and description-matching; (5) `devin -p`'s headless mode. **Owner carries: nothing.**
+
+**Cursor binding (five of five answered).** Implemented as `runtime/bindings/cursor/`. (1)+(2) one `sessionStart` hook carries both — live-confirmed by a prompt that never mentioned Permanence still causing an unprompted, accurate read of real stream content; (4) commands translated into `~/.cursor/skills/<name>/SKILL.md`, confirmed invokable by literal `/name` syntax. (3) standing instruction answered by a `stop` hook (`stop-hook.sh`) — every context-injection approach failed across seven tests, but forcing a genuine extra turn via `stop`'s `followup_message` works in interactive use, live-confirmed against the real production stream, see `design/cursor-binding.md` §3.3.1. (5) `agent -p`'s headless mode. **Owner carries: standing-instruction coverage in headless (`-p`) sessions only** — `stop` is confirmed to never fire there, so a scripted/headless session still needs manual updates; interactive use carries nothing.
+
+**`AGENTS.md`-reading tools (question 3 only).** `runtime/install.sh` also writes a delimited pointer block (`runtime/agents-md-block.md`) into whichever *global*, per-machine `AGENTS.md`-style config paths already exist on the machine — never into a project-committed `AGENTS.md`, which invariant 1 forbids (that file is meant to be shared with every contributor). This answers question 3 and nothing else: the standing rule lands, so the write side works, but there is no forcing read and no command layer. **Owner carries: orientation** — say *"good morning Permanence"* (or run `/perma-startup <name-or-path>`) at the start of a session, since nothing injects it automatically. A tool reading none of these files carries everything: the manual pointer is the whole binding. See `docs/TOOL-SUPPORT.md`.

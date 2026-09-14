@@ -36,6 +36,23 @@ a new release also changes that file, `/perma-upgrade` won't pick a winner for y
 started from, what you have now, and what the release wants — then asks. This is the only place an
 upgrade needs your judgment; everything else is mechanical.
 
+## Why `/perma-upgrade` double-checks itself after applying
+
+Occasionally a release adds a whole new tracked file or folder, not just a change to an existing
+one. `update.sh` decides what's changed using the copy of itself already sitting on your machine
+— which can't know about a brand new path until *after* it's finished updating itself. Left
+alone, that could report success while quietly leaving the new path undelivered.
+
+For any release from `v1.4.0` on, you don't need to do anything about this — `/perma-upgrade`
+re-runs `update.sh` once more after every apply and applies again if that finds more to do. It's a
+standing safety check, not something you'll normally notice.
+
+**The one exception is upgrading to `v1.4.0` itself**, if you're coming from an older install: that
+specific upgrade runs your *current* `update.sh`, which predates this fix and can't know to
+re-check itself. You'll still land correctly — nothing is silently lost — but you'll see a small,
+one-time conflict prompt for the newly-added files, the same as any other customization prompt.
+The right answer there is simply "take theirs"; they're new files, not something you edited.
+
 ## Migrating from an old `~/brain` install
 
 If you're on a pre-rename install (the folder is `~/brain`, commands are `/brain-*`), that's a one-time

@@ -1,0 +1,13 @@
+#!/bin/bash
+# claude-code/detect — always exits 0.
+#
+# Claude Code is the one harness every Permanence install already has, by construction — you
+# need some AI tool with shell access just to run install.sh in the first place
+# (design/harness-binding-mechanism.md §2). Unlike Antigravity or any other optional binding,
+# there's nothing meaningful to gate: a heuristic check ("does ~/.claude already exist?", "is a
+# claude binary on PATH?") is circular on a genuinely fresh install, since claude-code/wire
+# itself is what creates ~/.claude in the first place, and many real users drive Claude Code
+# through the desktop app or an IDE extension with no CLI binary on PATH at all. Confirmed the
+# hard way: a real CI run had neither signal present and the whole binding silently, correctly
+# (by its own broken logic) never ran — install.sh reported "done." with nothing actually wired.
+exit 0

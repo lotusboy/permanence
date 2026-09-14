@@ -1,8 +1,9 @@
 # Changelog
 
-Releases of Permanence **machinery** — `runtime/`, `.githooks/`, `templates/`, and the
-docs. Your own streams, `_meta/REGISTRY.md`, and notes are never part of a release;
-they're yours, not the template's.
+Releases of Permanence **machinery** — `runtime/`, `.githooks/`, `templates/`, the
+docs, and the forward-looking `design/` docs for work substantial enough to need one.
+Your own streams, `_meta/REGISTRY.md`, and notes are never part of a release; they're
+yours, not the template's.
 
 Tagged `vMAJOR.MINOR.PATCH`. `/perma-upgrade` diffs your installed version (recorded
 in `_meta/VERSION`) against the latest tag here and walks you through what changed.
@@ -14,6 +15,267 @@ refreshes machinery as usual. Migration notes are read and *proposed* against yo
 streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
+
+## [1.4.0] — the binding contract: decoupling Permanence from any one AI tool's mechanics
+
+**New in `SPEC.md` §3: the binding contract.** Permanence's support for an AI tool is now defined
+as five independent questions — passive orientation, forcing read, standing instruction, command
+invocation, headless invocation — rather than a tool being labelled wholesale. Two properties
+that weren't previously written down anywhere:
+
+- **Forcing subsumes passive.** A harness with only one usable injection point binds it to the
+  forcing read and omits passive orientation entirely. That is a *complete* binding, not a
+  degraded one.
+- **The standing-instruction question is the one whose absence is silent.** Without it the model
+  never learns to update streams unprompted, nothing raises an error, and the failure surfaces
+  only as an empty `LOG.md` weeks later. It should be verified first, not last.
+
+Also recorded: material-shift is not a separate question (it's what the forcing read and the
+standing instruction produce together), and on-commit/on-schedule are not harness questions at
+all — git fires one, the OS scheduler the other.
+
+**Numbered tiers (Tier 1/Tier 2) are retired.** A tier is ordinal; the five questions are a set.
+Two tools with opposite failure modes — one reads manually but writes automatically, one reads
+automatically but silently never writes — collapsed to the same "Tier 2" label, hiding exactly
+the difference that matters most. Each binding now states plainly **what the owner carries**.
+`docs/TOOL-SUPPORT.md` gains a capability table; `README.md` keeps its plain-English "fully
+automated on Claude Code", now phrased as what you carry rather than a tier number. Historical
+CHANGELOG entries still mention tiers and are deliberately left alone — they record what those
+releases actually said.
+
+**A binding is now a directory.** `runtime/bindings/<harness>/` holds `detect` and `wire`, plus
+any small translators that harness's hook contract needs; the core (`session-start.sh`,
+`session-load.sh`, `runtime/commands/*.md`, the block files) emits harness-neutral text and never
+varies. The intent is that `runtime/install.sh` iterates `runtime/bindings/*/`, so **adding a
+harness adds a directory and changes no existing file.** *(Contract and structure only — the
+iteration in `install.sh` is not implemented in this release.)*
+
+**New: `design/harness-binding-mechanism.md`** gives that mechanism its own design, separate
+from either tool binding — the `detect`/`wire` interface, the proposed `install.sh` loop, and the
+decision the two tool docs were each silently assuming: Claude Code's existing wiring stays
+outside this mechanism, deliberately, rather than migrating for symmetry alone — a real
+regression risk (its wiring carries real hardening: backup-before-edit, a mismatched-marker
+refusal, the different-Permanence-owns-this-job warning) for a benefit that's aesthetic, not
+functional. `runtime/bindings/` is for what's genuinely optional; Claude Code isn't. Both tool
+docs' shape sections now reference this doc instead of each re-deriving the same mechanism.
+
+**Two corrections to `docs/TOOL-SUPPORT.md`, found while researching the above.** Both were
+shipped inaccuracies: Gemini CLI was listed among tools reading `AGENTS.md` (it reads `GEMINI.md`
+and does not support `AGENTS.md` — confirmed against its own configuration reference), and
+Antigravity was described as reading `AGENTS.md` when its context-file convention isn't confirmed
+either way. Anyone who tried Permanence on Gemini CLI expecting that path to work would have got
+nothing, with no error.
+
+**New: `design/`**, tracked by `runtime/update.sh` so a future edit reaches existing installs via
+`/perma-upgrade`. First three entries are design docs for the harness-binding mechanism itself, a
+Gemini CLI binding, and an Antigravity binding — proposed, unbuilt, each verified against that
+tool's own docs and explicit about what remains unverified. Despite a shared `~/.gemini/` path
+prefix, Gemini CLI and Antigravity need genuinely separate bindings: their hook vocabularies are
+entirely different.
+
+**Fixed a real correctness bug in `update.sh`, found by actually testing this release before
+shipping it, not just by lint/link checks.** Adding `design` to the tracked paths above surfaced
+it: `update.sh` decides "am I fully caught up?" using its own currently-installed file list, which
+can't know a release added a brand new tracked path until *after* it's finished updating itself.
+Reproduced directly against a real scratch install: `_meta/VERSION` reached `v1.4.0` — full
+agreement, nothing pending — while `design/` was never delivered and never would be, since the
+next `/perma-upgrade` would see `v1.4.0 → v1.4.0` and stop at "already up to date" before checking
+again. Silent, permanent, and reported as success.
+
+Fixed at two layers. **`update.sh` now notices when it has just updated itself** and re-execs the
+updated script before deciding anything, rather than finishing on stale in-memory state — verified
+against a live simulated future release: one `--apply` invocation, no manual re-run, reaches the
+target version and delivers the new path. This protects every release from this one on.
+
+**The "already up to date" shortcut is also gone** — it used to trust `_meta/VERSION == latest tag`
+outright; now it always confirms against a real diff first. That mattered for a reason beyond this
+release: without it, even `/perma-upgrade`'s own verification dry-run (added to Phase 5) would have
+kept trusting the same lying string and reported nothing wrong.
+
+**Honest limit, found by testing this exact upcoming transition, not assumed:** the bash-level fix
+can't protect an install upgrading *from before this fix shipped* — that one upgrade runs the
+*old*, unfixed script, which has no way to know to re-exec itself. Confirmed what actually happens
+instead: `/perma-upgrade`'s verification pass correctly notices the new paths are missing (thanks
+to the shortcut removal above), but then treats them as needing review, the same as a genuine
+customization — a missing file and a deliberately-deleted one look structurally identical to a
+per-file diff. So this specific transition surfaces one small, safe, one-time decision — "take
+theirs" on 3 new files, via the existing negotiation flow — rather than either silently losing them
+(the original bug) or silently completing (which isn't actually achievable here). Every release
+after this one goes fully automatic, proven separately.
+
+**The harness-binding mechanism is now real, not just designed — and Claude Code is part of it.**
+`design/harness-binding-mechanism.md` originally decided Claude Code's wiring should stay a
+permanent special case in `install.sh`, for real hardening-preservation reasons. That decision
+was reopened and reversed on request: `install.sh` now reduces to one generic loop over
+`runtime/bindings/<harness>/`, Claude Code included, no special case left. All four hardening
+mechanisms (backup-before-edit, refuse-on-mismatched-marker, the cross-install scheduling guard,
+honest failure reporting) moved with it, unchanged. `_perma_block_merge` was extracted into a new
+sourced-only `runtime/lib/block-merge.sh` so both the migrated Claude Code binding and the
+existing AGENTS.md writer (unmoved — confirmed generic, not Claude-Code-specific) share one copy.
+
+**A real bug found live-testing this, not by reasoning:** `_perma_block_merge`'s "no existing
+marker" branch silently never wrote `CLAUDE.md` on a genuinely fresh install (no prior file at
+all) — the branch's own exit code was accidentally poisoned by a harmless `cat` on a nonexistent
+file, which skipped the file rename via `&&`. Fixed with one `|| true`. A second, separate bug
+surfaced the same way: `claude-code/detect`'s heuristic check (`~/.claude` exists, or `claude` is
+on `PATH`) failed on every real CI runner, since neither is true this early in a fresh install —
+`wire` itself is what creates `~/.claude`. Fixed by making `detect` unconditional, matching what
+`design/harness-binding-mechanism.md` §2 already said about Claude Code: it's the one harness
+every install already has, by construction, with nothing left to gate.
+
+**New: Antigravity's binding, shipped for four of five questions.**
+`runtime/bindings/antigravity/` wires the forcing read + passive orientation (one `PreInvocation`
+hook carries both — no separate event exists or is needed) and the standing instruction (a
+managed block in the global `~/.gemini/GEMINI.md`, via a new dedicated `gemini-md-block.md`
+rather than reusing the generic AGENTS.md-tools block, whose "Tier 2, no forcing read" framing
+doesn't match what Antigravity actually does). Verified live, end-to-end, not just with piped
+JSON: wired for real on the machine that built it, then a real `agy --print` session's actual
+reply demonstrably reflected the injected `[perma]` content. Command invocation (Skills) is
+deliberately not built yet — the design doc's own research flagged it as needing one live-fire
+test before its shape is committed to, and this pass didn't include that.
+
+**CI**: a real, previously-silent gap fixed — the lint job's three checks (`bash -n`, an embedded
+Python-heredoc compile check, ShellCheck) all matched `*.sh` only, so the new `detect`/`wire`
+scripts (extensionless, like `.githooks/pre-commit`) were invisible to all three; confirmed by
+deliberately breaking one locally and watching the old glob miss it. New coverage added to
+`install-matrix`: the migrated Claude Code binding's actual content (not just file existence),
+and a real failure-path test that temporarily breaks `claude-code/wire` and confirms
+`INSTALL_FAILED` correctly reaches `install.sh`'s final line — using Claude Code's own real
+binding as the mechanism's test case, exactly as the design doc intended once a synthetic
+Gemini-CLI-shaped test case became unnecessary.
+
+**New: Devin CLI's binding, shipped for four of five questions.** Real market numbers (Cursor $2B
+ARR / 1M+ paying users, Copilot ~42% market share, Devin $492M ARR / 89% internal adoption at
+Cognition itself) prompted a feasibility check on Devin specifically — its older reputation as
+purely cloud-hosted turned out stale; Devin CLI runs locally with real shell access, and its hook
+event names are the same ones Claude Code uses. That similarity was misleading in one important
+way: a live test caught two of Devin's own bundled docs contradicting each other on whether
+Claude Code's hooks get imported — one says yes, a more specific page's own import table lists
+only rules/skills/commands-as-skills/MCP servers, no hooks. The live test sided with the second
+page (no injected context, no `session-load.sh` marker file created). `runtime/bindings/devin/`
+therefore ships its own translator hooks (`SessionStart` + `UserPromptSubmit`, wrapping
+`session-start.sh`/`session-load.sh` output in Devin's own `hookSpecificOutput` JSON envelope),
+not a reuse of Claude Code's. The standing instruction writes a dedicated global
+`~/.config/devin/AGENTS.md` rather than relying solely on Devin's separate (real, but conditional
+on Claude Code's binding also being present) pickup of `~/.claude/CLAUDE.md`. Verified live,
+end-to-end: wired for real, then a real `devin -p` session's actual reply quoted the injected
+`[perma]` content verbatim. Command invocation (Skills) deliberately not built yet — needs its
+own live-fire test first, the same discipline Antigravity's Skills layer is held to.
+
+**Gemini CLI's decline upgraded from a cost decision to a settled fact.** Google's own developer
+blog confirms free/individual access to Gemini CLI ended 2026-06-18 — consumer, Pro, and Ultra
+users are pointed at Antigravity CLI (the product already bound this session), enterprise access
+is unaffected. `docs/TOOL-SUPPORT.md` and the design docs already reflected the practical
+consequence (rejected server-side sign-in); this is the reason why, found afterward, not a
+change in what was already documented.
+
+**New: `design/claude-code-binding.md`**, written retrospectively so every binding — including
+the original, most-hardened one that predates `design/` as a convention — is documented to the
+same standard.
+
+**New: Cursor's binding, initially shipped for four of five questions — the cleanest result of any
+binding this session. (The fifth, the standing instruction, was closed out later the same day —
+see below.)** A docs-based worry started this one: Cursor's own hook documentation says
+`beforeSubmitPrompt` (the closest analogue to every other binding's forcing-read hook) is
+read-only, and a real community bug report claims the CLI omits it and others. Live testing
+reversed the worry instead of confirming it: `sessionStart`'s context injection is real, and —
+proven with a prompt that never mentioned Permanence at all — the agent spontaneously read the
+real `PROJECT.md`/`LOG.md` content and reported it accurately, including noticing this very
+binding's own code was still untracked in git, purely because the injected instruction told it
+to. One hook, firing exactly once per session, answers both passive orientation and the forcing
+read — simpler than every other binding built this session, not more complex. Command invocation
+is fully shipped too: commands translate into `~/.cursor/skills/<name>/SKILL.md`, confirmed
+invokable by literal `/name` syntax from a completely unrelated project — a real `/perma-help`
+run executed its full actual logic (checked real scheduled tasks, read real registry data), not
+just echoed text. The one real gap: no working global standing-instruction file was found for
+Cursor despite three separate live attempts — a tested-away gap, not an unresearched one.
+
+**Antigravity's command layer, closed out — all five binding-contract questions now answered.**
+The live-fire test its design doc had flagged as the one remaining blocker finally ran: a real
+test skill fired correctly both by description-matching *and* by literal `/name` syntax — the
+bundled docs undersold this, describing only the former. `wire` now translates
+`runtime/commands/*.md` into `~/.gemini/config/skills/<name>/SKILL.md`, confirmed via a real
+`/perma-help` invocation that executed its full actual logic. Antigravity is now the second
+binding (after Claude Code) with nothing left for the owner to carry by hand.
+
+**Devin's command layer, closed out — all five binding-contract questions now answered.** A real
+test skill fired correctly two ways from a completely unrelated scratch project: literal
+`/perma-devin-test` syntax and a natural-language request matching its description. `~/.claude/skills/`
+never covered Permanence's own commands, but `~/.config/devin/skills/<name>/SKILL.md` does —
+confirmed via `devin skills list` showing the test skill tagged `[user,model]` immediately.
+`wire` now translates `runtime/commands/*.md` there, reusing the same description-extraction
+logic already shared with Cursor's and Antigravity's bindings. Verified via a real `/perma-help`
+invocation that executed its full actual logic. Devin is now the third binding, after Claude Code
+and Antigravity, with nothing left for the owner to carry.
+
+**Cursor's standing-instruction question settled — a real, confirmed gap, not an open one.** A
+disposable test stream and scratch project were registered temporarily (backed up and restored
+afterward) to run the one test the design doc had flagged as still needed: does a material fact
+mentioned mid-conversation get written back to the stream unprompted, purely because
+`sessionStart`'s injected content told the model to at session start? It doesn't — the agent
+acknowledged the fact in its reply but never touched `PROJECT.md` or `LOG.md`, confirmed by file
+checksums before and after. Four separate tests now agree: three global-file locations that don't
+exist, and a real write test that came back negative.
+
+**Same day, a second round: three more real attempts at a fix, applying Seesaw before building
+anything new — is this Permanence's content, or Cursor's platform?** A much stronger, imperative
+wording ("you MUST update... before you finish replying") produced the same negative, ruling out
+weak wording as the cause. The `stop` hook's `followup_message` — the most structurally direct
+candidate, since it forces an actual extra turn rather than hoping injected context gets noticed —
+turned out not to fire at all in headless mode, confirmed with a debug-instrumented hook logging
+zero invocations across a real test run, matching a community bug report found during initial
+research. `postToolUse` reinforcement, wired alongside `sessionStart` and confirmed to actually
+fire, produced the same negative as everything else. Seven tests, seven negatives, consistent
+enough to read as a real property of how Cursor's agent decides when to act versus merely
+acknowledge — not a wording or placement problem on Permanence's side. Untried and worth a real
+terminal: whether `stop` fires in genuinely interactive use, which this session's sandboxed
+environment has no way to test.
+
+**Cursor's standing instruction, reversed the same day — the seven-negative conclusion above
+turned out to be specific to headless mode, not Cursor generally.** The one thing this session
+couldn't test itself — `stop` in genuinely interactive use — the owner tested directly, in their
+own terminal. First run looped indefinitely on an ungated test script (a test-script bug, not a
+platform or Permanence defect) but proved `stop` fires repeatedly in interactive mode. A properly
+gated follow-up succeeded completely: a material fact stated mid-conversation, no instruction
+given to record it, and the agent's turn ended, then — unprompted — a second automatic turn began
+on its own and ran a real shell command that wrote an accurate LOG.md entry, then confirmed what
+it wrote. `runtime/bindings/cursor/stop-hook.sh` ships this for real: gated on `loop_count == 0` so
+it fires once per real user turn rather than re-triggering itself, resolves the real stream via
+`resolve-stream.sh`, and asks the model to check for material shifts and write if anything came up.
+`wire` now installs it alongside the existing `sessionStart` hook. Confirmed end-to-end against
+this machine's real, production Permanence stream (not a disposable test stream): a genuine
+unprompted write landed in the real `LOG.md`, immediately reverted since it was only a test fact.
+Cursor now answers all five binding-contract questions, joining Claude Code, Antigravity, and
+Devin — with one caveat carried forward, not closed: headless (`-p`) sessions still get no
+standing-instruction coverage, since `stop` is confirmed to never fire there at all.
+
+**A Two-Pass Axis Engineering review of the whole harness-binding mechanism, then every finding
+fixed.** Before merging this branch, ran a real Two-Pass review (two genuinely isolated fresh
+agents — Pass 1 analytical, Pass 2 adversarial and blind to Pass 1) against the full diff:
+`install.sh`'s generic discovery loop, the shared `block-merge.sh` helper, and all five bindings'
+`detect`/`wire` scripts. Pass 1's structural read concluded there was no critical finding; Pass 2
+live-executed the code against a scratch directory and found one Pass 1 missed — `block-merge.sh`'s
+"no existing marker" branch could silently destroy an existing `CLAUDE.md`/`AGENTS.md`/`GEMINI.md`
+with zero backup if reading it failed at write time, despite its own comment asserting "nothing
+here can lose data." Fixed, along with three more real correctness bugs (an uncaught crash on a
+wrong-shaped config file, one bad command file aborting Skills translation for every other command,
+unbacked-up skill/command overwrites on a name collision) and — after being asked to address the
+full remaining list too — seven more real findings: missing `python3` fallbacks (both at install
+time and in the runtime hooks' final output step), `install.sh` unable to tell a broken `detect`
+script from an absent tool, an inconsistency where Claude Code's own command-copy failure was
+silently non-fatal while the newer bindings' analogous step wasn't, orphaned Skills/commands never
+getting cleaned up on rename/removal, an overlapping-marker case that slipped past the
+marker-validation guard, a mismatched-marker WARN invisible in `install.sh`'s final summary, a
+malformed-frontmatter edge case producing a literal `"---"` Skill description, a non-atomic
+check-then-touch race in Antigravity's dedup marker, and zero CI coverage of the actual `wire`
+success path for three of the five bindings (now covered via no-op tool shims in a new
+`install-matrix` step). Every fix verified against a live reproduction of the exact scenario the
+finding described, not just re-read. Full detail, both raw review passes, and the merge contract
+that reconciled one genuine disagreement between them (a theoretical Pass 1 claim that didn't hold
+up under Pass 2's live test of the same scenario):
+`axis/runs/2026-09-14-harness-binding-mechanism-two-pass/`.
+
+No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step
 
@@ -49,9 +311,10 @@ history is intact. `perma-register` already looked for these "if present", so re
 never at risk either way; its wording and README's file table now say `*.template.md` explicitly.
 `programme-task-doc.md` is unchanged — it's copied by name and was never discoverable as a stream.
 
-Deliberately not folded in: F27 (`templates/` ships four of `SPEC.md`'s six canonical files, no
-`STRATEGY.md` or stream `README.md` skeleton) — same directory, same underlying `axis` finding,
-but a separate defect. Left open on purpose, not fixed here.
+Deliberately not folded in: `templates/` still ships only four of `SPEC.md`'s six canonical
+stream files — no `STRATEGY.md` or stream `README.md` skeleton, so a newly registered project
+is missing both by default. Same directory, same underlying `axis` review finding (tracked
+internally as F27) as the fix above, but a separate defect. Left open on purpose, not fixed here.
 
 No **Migration notes** — machinery only; no existing stream's shape changes, and nothing under
 `templates/` is ever a real user's own content.

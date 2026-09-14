@@ -1,0 +1,196 @@
+#!/bin/bash
+# devin/wire — connects Permanence to Devin CLI: SessionStart + UserPromptSubmit hooks in the
+# global ~/.config/devin/config.json "hooks" key (passive orientation + the forcing read), and
+# the standing instruction in the global ~/.config/devin/AGENTS.md. See design/devin-binding.md
+# for the confirmed mechanics this implements — nothing here was guessed. Claude Code's own
+# hooks are deliberately NOT reused: live-tested and confirmed not to fire, despite one of
+# Devin's own bundled docs claiming they would. This writes the GLOBAL user config, never
+# .devin/hooks.v1.json, which lives inside whatever project repo is open and would violate
+# invariant 1 if Permanence-referencing content landed there.
+#
+# Also translates Permanence's commands into Devin's own global Skills directory (command
+# invocation) — live-fire tested 2026-09-14, both literal /name syntax and description-matched
+# invocation confirmed working.
+set -u
+PERMA="${PERMA_DIR:-$HOME/permanence}"
+BINDING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+WIRE_FAILED=0
+
+# config.json: safely MERGE the SessionStart + UserPromptSubmit hooks (add only if absent;
+# preserve everything else; back up before writing) — same idempotent-merge idiom
+# install.sh's own settings.json step and the other bindings' wire scripts already use.
+CONFIG_JSON="$HOME/.config/devin/config.json"
+if command -v python3 >/dev/null 2>&1; then
+if ! python3 - "$CONFIG_JSON" "$BINDING_DIR" <<'PY'
+import json, sys, os, shutil
+
+path, binding_dir = sys.argv[1], sys.argv[2]
+os.makedirs(os.path.dirname(path), exist_ok=True)
+data = {}
+if os.path.exists(path):
+    try:
+        data = json.load(open(path))
+    except Exception:
+        print("  config.json: present but unparseable — NOT touched. Add the hooks by hand.")
+        sys.exit(1)
+
+session_start_cmd = f"{binding_dir}/session-start-hook.sh"
+prompt_submit_cmd = f"{binding_dir}/user-prompt-submit-hook.sh"
+changed = False
+
+try:
+    hooks = data.setdefault("hooks", {})
+
+    ss = hooks.get("SessionStart") or []
+    present = any(
+        isinstance(g, dict) and any(
+            isinstance(h, dict) and h.get("command") == session_start_cmd
+            for h in g.get("hooks", [])
+        )
+        for g in ss
+    )
+    if not present:
+        ss.append({"matcher": "", "hooks": [{"type": "command", "command": session_start_cmd, "timeout": 10}]})
+        hooks["SessionStart"] = ss
+        changed = True
+
+    ups = hooks.get("UserPromptSubmit") or []
+    present = any(
+        isinstance(g, dict) and any(
+            isinstance(h, dict) and h.get("command") == prompt_submit_cmd
+            for h in g.get("hooks", [])
+        )
+        for g in ups
+    )
+    if not present:
+        ups.insert(0, {"matcher": "", "hooks": [{"type": "command", "command": prompt_submit_cmd, "timeout": 10}]})
+        hooks["UserPromptSubmit"] = ups
+        changed = True
+except (AttributeError, TypeError):
+    print("  config.json: present but has an unexpected shape under an existing \"hooks\" key — NOT touched. Add the hooks by hand.")
+    sys.exit(1)
+
+if changed:
+    if os.path.exists(path):
+        shutil.copy(path, path + ".perma-bak")
+    json.dump(data, open(path, "w"), indent=2)
+    print("  config.json: SessionStart + UserPromptSubmit hooks merged in (backup: config.json.perma-bak)")
+else:
+    print("  config.json: hooks already present")
+PY
+then
+  echo "  config.json: FAILED to configure automatically — add the hooks by hand (see message above)"
+  WIRE_FAILED=1
+fi
+else
+  cat <<HOOKS
+  config.json: python3 not found — add these by hand to $CONFIG_JSON (MERGE, don't overwrite):
+      "hooks": {
+        "SessionStart": [ { "matcher": "", "hooks": [ { "type": "command", "command": "$BINDING_DIR/session-start-hook.sh", "timeout": 10 } ] } ],
+        "UserPromptSubmit": [ { "matcher": "", "hooks": [ { "type": "command", "command": "$BINDING_DIR/user-prompt-submit-hook.sh", "timeout": 10 } ] } ]
+      }
+HOOKS
+fi
+
+# AGENTS.md: standing instruction, global (live-tested: `devin rules list` shows "AGENTS
+# [Standard] always-on" once this file exists). Same delimited-block splice as CLAUDE.md's and
+# every other binding's standing-instruction file — refuse-on-mismatched-marker, back up before
+# any in-place edit.
+source "$PERMA/runtime/lib/block-merge.sh"
+DEVIN_AGENTS_MD="$HOME/.config/devin/AGENTS.md"
+BLOCK_SRC="$PERMA/runtime/devin-agents-md-block.md"
+if _perma_block_merge "$DEVIN_AGENTS_MD" "$BLOCK_SRC"; then
+  echo "  AGENTS.md: Permanence block refreshed at $DEVIN_AGENTS_MD"
+fi
+
+# Skills: translate runtime/commands/*.md into ~/.config/devin/skills/<name>/SKILL.md —
+# confirmed real, confirmed invokable both by literal /name syntax and description-matching.
+# Each command already carries a `description:` frontmatter field; reused directly rather than
+# re-derived. The one command without frontmatter (perma-contents.md) falls back to its first
+# heading/line.
+CMD_SRC="$PERMA/runtime/commands"
+SKILLS_DST="$HOME/.config/devin/skills"
+if command -v python3 >/dev/null 2>&1; then
+if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
+import json, os, re, shutil, sys
+
+cmd_src, skills_dst = sys.argv[1], sys.argv[2]
+
+def extract_description(content):
+    m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    if m:
+        dm = re.search(r'^description:\s*(.*)$', m.group(1), re.MULTILINE)
+        if dm:
+            raw = dm.group(1).strip()
+            if raw.startswith('"') and raw.endswith('"'):
+                try:
+                    return json.loads(raw)
+                except Exception:
+                    pass
+            return raw
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith('#'):
+            return line.lstrip('#').strip()
+        if line and line != '---':
+            return line
+    return "A Permanence command."
+
+failed = []
+for fname in sorted(os.listdir(cmd_src)):
+    if not fname.endswith(".md"):
+        continue
+    name = fname[:-3]
+    src_path = os.path.join(cmd_src, fname)
+    skill_dir = os.path.join(skills_dst, name)
+    try:
+        content = open(src_path).read()
+        description = extract_description(content)
+        os.makedirs(skill_dir, exist_ok=True)
+        fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
+        body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
+        skill_md = os.path.join(skill_dir, "SKILL.md")
+        if os.path.exists(skill_md):
+            shutil.copy(skill_md, skill_md + ".perma-bak")
+        marker = f"\n<!-- installed-from: ~/permanence/runtime/commands/{fname} -->\n"
+        with open(skill_md, "w") as f:
+            f.write("\n".join(fm_lines) + body + marker)
+        print(f"  skill: {name}")
+    except Exception as e:
+        print(f"  skill: {name} — FAILED to write ({e})")
+        failed.append(name)
+
+# Cleanup: remove a previously-installed skill with no matching source anymore, but ONLY if it
+# carries Permanence's own "installed-from" marker — never touch a user's own same-named skill.
+# Without this, a renamed/removed command stayed installed forever on every machine that had
+# already run wire once (Two-Pass review, 2026-09-14).
+current_names = {fn[:-3] for fn in os.listdir(cmd_src) if fn.endswith(".md")}
+if os.path.isdir(skills_dst):
+    for entry in sorted(os.listdir(skills_dst)):
+        if entry in current_names:
+            continue
+        entry_path = os.path.join(skills_dst, entry)
+        if not os.path.isdir(entry_path):
+            continue
+        try:
+            existing = open(os.path.join(entry_path, "SKILL.md")).read()
+        except Exception:
+            continue
+        if "installed-from: ~/permanence/runtime/commands/" not in existing:
+            continue
+        shutil.rmtree(entry_path)
+        print(f"  skill: {entry} — removed (no longer in runtime/commands/)")
+
+if failed:
+    sys.exit(1)
+PY
+then
+  echo "  skills: FAILED to translate one or more commands (see messages above)"
+  WIRE_FAILED=1
+fi
+else
+  echo "  skills: python3 not found — Permanence's commands were NOT translated into ~/.config/devin/skills/. Install python3, then re-run install.sh."
+fi
+
+exit "$WIRE_FAILED"

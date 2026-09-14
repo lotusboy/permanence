@@ -74,12 +74,24 @@ On go-ahead:
 
 1. Run `~/permanence/runtime/update.sh --apply` — it checks out the non-conflicted machinery paths,
    re-runs `install.sh`, commits the change, and writes `_meta/VERSION`.
-2. For each "take theirs" conflict: check out that specific path from the latest tag and add it to the
+2. **Verify it actually finished — don't trust the printed "✅" alone.** Run
+   `~/permanence/runtime/update.sh` again (plain dry-run). If it says "Already up to date," the apply
+   genuinely completed. This closes a real gap: a release that adds a whole new tracked path can, on an
+   install whose currently-running `update.sh` predates that fix, report success while quietly leaving
+   that new path undelivered, because the script decided "am I done?" using its own file list from
+   *before* it updated itself — treat this verification as a standing step, not a one-time check.
+   If the dry-run instead reports more changed files, one of two things is true, and the dry-run's own
+   output tells you which: if it lists them as plain changes with no "⚠️ file(s) need review," run
+   `--apply` once more — that finishes it. If it flags them as needing review instead, treat them exactly
+   like any Phase 3 conflict (a brand-new file the owner never touched reads the same to `update.sh` as
+   one they deliberately removed, so it asks rather than guessing): they were never applied on your
+   original install, so "take theirs" is almost always the right call — negotiate quickly, then apply.
+3. For each "take theirs" conflict: check out that specific path from the latest tag and add it to the
    same commit (or a clearly-labeled follow-up commit — never silently folded in with no trace).
-3. For each accepted migration-note edit: apply it to the relevant stream file(s), in a separate commit
+4. For each accepted migration-note edit: apply it to the relevant stream file(s), in a separate commit
    from the machinery update (a stream edit and a machinery refresh are different kinds of change and
    should be revertable independently).
-4. Anything the owner chose "keep mine" or "I'll merge by hand" on: leave untouched, and say so plainly in
+5. Anything the owner chose "keep mine" or "I'll merge by hand" on: leave untouched, and say so plainly in
    the close-out so it isn't forgotten.
 
 ## Guardrails

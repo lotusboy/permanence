@@ -1,45 +1,37 @@
 #!/bin/bash
-# Bind Permanence's runtime to this machine's Claude Code harness (hardening item 5 / F2).
+# Bind Permanence's runtime to this machine's AI-harness bindings.
 # Idempotent — run after clone, after pulling runtime changes, or any time to verify.
-# Copy-on-install (NOT symlinks): installed copies carry a version marker; symlinked
-# commands would track whatever ref the working tree has checked out.
 
 set -u
 PERMA="${PERMA_DIR:-$HOME/permanence}"
-CMD_SRC="$PERMA/runtime/commands"
-CMD_DST="$HOME/.claude/commands"
 SHA=$(git -C "$PERMA" rev-parse --short HEAD 2>/dev/null || echo "unversioned")
 
 # Tracks whether a step that matters actually succeeded, so the final line can say so honestly.
-# Without this, install.sh printed "done." unconditionally — a failed cp, an unparseable
-# settings.json, or a missing python3 all left the install silently incomplete while reporting
+# Without this, install.sh printed "done." unconditionally — an unparseable settings.json or a
+# broken harness-binding wire script all left the install silently incomplete while reporting
 # success. Not every possible failure in this script is caught (a full `set -e` audit was judged
 # riskier — several lines here rely on an expected, harmless failure via `2>/dev/null` or `||`,
-# and blanket -e risks a NEW silent-abort mode instead of fixing this one); this covers the two
-# concrete cases most likely to leave hooks unwired: the command copy and the settings.json write.
+# and blanket -e risks a NEW silent-abort mode instead of fixing this one); this covers the
+# concrete cases most likely to leave hooks unwired.
 INSTALL_FAILED=0
+
+# Collects standing-instruction files block-merge.sh refused to touch (a mismatched perma:begin/end
+# marker) — a deliberate soft warning, never a wire failure, but easy to miss scrolling past a long
+# install log otherwise. Exported so every binding's wire subprocess (a separate process) can
+# append to the same file as install.sh's own direct block-merge.sh calls (step 3 below).
+PERMA_ATTENTION_FILE="$(mktemp 2>/dev/null || echo "/tmp/.perma-attention-$$")"
+export PERMA_ATTENTION_FILE
+: > "$PERMA_ATTENTION_FILE" 2>/dev/null
+trap 'rm -f "$PERMA_ATTENTION_FILE"' EXIT
 
 echo "Permanence install — runtime @ $SHA"
 
-# 1. Commands: copy with version marker appended
-mkdir -p "$CMD_DST"
-for f in "$CMD_SRC"/*.md; do
-  name=$(basename "$f")
-  if cp "$f" "$CMD_DST/$name"; then
-    printf '\n<!-- installed-from: ~/permanence/runtime/commands/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$CMD_DST/$name"
-    echo "  command: $name"
-  else
-    echo "  command: $name — FAILED to copy"
-    INSTALL_FAILED=1
-  fi
-done
-
-# 2. Executable bits + git hooks path (re-run needed once after any re-clone)
-chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* 2>/dev/null
+# 1. Executable bits + git hooks path (re-run needed once after any re-clone)
+chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* "$PERMA/runtime/bindings/"*/detect "$PERMA/runtime/bindings/"*/wire 2>/dev/null
 git -C "$PERMA" config core.hooksPath .githooks
 echo "  hooks: core.hooksPath=.githooks (pre-commit people-guard + post-commit contents refresh)"
 
-# 3. Scheduled tasks — cross-platform via schedule-task.sh (launchd/cron/schtasks, per OS)
+# 2. Scheduled tasks — cross-platform via schedule-task.sh (launchd/cron/schtasks, per OS)
 mkdir -p "$PERMA/runtime/logs"
 source "$PERMA/runtime/schedule-task.sh"
 # $PERMA is embedded here inside its own literal double-quotes ("$PERMA"), not bare — this
@@ -58,47 +50,17 @@ if [ -n "$(_existing_job_command "perma-cogdebt" 2>/dev/null)" ]; then
   unschedule_task "perma-cogdebt"
 fi
 
-# 4. CLAUDE.md + AGENTS.md: manage ONLY the delimited Permanence block, never the rest of a
-#    file we don't own. `_perma_block_merge` is the one place that splices into someone else's
-#    file, so it carries the safety net: refuse to touch a mismatched begin/end pair (writing
-#    through one would delete everything after it) and back up before any in-place replace.
-_perma_block_merge() {  # _perma_block_merge <target-file> <block-source-file>
-  local dst="$1" src="$2" begins ends begin_line end_line
-  [ -f "$src" ] || return 0
-  mkdir -p "$(dirname "$dst")"
-  if [ -f "$dst" ] && grep -q '<!-- perma:begin' "$dst" 2>/dev/null; then
-    begins=$(grep -c '<!-- perma:begin' "$dst")
-    ends=$(grep -c '<!-- perma:end -->' "$dst")
-    begin_line=$(grep -n '<!-- perma:begin' "$dst" | head -1 | cut -d: -f1)
-    end_line=$(grep -n '<!-- perma:end -->' "$dst" | head -1 | cut -d: -f1)
-    if [ "$begins" -ne "$ends" ] || [ -z "$end_line" ] || [ "$end_line" -le "$begin_line" ]; then
-      echo "  WARN — $dst has a perma:begin marker with no matching perma:end after it (or a mismatched count). Left COMPLETELY UNTOUCHED — writing here would delete everything after the marker. Fix or remove the marker(s) by hand, then re-run install.sh."
-      return 1
-    fi
-    cp "$dst" "$dst.perma-bak"
-    awk -v s="$src" '
-      /<!-- perma:begin/ {while ((getline line < s) > 0) print line; close(s); skip=1; next}
-      /<!-- perma:end -->/ {skip=0; next}
-      !skip {print}' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
-  else
-    # No existing marker: this can only ever ADD content (prepend), never destroy any — no
-    # backup needed, because nothing here can lose data.
-    { cat "$src"; echo; cat "$dst" 2>/dev/null; } > "$dst.tmp" && mv "$dst.tmp" "$dst"
-  fi
-}
-
-CMD_MD="$HOME/.claude/CLAUDE.md"
-BLOCK_SRC="$PERMA/runtime/claude-md-block.md"
-if _perma_block_merge "$CMD_MD" "$BLOCK_SRC"; then
-  echo "  CLAUDE.md: Permanence block refreshed"
-fi
-
-# 4b. AGENTS.md (Tier 2 — other AI tools): same delimited-block merge, into GLOBAL per-machine
-#     paths ONLY — never a project-committed AGENTS.md, which invariant 1 forbids (that file is
-#     meant to be shared with every contributor). Only touches a tool's config path if that tool's
-#     own config directory already exists (real signal it's installed) — never invents one. The
-#     emerging unifying standard path is written unconditionally since it's dedicated to exactly
-#     this purpose, not a directory shared by unrelated tools.
+# 3. AGENTS.md (other AI tools that read it — Claude Code has its own binding, step 4 below):
+#    the same delimited-block merge, into GLOBAL per-machine paths ONLY — never a project-
+#    committed AGENTS.md, which invariant 1 forbids (that file is meant to be shared with every
+#    contributor). Only touches a tool's config path if that tool's own config directory already
+#    exists (real signal it's installed) — never invents one. The emerging unifying standard path
+#    is written unconditionally since it's dedicated to exactly this purpose, not a directory
+#    shared by unrelated tools. `_perma_block_merge` (runtime/lib/block-merge.sh) is the one
+#    place that splices into someone else's file, so it carries the safety net there: refuse to
+#    touch a mismatched begin/end pair (writing through one would delete everything after it) and
+#    back up before any in-place replace.
+source "$PERMA/runtime/lib/block-merge.sh"
 AGENTS_BLOCK_SRC="$PERMA/runtime/agents-md-block.md"
 merge_agents_block() {  # merge_agents_block <target-file>
   local dst="$1"
@@ -110,64 +72,45 @@ merge_agents_block "$HOME/.config/agents/AGENTS.md"                 # emerging u
 [ -f "$HOME/.config/AGENTS.md" ] && merge_agents_block "$HOME/.config/AGENTS.md"  # Amp, if it already exists
 # Devin's and Google Antigravity's own global-config paths weren't confirmed at time of writing —
 # verify and add here before relying on automatic Tier 2 coverage for those specifically; until
-# then they fall back to the manual pointer (see docs/TOOL-SUPPORT.md).
+# then they fall back to the manual pointer (see docs/TOOL-SUPPORT.md). (Antigravity has its own
+# real binding now — see runtime/bindings/antigravity/ — this note is about the generic
+# AGENTS.md-only fallback other, not-yet-bound tools get.)
 
-# 5. settings.json: safely MERGE the SessionStart hook + ~/permanence permission
-#    (add only if absent; preserve everything else; back up before writing).
-SETTINGS="$HOME/.claude/settings.json"
-if command -v python3 >/dev/null 2>&1; then
-  if ! python3 - "$SETTINGS" "$PERMA" <<'PY'
-import json, sys, os, shutil
-path, perma = sys.argv[1], sys.argv[2]
-os.makedirs(os.path.dirname(path), exist_ok=True)
-data = {}
-if os.path.exists(path):
-    try:
-        data = json.load(open(path))
-    except Exception:
-        print("  settings.json: present but unparseable — NOT touched. Add the hook + permission by hand.")
-        sys.exit(1)
-cmd = f"{perma}/runtime/session-start.sh"
-changed = False
-ad = data.setdefault("permissions", {}).setdefault("additionalDirectories", [])
-if perma not in ad:
-    ad.append(perma); changed = True
-ss = data.setdefault("hooks", {}).setdefault("SessionStart", [])
-present = any(isinstance(e, dict) and any(h.get("command") == cmd for h in e.get("hooks", [])) for e in ss)
-if not present:
-    ss.append({"hooks": [{"type": "command", "command": cmd, "timeout": 10}]}); changed = True
-# UserPromptSubmit: session-load — RELIABLE per-session context auto-load (SessionStart context is
-# passive; this fires on the user's first prompt so the model actually reads the stream). Core, so
-# auto-wired (unlike events, which is opt-in).
-cmd_load = f"{perma}/runtime/session-load.sh"
-ups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
-if not any(isinstance(e, dict) and any(h.get("command") == cmd_load for h in e.get("hooks", [])) for e in ups):
-    ups.insert(0, {"hooks": [{"type": "command", "command": cmd_load, "timeout": 10}]}); changed = True
-if changed:
-    if os.path.exists(path): shutil.copy(path, path + ".perma-bak")
-    json.dump(data, open(path, "w"), indent=2)
-    print("  settings.json: SessionStart + session-load (auto context) hooks + ~/permanence permission merged in (backup: settings.json.perma-bak)")
-else:
-    print("  settings.json: hook + permission already present")
-PY
-  then
-    echo "  settings.json: FAILED to configure automatically — add the hook + permission by hand (see message above)"
+# 4. AI-harness bindings — every runtime/bindings/<harness>/ directory, Claude Code included:
+#    its own detect script decides whether it applies to this machine, its own wire script does
+#    the actual merge. install.sh knows nothing about any specific harness here — adding one is a
+#    new directory, not an edit to this file. See design/harness-binding-mechanism.md.
+for b in "$PERMA/runtime/bindings/"*/; do
+  [ -d "$b" ] || continue
+  name="$(basename "$b")"
+  if [ ! -x "$b/detect" ]; then
+    echo "  binding: $name — no executable detect script, skipping (step 1's chmod should have covered this; check the file exists and is committed with the executable bit set)"
+    continue
+  fi
+  "$b/detect" >/dev/null 2>&1
+  detect_rc=$?
+  if [ "$detect_rc" -eq 0 ]; then
+    if [ -x "$b/wire" ] && "$b/wire"; then
+      echo "  binding: $name wired"
+    elif [ -x "$b/wire" ]; then
+      echo "  binding: $name — FAILED to wire (see above)"
+      INSTALL_FAILED=1
+    else
+      echo "  binding: $name detected, no wire script yet"
+    fi
+  elif [ "$detect_rc" -ne 1 ]; then
+    # The detect contract is exit 0 (present) or 1 (absent) — anything else means detect itself
+    # is broken (a crash, a typo, a missing intermediate command), not a clean "not installed"
+    # signal, and was previously indistinguishable from one.
+    echo "  binding: $name — detect exited with unexpected code $detect_rc (expected 0 or 1) — treating as broken, not absent"
     INSTALL_FAILED=1
   fi
-else
-  cat <<SETTINGS
-  settings.json: python3 not found — add these by hand to ~/.claude/settings.json (MERGE, don't overwrite):
-      "permissions": { "additionalDirectories": ["$PERMA"] },
-      "hooks": {
-        "SessionStart": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/session-start.sh", "timeout": 10 } ] } ],
-        "UserPromptSubmit": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/session-load.sh", "timeout": 10 } ] } ]
-      }
-SETTINGS
-fi
+done
 
-# 6. Events (cross-project notifications) — OPT-IN. The scripts (emit-event / events-listen /
-#    stop-listen / resolve-stream) + the /perma-emit command are installed by steps 1-2. *Emitting*
-#    works now; *receiving* uses two machine-wide hooks we DON'T auto-wire (your call):
+# 5. Events (cross-project notifications) — OPT-IN. The scripts (emit-event / events-listen /
+#    stop-listen / resolve-stream) + the /perma-emit command are installed by Claude Code's own
+#    binding above. *Emitting* works now; *receiving* uses two machine-wide hooks we DON'T
+#    auto-wire (your call):
 #      • UserPromptSubmit → events-listen.sh  — delivers waiting messages on a session's next prompt
 #      • Stop            → stop-listen.sh     — catches messages that land mid-turn, right as a session
 #                                               would go idle (blocks the stop so it reads them). FREE:
@@ -177,10 +120,15 @@ echo "  events: scripts + /perma-emit installed. To ENABLE delivery (opt-in), ad
 echo "      \"UserPromptSubmit\": [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"$PERMA/runtime/events-listen.sh\", \"timeout\": 10 } ] } ],"
 echo "      \"Stop\":             [ { \"hooks\": [ { \"type\": \"command\", \"command\": \"$PERMA/runtime/stop-listen.sh\",  \"timeout\": 10 } ] } ]"
 
-# 7. Shutdown nudge (macOS) — OPT-IN. A weekday end-of-day notification reminding you to run
+# 6. Shutdown nudge (macOS) — OPT-IN. A weekday end-of-day notification reminding you to run
 #    /perma-shutdown. Not installed automatically (a desktop ping is a personal choice).
 echo "  shutdown nudge: to get a weekday reminder to run /perma-shutdown, enable it:"
 echo "      $PERMA/runtime/shutdown-nudge.sh --install 17:00   (change the time, or --uninstall to remove)"
+
+if [ -s "$PERMA_ATTENTION_FILE" ]; then
+  n=$(wc -l < "$PERMA_ATTENTION_FILE" | tr -d ' ')
+  echo "  NEEDS ATTENTION: $n standing-instruction file(s) have a malformed perma:begin/end marker and were left untouched — see the WARN line(s) above for which file(s) and how to fix."
+fi
 
 if [ "$INSTALL_FAILED" -eq 0 ]; then
   echo "done."

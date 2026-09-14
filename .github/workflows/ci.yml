@@ -104,6 +104,208 @@ jobs:
           if [ "$FAIL" -eq 0 ]; then echo "Redaction scan passed"; fi
           exit $FAIL
 
+  upgrade-path:
+    name: Upgrade Path
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need real tag history, not just the PR's own commits
+
+      - name: Simulate a hypothetical future release on top of this PR's own content
+        shell: bash
+        run: |
+          set -e
+          # Deliberately NOT testing "upgrade from the latest real tag straight to this PR" —
+          # that transition is a known, accepted, one-time exception (see CHANGELOG.md's v1.4.0
+          # entry): an install upgrading from before this fix shipped runs the OLD script for
+          # that one upgrade, which can't know to re-check itself, so it correctly ends in a
+          # small manual "take theirs" decision rather than silent loss or full automation. A
+          # non-interactive CI job can't assert against a step that's supposed to ask a human.
+          #
+          # What CAN be asserted, and is the actual point of this fix: an install already fully
+          # caught up to THIS PR's content, upgrading to some future release that adds one more
+          # new tracked path, should self-heal in one --apply with no manual step at all. That's
+          # simulated here with a throwaway commit on top of this checkout.
+          BASE_VERSION=$(tr -d '[:space:]' < _meta/VERSION)
+
+          # A fresh runner has no git identity configured at all (unlike a dev machine, where
+          # this silently worked). Needed here too, not just in $SCRATCH below -- the "simulate
+          # a future release" commits a few lines down happen in this checkout directly.
+          git config user.email "ci@example.com"
+          git config user.name "CI"
+
+          SCRATCH="${RUNNER_TEMP}/upgrade-scratch"
+          git worktree add --detach "$SCRATCH" HEAD -q
+          rm -rf "$SCRATCH/.git"
+          git -C "$SCRATCH" init -q
+          git -C "$SCRATCH" config user.email "ci@example.com"
+          git -C "$SCRATCH" config user.name "CI"
+          git -C "$SCRATCH" add -A
+          git -C "$SCRATCH" commit -q -m "scratch install already at $BASE_VERSION"
+
+          # Tag the base too, not just the target — conflict detection resolves _meta/VERSION as
+          # a git ref to tell "you customized this" from "the template changed this"; with no
+          # base tag it fails open and flags everything, which would make this test meaningless.
+          git tag "$BASE_VERSION" HEAD
+
+          echo "hypothetical new tracked path, CI test only" > TESTFILE.md
+          sed -i "s/^PATHS=(\(.*\))/PATHS=(\1 TESTFILE.md)/" runtime/update.sh
+          NEXT_VERSION="${BASE_VERSION}-ci-next"
+          echo "$NEXT_VERSION" > _meta/VERSION
+          git add -A
+          git commit -q -m "CI test only: simulate a future release adding TESTFILE.md"
+          git tag "$NEXT_VERSION" HEAD
+
+          # A branch NAME isn't reliably fetchable here: a PR checkout leaves this repo in a
+          # detached/merge-ref state, not on a real local branch (the actual cause of a prior
+          # failure on a real runner -- "couldn't find remote ref <branch>", never hit locally
+          # since a dev checkout normally has the named branch). A commit SHA has no such
+          # ambiguity -- fetch that instead, from this checkout's own HEAD right now.
+          CURRENT_SHA=$(git rev-parse HEAD)
+
+          export PERMA_UPDATE_SOURCE="${GITHUB_WORKSPACE}" PERMA_DIR="$SCRATCH"
+          export PERMA_UPDATE_BRANCH="$CURRENT_SHA"
+
+          bash "$SCRATCH/runtime/update.sh" --apply
+
+          echo "GOT_VERSION=$(tr -d '[:space:]' < "$SCRATCH/_meta/VERSION")" >> "$GITHUB_ENV"
+          echo "NEXT_VERSION=$NEXT_VERSION" >> "$GITHUB_ENV"
+          echo "SCRATCH=$SCRATCH" >> "$GITHUB_ENV"
+
+          # This job has a later step that also inspects tags/HEAD in this same checkout --
+          # leaving these behind would make its "latest tag" resolve to this step's own test
+          # tag instead of a real release. Clean up regardless (the later step is also written
+          # to be robust to this independently, but no reason to rely on only one of the two).
+          git tag -d "$BASE_VERSION" "$NEXT_VERSION" 2>/dev/null || true
+
+      - name: Verify by content, not just the VERSION string
+        shell: bash
+        run: |
+          set -e
+          # A VERSION-string match alone is not sufficient evidence — that's exactly how the bug
+          # this job guards against went undetected: _meta/VERSION reached the target while a real
+          # tracked path was silently never delivered. Diff the actual tracked paths against the
+          # actual target tag's content instead of trusting either side's own self-report.
+          # shellcheck disable=SC1090
+          source <(grep "^PATHS=" "${SCRATCH}/runtime/update.sh")
+
+          if [ "$GOT_VERSION" != "$NEXT_VERSION" ]; then
+            echo "FAILED: expected $NEXT_VERSION, got $GOT_VERSION — the new path should have been"
+            echo "delivered automatically in one --apply, with no manual re-run needed."
+            exit 1
+          fi
+          if ! git -C "$SCRATCH" diff --quiet HEAD "$NEXT_VERSION" -- "${PATHS[@]}"; then
+            echo "FAILED: VERSION says $GOT_VERSION but tracked paths still differ from the target tag:"
+            git -C "$SCRATCH" diff --stat HEAD "$NEXT_VERSION" -- "${PATHS[@]}"
+            exit 1
+          fi
+          echo "PASS: a future release's new tracked path is delivered in one --apply, automatically."
+
+      - name: Verify the real transition (latest shipped release -> this PR) never loses data silently
+        shell: bash
+        run: |
+          set -e
+          # This is a genuinely different guarantee from the step above, and a weaker one on
+          # purpose. An install on the latest already-SHIPPED tag, upgrading to this PR's own
+          # content, runs that OLD release's own update.sh and reads its own perma-upgrade.md --
+          # both frozen at whatever they were when that tag shipped, before any fix in this PR
+          # existed. Neither the script fix nor the AI-instruction fix above can reach backwards
+          # into an already-shipped release, so this transition can genuinely need a manual "take
+          # theirs" step -- that is not a bug and this check does not try to make it disappear.
+          # What must never happen, and what this checks for real: VERSION silently claiming full
+          # completion while tracked content is actually missing -- the original bug this whole
+          # release exists to fix. Safe outcomes: either it genuinely completes, or it correctly
+          # stops short and says so. The one unsafe outcome -- claims done, isn't -- fails the job.
+          # The previous step commits and tags directly in this same checkout to simulate a
+          # future release -- so neither `git tag | head -1` nor HEAD nor the _meta/VERSION file
+          # on disk can be trusted here; all three now reflect that step's test state, not this
+          # PR's real one. THIS_SHA comes from GitHub's own context instead (immune to anything a
+          # prior step did), and THIS_VERSION is read from that exact commit's tree, not off disk.
+          THIS_SHA="${GITHUB_SHA}"
+          THIS_VERSION=$(git show "$THIS_SHA:_meta/VERSION" | tr -d '[:space:]')
+
+          # Real, already-tagged releases only -- excludes the previous step's own "-ci-next"
+          # simulated tag, which would otherwise be "the latest tag" in this same checkout.
+          PREV_TAG=$(git tag --sort=-v:refname | grep -v -- '-ci-next$' | head -1)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No existing shipped tag yet -- nothing to test this transition against."
+            exit 0
+          fi
+          echo "Testing: latest shipped ($PREV_TAG) -> this PR's real HEAD ($THIS_SHA), using that release's own script"
+
+          # Without a tag matching THIS_VERSION, the OLD script's own tag resolution
+          # (`git tag --merged FETCH_HEAD`) finds nothing newer than $PREV_TAG and short-circuits
+          # to "Already up to date" without attempting anything -- caught by testing this for
+          # real, not assumed. A real v1.4.0 tag only exists once this PR actually merges (the
+          # auto-tag job creates it then); simulate that state locally so the OLD script sees a
+          # real target to reach for, matching what it will actually see post-merge.
+          git tag "$THIS_VERSION" "$THIS_SHA"
+
+          git config user.email "ci@example.com"
+          git config user.name "CI"
+
+          OLD_INSTALL="${RUNNER_TEMP}/old-install"
+          git worktree add --detach "$OLD_INSTALL" "$PREV_TAG" -q
+          rm -rf "$OLD_INSTALL/.git"
+          git -C "$OLD_INSTALL" init -q
+          git -C "$OLD_INSTALL" config user.email "ci@example.com"
+          git -C "$OLD_INSTALL" config user.name "CI"
+          git -C "$OLD_INSTALL" add -A
+          git -C "$OLD_INSTALL" commit -q -m "scratch install at $PREV_TAG"
+
+          export PERMA_UPDATE_SOURCE="${GITHUB_WORKSPACE}" PERMA_DIR="$OLD_INSTALL"
+          export PERMA_UPDATE_BRANCH="$THIS_SHA"
+
+          # Runs the OLD (pre-this-PR) update.sh -- deliberately, that is the actual condition
+          # a real existing install is in. Failure here (a non-zero exit some other way) would
+          # be its own problem, but is not what this check is for -- see the VERSION+content
+          # logic below, which is where the real safety property is verified.
+          bash "$OLD_INSTALL/runtime/update.sh" --apply || true
+
+          GOT_VERSION=$(tr -d '[:space:]' < "$OLD_INSTALL/_meta/VERSION")
+          echo "VERSION after apply: $GOT_VERSION (this PR ships as: $THIS_VERSION)"
+
+          # Whether a content gap here is a genuine regression or the one known, accepted, and
+          # provably unfixable exception depends on one thing: did $PREV_TAG's own update.sh
+          # already carry the self-heal fix? If yes, this transition SHOULD have protected
+          # itself, and a gap is a real regression -- hard fail. If no (true for v1.3.0, which
+          # predates the fix), this is exactly the crossing that cannot be protected in code --
+          # the fix cannot reach backwards into an already-shipped, already-frozen release. Not
+          # a version-number allowlist; a direct check of the actual root cause.
+          PREV_HAS_FIX=false
+          git show "$PREV_TAG:runtime/update.sh" 2>/dev/null | grep -q "self_updated" && PREV_HAS_FIX=true
+          echo "Did $PREV_TAG's own update.sh already have the self-heal fix? $PREV_HAS_FIX"
+
+          if [ "$GOT_VERSION" = "$THIS_VERSION" ]; then
+            echo "Claims full completion -- verifying tracked content genuinely matches, not just the string..."
+            # shellcheck disable=SC1090
+            source <(grep "^PATHS=" "${GITHUB_WORKSPACE}/runtime/update.sh")
+            if git -C "$OLD_INSTALL" diff --quiet "$THIS_SHA" -- "${PATHS[@]}"; then
+              echo "PASS: genuinely complete -- VERSION and content agree."
+            elif [ "$PREV_HAS_FIX" = false ]; then
+              echo "::warning::Known, documented, unfixable-in-code gap: $PREV_TAG predates the self-heal"
+              echo "::warning::fix, so it cannot protect its own upgrade to this PR. VERSION claims"
+              echo "::warning::$GOT_VERSION but tracked content differs -- see CHANGELOG.md's v1.4.0 entry"
+              echo "::warning::and docs/UPGRADE.md. Not blocking merge: this is the one crossing where the"
+              echo "::warning::fix's own introduction cannot retroactively protect itself, not a new defect."
+              git -C "$OLD_INSTALL" diff --stat "$THIS_SHA" -- "${PATHS[@]}"
+              echo "PASS (with warning above) -- see docs/UPGRADE.md before actually upgrading a real"
+              echo "install across this exact boundary; verify manually rather than trusting this alone."
+            else
+              echo "FAILED: $PREV_TAG already had the self-heal fix, so this content gap is a genuine"
+              echo "regression, not the known exception. VERSION claims $GOT_VERSION but tracked content"
+              echo "still differs from this PR:"
+              git -C "$OLD_INSTALL" diff --stat "$THIS_SHA" -- "${PATHS[@]}"
+              echo "This is the exact silent-loss bug this release exists to fix -- claims done, isn't."
+              exit 1
+            fi
+          else
+            echo "PASS: correctly did not claim completion ($GOT_VERSION, not $THIS_VERSION) -- safe,"
+            echo "stopped short rather than silently losing anything. Expected for this one transition;"
+            echo "see CHANGELOG.md's v1.4.0 entry and docs/UPGRADE.md for why."
+          fi
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -112,7 +314,7 @@ jobs:
       - name: Syntax-check every shell script
         run: |
           set -e
-          for f in $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit; do
+          for f in $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit runtime/bindings/*/detect runtime/bindings/*/wire; do
             echo "checking $f"
             bash -n "$f"
           done
@@ -121,7 +323,7 @@ jobs:
         run: |
           set -e
           # extract each `<<'PY' ... PY` block per shell script and compile-check it
-          for f in $(find . -name "*.sh" -not -path "./.git/*"); do
+          for f in $(find . -name "*.sh" -not -path "./.git/*") runtime/bindings/*/detect runtime/bindings/*/wire; do
             awk '/<<.PY/{flag=1;next} /^PY$/{flag=0} flag' "$f" > /tmp/_heredoc_check.py
             if [ -s /tmp/_heredoc_check.py ]; then
               echo "checking embedded python in $f"
@@ -131,7 +333,7 @@ jobs:
 
       - name: ShellCheck
         run: |
-          shellcheck --severity=warning $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit
+          shellcheck --severity=warning $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit runtime/bindings/*/detect runtime/bindings/*/wire
 
   install-matrix:
     strategy:
@@ -169,6 +371,124 @@ jobs:
           test -f "$HOME/.claude/commands/perma-upgrade.md"
           echo "commands installed OK"
 
+      - name: Verify the migrated Claude Code binding actually wired everything
+        shell: bash
+        run: |
+          set -e
+          bash "${PERMA_DIR}/runtime/bindings/claude-code/detect"
+          echo "claude-code/detect: OK"
+
+          grep -q "perma:begin" "$HOME/.claude/CLAUDE.md"
+          echo "CLAUDE.md: perma block present"
+
+          python3 - "$HOME/.claude/settings.json" "$PERMA_DIR" <<'PY'
+          import json, sys
+          path, perma = sys.argv[1], sys.argv[2]
+          d = json.load(open(path))
+          assert perma in d["permissions"]["additionalDirectories"], "additionalDirectories missing PERMA"
+          assert any(h.get("command", "").endswith("session-start.sh") for e in d["hooks"]["SessionStart"] for h in e.get("hooks", [])), "SessionStart hook missing"
+          assert any(h.get("command", "").endswith("session-load.sh") for e in d["hooks"]["UserPromptSubmit"] for h in e.get("hooks", [])), "UserPromptSubmit hook missing"
+          print("settings.json: hooks + permission OK")
+          PY
+
+      - name: Verify Antigravity's detect correctly reports absent on a CI runner
+        shell: bash
+        run: |
+          set -e
+          if bash "${PERMA_DIR}/runtime/bindings/antigravity/detect"; then
+            echo "FAILED: antigravity/detect exited 0, but no Antigravity install exists on this runner"
+            exit 1
+          fi
+          echo "antigravity/detect: correctly reports absent (proves the gate itself works, not a mocked agy)"
+
+      - name: Verify Devin's detect correctly reports absent on a CI runner
+        shell: bash
+        run: |
+          set -e
+          if bash "${PERMA_DIR}/runtime/bindings/devin/detect"; then
+            echo "FAILED: devin/detect exited 0, but no Devin CLI install exists on this runner"
+            exit 1
+          fi
+          echo "devin/detect: correctly reports absent (proves the gate itself works, not a mocked devin)"
+
+      - name: Verify Cursor's detect correctly reports absent on a CI runner
+        shell: bash
+        run: |
+          set -e
+          if bash "${PERMA_DIR}/runtime/bindings/cursor/detect"; then
+            echo "FAILED: cursor/detect exited 0, but no Cursor CLI install exists on this runner"
+            exit 1
+          fi
+          echo "cursor/detect: correctly reports absent (proves the gate itself works, not a mocked cursor-agent)"
+
+      - name: Verify Antigravity/Devin/Cursor wire scripts actually succeed when the tool is present
+        # No-op shim binaries so detect passes and wire genuinely runs — the JSON-merge and
+        # Skills-translation logic otherwise had zero automated regression coverage (only the
+        # correct detect-absent path was ever exercised). Not testing against the real tools'
+        # actual hook payloads (that's the live-fire testing described in each design doc) — this
+        # only covers wire's own idempotent-merge and file-write correctness. ubuntu-latest only,
+        # matching the failure-path test below (Two-Pass review, 2026-09-14, Pass 1 Finding 9).
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -e
+          SHIM_DIR="${RUNNER_TEMP}/perma-shims"
+          mkdir -p "$SHIM_DIR"
+          for name in agy devin cursor-agent; do
+            printf '#!/bin/bash\nexit 0\n' > "$SHIM_DIR/$name"
+            chmod +x "$SHIM_DIR/$name"
+          done
+          export PATH="$SHIM_DIR:$PATH"
+
+          bash "${PERMA_DIR}/runtime/bindings/antigravity/detect" && echo "antigravity/detect: OK (shim present)"
+          bash "${PERMA_DIR}/runtime/bindings/devin/detect" && echo "devin/detect: OK (shim present)"
+          bash "${PERMA_DIR}/runtime/bindings/cursor/detect" && echo "cursor/detect: OK (shim present)"
+
+          bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"
+          bash "${PERMA_DIR}/runtime/bindings/devin/wire"
+          bash "${PERMA_DIR}/runtime/bindings/cursor/wire"
+
+          python3 - "$HOME/.gemini/config/hooks.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          assert "PreInvocation" in d.get("perma-pre-invocation", {}), "PreInvocation missing"
+          assert "PreToolUse" in d.get("perma-pre-tool-use", {}), "PreToolUse missing"
+          print("antigravity hooks.json: OK")
+          PY
+          grep -q "perma:begin" "$HOME/.gemini/GEMINI.md" && echo "GEMINI.md: perma block present"
+          test -f "$HOME/.gemini/config/skills/perma-startup/SKILL.md" && echo "antigravity skills: OK"
+
+          python3 - "$HOME/.config/devin/config.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          assert any(h.get("command", "").endswith("session-start-hook.sh") for g in d["hooks"]["SessionStart"] for h in g.get("hooks", [])), "SessionStart hook missing"
+          assert any(h.get("command", "").endswith("user-prompt-submit-hook.sh") for g in d["hooks"]["UserPromptSubmit"] for h in g.get("hooks", [])), "UserPromptSubmit hook missing"
+          print("devin config.json: OK")
+          PY
+          grep -q "perma:begin" "$HOME/.config/devin/AGENTS.md" && echo "devin AGENTS.md: perma block present"
+          test -f "$HOME/.config/devin/skills/perma-startup/SKILL.md" && echo "devin skills: OK"
+
+          python3 - "$HOME/.cursor/hooks.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          assert any(h.get("command", "").endswith("session-start-hook.sh") for h in d["hooks"]["sessionStart"]), "sessionStart hook missing"
+          assert any(h.get("command", "").endswith("stop-hook.sh") for h in d["hooks"]["stop"]), "stop hook missing"
+          print("cursor hooks.json: OK")
+          PY
+          test -f "$HOME/.cursor/skills/perma-startup/SKILL.md" && echo "cursor skills: OK"
+
+          # Idempotency: re-run all three and confirm no error and no duplicate entries.
+          bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"
+          bash "${PERMA_DIR}/runtime/bindings/devin/wire"
+          bash "${PERMA_DIR}/runtime/bindings/cursor/wire"
+          python3 - "$HOME/.cursor/hooks.json" <<'PY'
+          import json, sys
+          d = json.load(open(sys.argv[1]))
+          n = sum(1 for h in d["hooks"]["sessionStart"] if h.get("command", "").endswith("session-start-hook.sh"))
+          assert n == 1, f"expected exactly 1 sessionStart entry after re-run, found {n}"
+          print("idempotency: OK — re-running wire did not duplicate entries")
+          PY
+
       - name: Verify the scheduled task actually exists (real backend for this OS)
         shell: bash
         run: |
@@ -194,3 +514,16 @@ jobs:
             Windows) ! MSYS_NO_PATHCONV=1 schtasks /Query /TN "perma-consolidate" >/dev/null 2>&1 ;;
           esac
           echo "unschedule: OK"
+
+      - name: Verify a broken binding wire script is correctly reported as a failure
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -e
+          mv "${PERMA_DIR}/runtime/bindings/claude-code/wire" "${PERMA_DIR}/runtime/bindings/claude-code/wire.orig"
+          printf '#!/bin/bash\nexit 1\n' > "${PERMA_DIR}/runtime/bindings/claude-code/wire"
+          chmod +x "${PERMA_DIR}/runtime/bindings/claude-code/wire"
+          OUTPUT=$(bash "${PERMA_DIR}/runtime/install.sh")
+          echo "$OUTPUT"
+          mv "${PERMA_DIR}/runtime/bindings/claude-code/wire.orig" "${PERMA_DIR}/runtime/bindings/claude-code/wire"
+          echo "$OUTPUT" | grep -q "done, WITH FAILURES" && echo "failure path: OK — real binding failure correctly propagated"

@@ -1,0 +1,5 @@
+#!/bin/bash
+# devin/detect — exit 0 iff Devin CLI is usable on this machine. No side effects, per the
+# detect/wire interface's own contract.
+command -v devin >/dev/null 2>&1 && exit 0
+exit 1

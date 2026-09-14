@@ -1,0 +1,7 @@
+#!/bin/bash
+# cursor/detect — exit 0 iff Cursor's Agent CLI is usable on this machine. Checks the specific
+# `cursor-agent` binary name rather than the generic `agent` symlink it also installs, to avoid
+# a false positive from some unrelated tool coincidentally named `agent` on a user's PATH. No
+# side effects, per the detect/wire interface's own contract.
+command -v cursor-agent >/dev/null 2>&1 && exit 0
+exit 1

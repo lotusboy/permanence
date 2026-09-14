@@ -1,0 +1,4 @@
+<!-- perma:begin (managed by ~/permanence/runtime/install.sh — edit ~/permanence/runtime/devin-agents-md-block.md, not here) -->
+## Permanence protocol (standing instruction)
+This session's project context loads automatically at the start of each session and on your first message — no manual step needed. The one thing those hooks can't do for you: whenever something material shifts during the session (a decision, a scope change, a meeting, anything that moves the picture), update the active stream's files without being asked — see `~/permanence/SPEC.md` for the full contract. Never reference Permanence's paths or contents in any file committed to a project repository (one-way flow).
+<!-- perma:end -->
