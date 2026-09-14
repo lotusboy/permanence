@@ -6,8 +6,9 @@
 > including a real broken-`wire` failure path.
 > Written 2026-09-13. Read this *before*
 > [claude-code-binding.md](./claude-code-binding.md), [antigravity-binding.md](./antigravity-binding.md),
-> [devin-binding.md](./devin-binding.md), or [gemini-cli-binding.md](./gemini-cli-binding.md)
-> — all four assume the mechanism this doc specifies, rather than each defining their own.
+> [devin-binding.md](./devin-binding.md), [cursor-binding.md](./cursor-binding.md), or
+> [gemini-cli-binding.md](./gemini-cli-binding.md) — all five assume the mechanism this doc
+> specifies, rather than each defining their own.
 
 ## 1. Why this needed its own doc
 
