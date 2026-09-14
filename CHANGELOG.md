@@ -189,6 +189,14 @@ run executed its full actual logic (checked real scheduled tasks, read real regi
 just echoed text. The one real gap: no working global standing-instruction file was found for
 Cursor despite three separate live attempts — a tested-away gap, not an unresearched one.
 
+**Antigravity's command layer, closed out — all five binding-contract questions now answered.**
+The live-fire test its design doc had flagged as the one remaining blocker finally ran: a real
+test skill fired correctly both by description-matching *and* by literal `/name` syntax — the
+bundled docs undersold this, describing only the former. `wire` now translates
+`runtime/commands/*.md` into `~/.gemini/config/skills/<name>/SKILL.md`, confirmed via a real
+`/perma-help` invocation that executed its full actual logic. Antigravity is now the second
+binding (after Claude Code) with nothing left for the owner to carry by hand.
+
 No **Migration notes** — nothing in any existing stream changes shape; this is all machinery.
 
 ## [1.3.0] — `/perma-unregister`: completely remove a stream in one step

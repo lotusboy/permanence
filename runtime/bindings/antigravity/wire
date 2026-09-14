@@ -1,14 +1,11 @@
 #!/bin/bash
 # antigravity/wire — connects Permanence to Antigravity: the PreInvocation + PreToolUse hooks in
-# the global hooks.json (forcing read + a safe always-allow default for tool gating), and the
-# standing instruction in the global GEMINI.md. See design/antigravity-binding.md for the
-# confirmed mechanics this implements — hooks.json's location and schema, GEMINI.md's discovery
-# rule — all live-tested, not assumed.
-#
-# The Skills/command-invocation layer is deliberately NOT built here yet:
-# design/antigravity-binding.md §5/§6 say that part needs a real live-fire test against the
-# installed product before committing to its exact shape, since only the bundled docs (not a
-# real firing) confirm how Skills activate.
+# the global hooks.json (forcing read + a safe always-allow default for tool gating), the
+# standing instruction in the global GEMINI.md, and Permanence's commands translated into
+# Antigravity's own global Skills directory (command invocation). See design/antigravity-binding.md
+# for the confirmed mechanics this implements — hooks.json's location and schema, GEMINI.md's
+# discovery rule, and Skills' real invocation behavior (both description-matched and literal
+# /name syntax, live-fire tested 2026-09-14) — all live-tested, not assumed.
 set -u
 PERMA="${PERMA_DIR:-$HOME/permanence}"
 BINDING_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,6 +76,67 @@ GEMINI_MD="$HOME/.gemini/GEMINI.md"
 BLOCK_SRC="$PERMA/runtime/gemini-md-block.md"
 if _perma_block_merge "$GEMINI_MD" "$BLOCK_SRC"; then
   echo "  GEMINI.md: Permanence block refreshed"
+fi
+
+# Skills: translate runtime/commands/*.md into ~/.gemini/config/skills/<name>/SKILL.md —
+# confirmed real, confirmed invokable both by description-matching and literal /name syntax.
+# Each command already carries a `description:` frontmatter field; reused directly rather than
+# re-derived. The one command without frontmatter (perma-contents.md) falls back to its first
+# heading/line.
+CMD_SRC="$PERMA/runtime/commands"
+SKILLS_DST="$HOME/.gemini/config/skills"
+if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
+import json, os, re, sys
+
+cmd_src, skills_dst = sys.argv[1], sys.argv[2]
+
+def extract_description(content):
+    m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    if m:
+        dm = re.search(r'^description:\s*(.*)$', m.group(1), re.MULTILINE)
+        if dm:
+            raw = dm.group(1).strip()
+            if raw.startswith('"') and raw.endswith('"'):
+                try:
+                    return json.loads(raw)
+                except Exception:
+                    pass
+            return raw
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith('#'):
+            return line.lstrip('#').strip()
+        if line:
+            return line
+    return "A Permanence command."
+
+failed = []
+for fname in sorted(os.listdir(cmd_src)):
+    if not fname.endswith(".md"):
+        continue
+    name = fname[:-3]
+    src_path = os.path.join(cmd_src, fname)
+    content = open(src_path).read()
+    description = extract_description(content)
+
+    skill_dir = os.path.join(skills_dst, name)
+    try:
+        os.makedirs(skill_dir, exist_ok=True)
+        fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
+        body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w") as f:
+            f.write("\n".join(fm_lines) + body)
+        print(f"  skill: {name}")
+    except Exception as e:
+        print(f"  skill: {name} — FAILED to write ({e})")
+        failed.append(name)
+
+if failed:
+    sys.exit(1)
+PY
+then
+  echo "  skills: FAILED to translate one or more commands (see messages above)"
+  WIRE_FAILED=1
 fi
 
 exit "$WIRE_FAILED"

@@ -15,7 +15,7 @@ below states plainly what its owner carries — what's still done by hand — in
 | Tool | Passive orientation | Forcing read | Standing instruction | Command invocation | Headless invocation | Owner carries |
 |---|---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
-| **Antigravity** | ✅ | ✅ | ✅ | 🔧 | ✅ | Command invocation — Skills need one live-fire test against the real product before `wire`'s command layer is written; see `design/antigravity-binding.md` §5 |
+| **Antigravity** | ✅ | ✅ | ✅ | ✅ | ✅ | Nothing |
 | **Devin CLI** | ✅ | ✅ | ✅ | 🔧 | ✅ | Command invocation — Skills need one live-fire test before `wire`'s command layer is written; see `design/devin-binding.md` §5 |
 | **Cursor** | ✅ | ✅ | ❌ | ✅ | ✅ | Standing instruction — no working global rules/`AGENTS.md` file exists for Cursor despite three real attempts; see `design/cursor-binding.md` §5 |
 | **AGENTS.md-reading tools** (Codex, droid, Amp, GitHub Copilot, Aider, Zed, Windsurf, Google Jules, ...) | ❌ | ❌ | ✅ | ❌ | ❓ | Orientation — say "good morning Permanence" (or run `/perma-startup <name-or-path>`) at the start of a session |
@@ -39,8 +39,9 @@ A `PreInvocation` hook (`runtime/bindings/antigravity/`) carries the forcing rea
 orientation in one — Antigravity has no separate session-start-style event, and doesn't need one, per
 `SPEC.md` §3's "forcing subsumes passive." The standing instruction lands in the global `~/.gemini/GEMINI.md`.
 Live-fire verified: wired for real and tested against an actual `agy` session, not just reasoned about.
-Command invocation (Skills) isn't built yet — see `design/antigravity-binding.md` §5. **Owner carries:
-nothing but the `/perma-*` commands themselves**, which have no home here until that's built.
+Command invocation (Skills) is shipped too — commands translate into `~/.gemini/config/skills/<name>/SKILL.md`,
+confirmed invokable both by description-matching and literal `/name` syntax, the same shape Claude
+Code's own `/perma-shutdown` uses. **Owner carries: nothing.**
 
 ## Devin CLI
 

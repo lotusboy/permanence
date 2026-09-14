@@ -1,19 +1,21 @@
 # Design — an Antigravity binding for Permanence
 
-> Status: **built and shipped, except the command layer.** `runtime/bindings/antigravity/`
-> implements the forcing read + passive orientation (`PreInvocation`) and the standing
-> instruction (`GEMINI.md`) — live-fire tested end-to-end against the real installed product on
-> this machine, not just dry I/O. Skills/command invocation is still deliberately unbuilt — see
-> §5 item 1, unchanged: it needs its own live-fire test before its `wire` shape is committed to.
-> Written 2026-09-13, substantially revised twice the same day after live testing. See
-> [gemini-cli-binding.md](./gemini-cli-binding.md) — Antigravity shares a `~/.gemini/` path
-> prefix with Gemini CLI, which is shared branding, not a shared mechanism for hooks (confirmed
-> below), though the two may genuinely share one standing-instruction file (also below).
+> Status: **built and shipped, all five questions answered.** `runtime/bindings/antigravity/`
+> implements the forcing read + passive orientation (`PreInvocation`), the standing instruction
+> (`GEMINI.md`), and command invocation (Skills) — all live-fire tested end-to-end against the
+> real installed product on this machine, not just dry I/O. §5 item 1's live-fire test is done:
+> both description-matched and literal `/name` invocation confirmed working, 2026-09-14.
+> Written 2026-09-13, substantially revised the same day after live testing, then again 2026-09-14
+> once Skills shipped. See [gemini-cli-binding.md](./gemini-cli-binding.md) — Antigravity shares a
+> `~/.gemini/` path prefix with Gemini CLI, which is shared branding, not a shared mechanism for
+> hooks (confirmed below), though the two may genuinely share one standing-instruction file (also
+> below).
 
-**Owner carries: nothing, for the read/write side that's built.** Four of five binding-contract
-questions (§3) are shipped — forcing read + passive orientation and standing instruction
-live-fire tested against a real `agy --print` session, the model's actual reply demonstrably
-reflecting the injected content. Command invocation (Skills) is the one still open — see §5.
+**Owner carries: nothing.** All five binding-contract questions (§3) are shipped and live-fire
+tested — forcing read + passive orientation and standing instruction against a real `agy --print`
+session, the model's actual reply demonstrably reflecting the injected content; command
+invocation via a real `/perma-help` run that executed its full actual logic, not just echoed
+text.
 
 ## 1. Why
 
@@ -98,23 +100,25 @@ confirmed:**
   mechanism doc's own precedence order says workspace would win if both existed, consistent with
   Claude Code's own CLAUDE.md-block pattern.
 
-**Skills (`skills/<name>/SKILL.md`) — the command-invocation question, confirmed against the
-bundled docs, not yet live-tested:**
+**Skills (`skills/<name>/SKILL.md`) — the command-invocation question, live-fire tested
+2026-09-14, both invocation modes confirmed:**
 
 - A skill is a directory (`skills/<name>/`) containing `SKILL.md` with YAML frontmatter (`name`,
   `description`) plus the procedure body — structurally very close to what
-  `runtime/commands/*.md` already are, minus the frontmatter.
-- **Invocation is description-matched, not literal slash syntax.** Per the bundle's overview:
-  "Skills are not loaded into the context window by default. Only their names and descriptions
-  are injected. The full content of a skill is only loaded if the model (or the user) explicitly
-  decides to activate it." This is a genuinely different invocation model from Claude Code's
-  `/perma-shutdown` — no confirmed literal command syntax was found — but it's functionally
-  equivalent for the human-triggered triggers: saying something matching a skill's description
-  (e.g. "wind down for the day") should activate it, the same job a slash command does.
+  `runtime/commands/*.md` already are, minus the frontmatter. Confirmed by inspecting a real
+  pre-existing user skill on this machine (`~/.gemini/config/skills/axis-engineering/SKILL.md`)
+  before building against the format.
+- **Both description-matched and literal `/name` invocation work — live-confirmed, not just
+  read from docs.** A real test skill (`~/.gemini/config/skills/perma-agy-test/SKILL.md`) fired
+  correctly two separate ways: a natural-language request matching its description ("please run
+  the perma agy test skill"), and the literal string `/perma-agy-test` as the entire prompt. The
+  bundle's own prose ("only names and descriptions are injected... activated if the model or the
+  user explicitly decides to") undersold this — it works exactly like Claude Code's own
+  `/perma-shutdown` syntax too, not only via description-matching.
 - Discovery follows the same workspace/global split as hooks (§ above) — `skills/` under
-  `.agents/` in a workspace, or under `~/.gemini/config/` globally; `skills.json` exists for
-  registering non-standard locations (e.g. pointing at a shared, version-controlled skills
-  directory), per `json_configs.md`.
+  `.agents/` in a workspace, or under `~/.gemini/config/` globally (the path used); `skills.json`
+  exists for registering non-standard locations (e.g. pointing at a shared, version-controlled
+  skills directory), per `json_configs.md` — not used here.
 
 ## 3. Trigger mapping — the five binding-contract questions
 
@@ -131,10 +135,9 @@ ladder. **All five now have real answers.**
    been silent (`SPEC.md` §3) — verified rather than assumed for exactly that reason. Global
    `~/.gemini/GEMINI.md` genuinely works (§2's ZUCCHINI test), and is very plausibly shareable
    with the Gemini CLI binding rather than needing its own separate file.
-4. **Command invocation.** Confirmed to exist via **Skills** (§2), against the bundled docs —
-   not yet live-tested with a real skill firing. Different invocation model from Claude Code
-   (description-matched, not literal `/command`), but structurally close to
-   `runtime/commands/*.md` already and functionally does the same job.
+4. **Command invocation. Live-confirmed**, both ways — description-matched and literal `/name`
+   syntax, the same shape Claude Code's own `/perma-shutdown` uses. Structurally close to
+   `runtime/commands/*.md` already, and now shipped as `wire`'s Skills-translation step.
 5. **Headless invocation.** Confirmed real (`agy --print`), and confirmed to carry hooks
    correctly — live-tested, the earlier same-day concern that it might not was wrong (§2).
    `workspacePaths` needs the explicit `--add-dir` flag in headless mode; **the GUI IDE
@@ -158,8 +161,10 @@ runtime/bindings/antigravity/
                             # version); writes the standing-instruction block into
                             # ~/.gemini/GEMINI.md via runtime/gemini-md-block.md (a dedicated
                             # block, not agents-md-block.md's Tier-2 framing, which doesn't match
-                            # this binding's actual capability). The Skills/command layer is NOT
-                            # in wire yet — see §5 item 1.
+                            # this binding's actual capability). Also translates
+                            # runtime/commands/*.md into ~/.gemini/config/skills/<name>/SKILL.md,
+                            # reusing each command's own existing `description:` frontmatter
+                            # field directly.
   pre-invocation-hook.sh   # reads invocationNum + conversationId off stdin; if this
                             # conversationId's cursor hasn't fired yet, calls session-start.sh +
                             # session-load.sh's combined output (fed a translated {"cwd": ...}
@@ -173,39 +178,33 @@ runtime/bindings/antigravity/
 
 Live-fire verified end-to-end, not just dry I/O: wired for real on this machine, then a real
 `agy --print` session correctly reported the exact `[perma]` stream-registration line the hook
-injected — the model's own answer, not a log line.
+injected — the model's own answer, not a log line — and a real `/perma-help` invocation executed
+its full actual logic (checked real scheduled tasks, read real registry data), not just echoed
+text.
 
-## 5. Still open — the command layer only
+## 5. Still open — nothing blocking, all optional
 
-Everything blocking the read/write half shipped (§4). What's left is narrower, and only item 1
-actually blocks more code from being written:
+Every item that could have blocked shipping (§4) is resolved. What's left is narrower and
+optional:
 
-1. **Live-fire an actual Skill**, not just read the docs on how they work — confirm the
-   description-matching invocation behaves as documented, and check whether there's also a
-   literal explicit-invocation syntax (a `/name` or `@name` mention) the docs didn't surface.
-   This is the one open item that's still load-bearing — `wire`'s Skills/command-invocation logic
-   isn't written until this is checked.
-2. **Confirm the `.git`-boundary hypothesis for workspace discovery** — does `.agents/hooks.json`
+1. **Confirm the `.git`-boundary hypothesis for workspace discovery** — does `.agents/hooks.json`
    (or `skills/`) work once the test directory is a real git repo, unlike the non-repo scratch
    folder tested? Matters for whether project-scoped bindings are viable at all, versus
    global-only. Not blocking — the shipped binding uses the confirmed global path.
-3. **Whether a project-level `GEMINI.md`/`AGENTS.md` is worth using instead of (or alongside) the
+2. **Whether a project-level `GEMINI.md`/`AGENTS.md` is worth using instead of (or alongside) the
    global one** — only the global file was live-tested and shipped; per-project rules were not
    tried.
-4. **Whether a Gemini CLI hook and an Antigravity hook, and a shared `GEMINI.md`, coexist
+3. **Whether a Gemini CLI hook and an Antigravity hook, and a shared `GEMINI.md`, coexist
    cleanly** on one machine — moot for now: Gemini CLI's binding is permanently declined
    (`harness-binding-mechanism.md` §5), not just paused. Revisit only if that changes.
 
 Retired by live testing or authoritative local docs, no longer open: `PreInvocation`'s existence,
 cardinality, and injection mechanism; `PreToolUse`'s fail-closed behavior; `workspacePaths`
 resolution on both CLI and GUI; whether headless mode excludes hooks; the standing-instruction
-question; the existence (though not yet the exact invocation syntax) of a command layer.
+question; Skills' invocation mechanism (both description-matched and literal `/name` syntax).
 
 ## 6. Non-goals
 
-- Not building the command-invocation layer yet — item 1 (live-firing a real Skill) is worth
-  doing before committing to the exact `wire` shape for it, since the description-match
-  invocation model is confirmed to exist but not yet exercised for real. Everything else shipped.
 - Not assuming Antigravity and Gemini CLI's hook engines are related just because of the path
   overlap — confirmed as two separate config files and two separate discovery behaviors. Their
   standing-instruction file may genuinely be shared, which is the opposite finding, and both are
