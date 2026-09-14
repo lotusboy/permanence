@@ -411,6 +411,16 @@ jobs:
           fi
           echo "devin/detect: correctly reports absent (proves the gate itself works, not a mocked devin)"
 
+      - name: Verify Cursor's detect correctly reports absent on a CI runner
+        shell: bash
+        run: |
+          set -e
+          if bash "${PERMA_DIR}/runtime/bindings/cursor/detect"; then
+            echo "FAILED: cursor/detect exited 0, but no Cursor CLI install exists on this runner"
+            exit 1
+          fi
+          echo "cursor/detect: correctly reports absent (proves the gate itself works, not a mocked cursor-agent)"
+
       - name: Verify the scheduled task actually exists (real backend for this OS)
         shell: bash
         run: |
