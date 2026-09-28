@@ -158,6 +158,19 @@ export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=1800000
 # caffeinate -i holds off IDLE sleep for the duration of the run. The gate above already proved a
 # human was present when this started; this covers them walking away mid-run. It deliberately does
 # NOT try to fight a closed lid — nothing in userspace can, which is why the gate exists at all.
+#
+# Checked explicitly, with its own distinct log/alert line, rather than letting a missing
+# `caffeinate` fall through as a plain nonzero exit from this whole pipeline: the generic handler
+# below (`RC -ne 0`) says "most likely the subscription token expired" — actively wrong and
+# misleading for this specific cause, sending the owner to re-authenticate when the real fix is
+# unrelated. Found by adversarial review, 2026-09-28
+# (axis/runs/2026-09-28-v1.5.0-update-sh-review), live-reproduced (RC 127, generic message fired).
+if ! command -v caffeinate >/dev/null 2>&1; then
+  note "ERROR: caffeinate not found on PATH — cannot hold off idle sleep for this run, so it did not start"
+  alert "Nightly consolidate did NOT run on $(date '+%Y-%m-%d') — caffeinate is not on PATH (macOS-only tool; check PATH or the machine itself). NOT a token/auth problem. Log: runtime/logs/nightly-consolidate.log."
+  exit 69
+fi
+
 caffeinate -i "$CLAUDE_BIN" -p "/perma-consolidate" \
   --permission-mode default --model sonnet \
   --allowedTools "Read" "Glob" "Grep" \

@@ -73,7 +73,15 @@ role_lines() {  # role_lines <dir-whose-WIP.md-to-mention>
     ""|none) return 0 ;;
     pm)      file="$PERMA/runtime/roles/pm.md" ;;
     "~/"*)   file="$HOME/${role#\~/}" ;;
-    *)       file="$role" ;;
+    /*)      file="$role" ;;
+    *)       # A bare relative value (e.g. "roles/custom.md", by analogy with the shipped "pm" ->
+             # runtime/roles/pm.md convention) used to resolve against this process's cwd — for
+             # the real SessionStart hook that's the project workspace the session opened in,
+             # essentially never $PERMA/runtime, so it silently never resolved. Resolve against
+             # $PERMA/runtime explicitly instead, matching where "pm" itself resolves. Found by
+             # adversarial review, 2026-09-28 (axis/runs/2026-09-28-v1.5.0-update-sh-review),
+             # live-reproduced.
+             file="$PERMA/runtime/$role" ;;
   esac
   if [ ! -f "$file" ]; then
     echo "[perma] runtime/.role names a role file that does not exist ($file) — no role applied. Tell the owner once."

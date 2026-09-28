@@ -37,7 +37,14 @@ if [ "$MODE" = "apply" ] && { ! git -C "$PERMA" diff --quiet || ! git -C "$PERMA
 fi
 
 PATHS=(runtime .githooks templates SPEC.md README.md QUICKSTART.md CHANGELOG.md design)   # machinery + the template's own planning docs
-CURRENT=$(tr -d '[:space:]' < "$PERMA/_meta/VERSION" 2>/dev/null || echo "")
+# 2>/dev/null must come before the < redirect: bash reports a missing input file's "No such file
+# or directory" to whatever stderr is in effect at the moment the < redirect is processed, in
+# left-to-right order — with 2>/dev/null written after it (the original order here), that report
+# already escaped to the real terminal/log before the suppression took effect. Verified
+# empirically, not just reasoned about. Found by adversarial review, 2026-09-28
+# (axis/runs/2026-09-28-v1.5.0-update-sh-review) — pre-existing since before v1.5.0, out of that
+# PR's own diff, fixed here anyway since it's the same file and the same review pass.
+CURRENT=$(tr -d '[:space:]' 2>/dev/null < "$PERMA/_meta/VERSION" || echo "")
 [ -n "$CURRENT" ] || CURRENT="unknown"
 
 echo "fetching from $SRC ($BRANCH) ..."
@@ -88,17 +95,15 @@ echo "$CHANGED" | sed 's/^/  /'
 # (e.g. all of runtime/, every one of its ~20 scripts) from being applied just because ONE file in
 # it conflicted; per-file tracking means only the actually-conflicting files are held back.
 #
-# Deletions (status D — the template no longer ships this path) are tracked separately and never
-# go through conflict detection below: if the template removed it, it's removed on upgrade,
-# customized or not. The alternative (treat a customized deleted file as a negotiated conflict,
-# like a modified one) sounds more careful but isn't — conflict detection here is purely
-# per-file with no concept of "feature", so a multi-release upgrade could surface several
-# unrelated customized files as one flat, ungrouped list to reason about individually. Tolerable
-# for an ordinary modified file; not worth it for a file the template doesn't support at all
-# anymore. It's still visible either way, in the "Changed machinery files" diff printed above.
+# Deletions (status D — the template no longer ships this path) are tracked separately from the
+# CHANGED_FILES conflict detection below, but a customized path that the template deletes or
+# renames away IS routed into CONFLICTS (see the check inside the loop) rather than applied blind
+# — the same "you changed it, so it needs review" rule every other bucket in this file already
+# follows. Only a deletion of a path you never touched applies automatically.
 CHANGED_FILES=()
 DELETED_FILES=()
 KEPT_FILES=()
+CONFLICTS=()
 while IFS=$'\t' read -r status path; do
   [ -n "${path:-}" ] || continue
   if [ "$status" = "D" ]; then
@@ -109,7 +114,19 @@ while IFS=$'\t' read -r status path; do
     # dry run would have deleted 8 files the owner had added (a personal role file, a set of
     # scripts) although the template deleted nothing in that range.
     if [ "$CURRENT" != "unknown" ] && git -C "$PERMA" cat-file -e "$CURRENT:$path" 2>/dev/null; then
-      DELETED_FILES+=("$path")
+      # The template shipped this path at your recorded version and no longer does — a genuine
+      # deletion (or rename-away) candidate. But if YOU changed this path since $CURRENT, applying
+      # that unconditionally would silently destroy your edit — no flag, no warning — exactly the
+      # case a modified-but-not-deleted file is already protected from below. Route it to
+      # CONFLICTS instead. Found by adversarial review, 2026-09-28
+      # (axis/runs/2026-09-28-v1.5.0-update-sh-review), live-reproduced twice: a template deletion
+      # and a template rename-away of a file the owner had customised were both previously applied
+      # silently.
+      if git -C "$PERMA" diff --quiet "$CURRENT" HEAD -- "$path" 2>/dev/null; then
+        DELETED_FILES+=("$path")
+      else
+        CONFLICTS+=("$path")
+      fi
     else
       KEPT_FILES+=("$path")
     fi
@@ -132,7 +149,8 @@ fi
 # "needs review" on every run, even when already up to date, so real conflicts hid among permanent
 # false ones. It must NOT simply fall through to "applied" either — that would overwrite your
 # customisation with a template version that has not changed. Hence its own bucket.
-CONFLICTS=()
+# CONFLICTS is declared and possibly already populated above (customized deletions/renames) —
+# not re-initialized here, so those entries survive.
 YOURS_FILES=()
 if [ "$CURRENT" != "unknown" ] && git -C "$PERMA" rev-parse -q --verify "$CURRENT" >/dev/null 2>&1; then
   for path in "${CHANGED_FILES[@]:-}"; do
@@ -161,7 +179,13 @@ fi
 
 if [ "${#YOURS_FILES[@]}" -gt 0 ]; then
   echo ""
-  echo "🛡  ${#YOURS_FILES[@]} file(s) you customised that the template did not change — left exactly as they are:"
+  # "left exactly as they are" is accurate for the ordinary case (path unchanged); if you renamed
+  # or removed this path yourself since $CURRENT (the template never touched it either way), this
+  # script made no change to it — nothing lost, your content survives wherever you put it, but the
+  # path below may no longer exist here. Wording loosened after adversarial review, 2026-09-28
+  # (axis/runs/2026-09-28-v1.5.0-update-sh-review) found the old blanket phrasing was inaccurate
+  # for that case.
+  echo "🛡  ${#YOURS_FILES[@]} file(s) you customised that the template did not change — this script made no change to them (if you've since renamed or removed one yourself, that's untouched too — it just may not exist at the path below anymore):"
   printf '  %s\n' "${YOURS_FILES[@]}"
 fi
 
@@ -186,6 +210,22 @@ if [ "$MODE" = "dry-run" ]; then
   echo "Dry run only — nothing changed. Re-run with --apply to fetch and commit the non-conflicted machinery changes."
   exit 0
 fi
+
+# Only chmod the files THIS run actually checks out — the previous unscoped
+# `chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"*` set the same executable bit on every
+# runtime/.githooks file whether this run touched it or not (KEPT, YOURS, untouched alike),
+# leaving the working tree dirty after every --apply and blocking the very next --apply (which
+# refuses to run over uncommitted changes) — exactly the "resolve a conflict, then re-run"
+# workflow this release is built around. Found by adversarial review, 2026-09-28
+# (axis/runs/2026-09-28-v1.5.0-update-sh-review), live-reproduced.
+chmod_applied_scripts() {  # chmod_applied_scripts <path>...
+  local f
+  for f in "$@"; do
+    case "$f" in
+      runtime/*.sh|.githooks/*) [ -f "$PERMA/$f" ] && chmod +x "$PERMA/$f" ;;
+    esac
+  done
+}
 
 # --- apply: only files the template changed and you did not; conflicts wait for /perma-upgrade, YOURS stay put ---
 APPLY_FILES=()
@@ -230,7 +270,7 @@ for f in "${APPLY_FILES[@]:-}"; do
   [ "$f" = "runtime/update.sh" ] && self_updated=true && break
 done
 if $self_updated; then
-  chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* 2>/dev/null
+  chmod_applied_scripts "${APPLY_FILES[@]:-}"
   git -C "$PERMA" add "${APPLY_FILES[@]}" 2>/dev/null
   if ! git -C "$PERMA" diff --cached --quiet; then
     git -C "$PERMA" commit -q -m "perma-upgrade: machinery refreshed (update.sh itself changed — continuing with the updated script) ($SRC)"
@@ -246,7 +286,7 @@ if $self_updated; then
   exec bash "$PERMA/runtime/update.sh" --apply
 fi
 
-chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* 2>/dev/null
+chmod_applied_scripts "${APPLY_FILES[@]:-}"
 echo "re-running install.sh (re-wires hooks + commands) ..."
 bash "$PERMA/runtime/install.sh"
 mkdir -p "$PERMA/_meta"
@@ -261,6 +301,26 @@ if [ "${#CONFLICTS[@]}" -eq 0 ]; then
 fi
 if [ "${#APPLY_FILES[@]}" -gt 0 ]; then
   git -C "$PERMA" add "${APPLY_FILES[@]}" 2>/dev/null
+fi
+
+# install.sh (just called above) chmod's every runtime/.githooks/bindings script unconditionally
+# as its own regular-install behavior — real, useful there, but it can leave mode-only noise on
+# machinery paths this run didn't otherwise touch. The working tree was guaranteed clean when
+# this script started (the uncommitted-changes guard at the top), so anything dirty now was
+# caused by this run; stage it, scoped to the machinery paths this script is allowed to touch, so
+# it lands in this same commit instead of blocking the very next --apply. Found by adversarial
+# review, 2026-09-28 (axis/runs/2026-09-28-v1.5.0-update-sh-review), live-reproduced.
+#
+# `git add -A -- <pathspecs>` is all-or-nothing: ONE pathspec in the list that matches nothing
+# (a genuinely empty PATHS entry, e.g. no design/ on an older install) makes git stage NOTHING at
+# all from the whole list, silently, since this call is `2>/dev/null` — found live while verifying
+# this very fix, not assumed. Filter to paths that actually exist first.
+EXISTING_PATHS=()
+for p in "${PATHS[@]}"; do
+  [ -e "$PERMA/$p" ] && EXISTING_PATHS+=("$p")
+done
+if [ "${#EXISTING_PATHS[@]}" -gt 0 ]; then
+  git -C "$PERMA" add -A -- "${EXISTING_PATHS[@]}" 2>/dev/null
 fi
 
 if git -C "$PERMA" diff --cached --quiet; then

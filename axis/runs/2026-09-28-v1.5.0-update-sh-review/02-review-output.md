@@ -1,3 +1,55 @@
+## Outcome (2026-09-28, later) — every finding fixed and independently re-verified
+
+All six findings below were fixed on the `v1.5.0` branch and re-verified against the exact (or an
+equivalent, corrected) reproduction each finding describes — not just re-read:
+
+- **CRITICAL (deletion/rename of a customised file)** — fixed: the deletion loop in
+  `runtime/update.sh` now checks for owner customisation the same way `CONFLICTS` does, routing a
+  customised path there instead of applying the deletion/rename blind. Re-reproduced both original
+  fixtures (a) and (b): the owner's content now survives and the file is correctly flagged, not
+  silently destroyed.
+- **HIGH (dirty tree blocks the next `--apply`)** — fixed, in two parts: `update.sh`'s own two
+  `chmod +x` calls are now scoped to `APPLY_FILES` only, and a catch-all `git add -A` (scoped to
+  the machinery `PATHS`, and itself filtered to paths that actually exist — see below) absorbs any
+  residual mode-bit noise from `install.sh`'s own unrelated blanket `chmod` before the final
+  commit. **A real defect was found in the first version of this fix during verification**: an
+  unfiltered `git add -A -- "${PATHS[@]}"` fails entirely, silently (all-or-nothing pathspec
+  resolution, masked by `2>/dev/null`), the moment any single `PATHS` entry doesn't exist on that
+  install (e.g. no `design/` directory) — caught by re-running the exact HIGH-finding reproduction
+  against the "fixed" code and seeing it still fail, then tracing with `bash -x` to find why.
+  Corrected by filtering to existing paths first. Re-verified: working tree is clean after
+  `--apply`, and a second consecutive `--apply` completes instead of being blocked.
+- **MEDIUM (`role_lines()` relative-path resolution)** — fixed: a bare relative `.role` value now
+  resolves against `$PERMA/runtime` explicitly. **The review's own suggested fix
+  (`file="$PERMA/$role"`) was wrong** — its own reproduction had placed the file under
+  `$PERMA/runtime/roles/`, one level deeper — caught by re-running that exact reproduction against
+  the literal suggested fix and watching it still fail to find the file. Corrected to
+  `$PERMA/runtime/$role`, matching where the `pm` branch itself resolves. Re-verified: the full
+  9-case matrix (missing, `none`, `pm`, absolute, `~/`, padded whitespace, missing-file, override,
+  and now a bare relative value from an arbitrary cwd) all pass.
+- **MEDIUM (`caffeinate` failure message)** — fixed: an explicit `command -v caffeinate` check now
+  precedes the wrapped invocation, with its own log line and a distinct alert that says "NOT a
+  token/auth problem." Re-verified in isolation (the guard block alone, to avoid any risk of
+  invoking a real `claude` session during testing — see the note below).
+- **LOW (rename-away wording)** — fixed: the `YOURS_FILES` message no longer implies the path
+  still exists.
+- **LOW (missing `_meta/VERSION` diagnostic leak)** — fixed: `2>/dev/null` now precedes the `<`
+  redirect, verified empirically (not just reasoned about) to actually suppress the leak.
+
+**Left as-is, deliberately**: LOW finding #5 (awake-gate alert visibility depends on the opt-in
+events system) — the review itself describes this as consistent with every other failure path in
+the file, not a discrete defect with a proposed fix, so no code change was made.
+
+**A verification note, in the interest of the same honesty this review asked of the original
+release**: an early attempt at testing the `caffeinate` fix accidentally invoked a real `claude`
+CLI process (a PATH-restriction test didn't actually exclude the real binary), which ran briefly
+against a scratch `PERMA_DIR` before hitting a permission wall on its own and stopping without
+writing anything. Confirmed via `git status` on both `~/permanence` and this repo that nothing
+real was touched. Subsequent tests isolated the guard logic in a standalone script instead of
+running the real script end-to-end, precisely to eliminate this risk.
+
+---
+
 # v1.5.0 review — `update.sh`, `nightly-consolidate.sh`, `install.sh`, `session-start.sh`
 
 Axes applied: Genba + Shoshin (verify against real code, read fresh) · Chaos Engineering + Andon
