@@ -147,6 +147,16 @@ jobs:
           # Tag the base too, not just the target — conflict detection resolves _meta/VERSION as
           # a git ref to tell "you customized this" from "the template changed this"; with no
           # base tag it fails open and flags everything, which would make this test meaningless.
+          #
+          # Delete any existing tag of that name first: this step runs on `main` too (push
+          # trigger, not just pull_request), and immediately after a merge, _meta/VERSION already
+          # equals the release that "Tag Release" (this same workflow) just tagged for real — this
+          # checkout already has that real tag (fetch-depth: 0 above pulls it in), so creating a
+          # second one of the same name fails outright with "tag already exists", crashing this
+          # whole job on every release, forever. Only ever removes a LOCAL tag ref in this
+          # ephemeral runner's own checkout — never touches the real tag on the remote. Found on
+          # a real post-merge run of v1.5.0, 2026-09-28.
+          git tag -d "$BASE_VERSION" 2>/dev/null || true
           git tag "$BASE_VERSION" HEAD
 
           echo "hypothetical new tracked path, CI test only" > TESTFILE.md
@@ -240,6 +250,12 @@ jobs:
           # real, not assumed. A real v1.4.0 tag only exists once this PR actually merges (the
           # auto-tag job creates it then); simulate that state locally so the OLD script sees a
           # real target to reach for, matching what it will actually see post-merge.
+          #
+          # Delete any existing tag of that name first -- the same reason as the base-tag step
+          # above: this job also runs on `main` after a merge, where THIS_VERSION already equals
+          # the release "Tag Release" just tagged for real, and this checkout already has that
+          # real tag. Local-only deletion, never touches the remote tag.
+          git tag -d "$THIS_VERSION" 2>/dev/null || true
           git tag "$THIS_VERSION" "$THIS_SHA"
 
           git config user.email "ci@example.com"
