@@ -71,7 +71,6 @@ No **Migration notes** — nothing in any existing stream changes shape. To take
 files yourself: `echo pm > ~/permanence/runtime/.role`, and on a laptop `echo 16:45 >
 ~/permanence/runtime/.consolidate-time` (then re-run `install.sh`).
 
-
 ## [1.4.0] — the binding contract: decoupling Permanence from any one AI tool's mechanics
 
 **New in `SPEC.md` §3: the binding contract.** Permanence's support for an AI tool is now defined

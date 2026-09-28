@@ -67,6 +67,8 @@ fi
 role_lines() {  # role_lines <dir-whose-WIP.md-to-mention>
   local role file
   role="${PERMA_ROLE:-$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.role" 2>/dev/null | head -n1 | tr -d '[:space:]')}"
+  # shellcheck disable=SC2088  # the "~/"* branch below deliberately matches a literal "~/"
+  # prefix stored in .role (a config value, not a shell word) and expands it via $HOME itself.
   case "$role" in
     ""|none) return 0 ;;
     pm)      file="$PERMA/runtime/roles/pm.md" ;;
