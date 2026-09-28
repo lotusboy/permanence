@@ -16,6 +16,61 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.5.0] — roles, a configurable nightly time, and upgrades that never touch what is yours
+
+**New: roles.** An optional standing role for Claude, chosen per install. `runtime/.role` holds one line:
+`none` (or no file) for no role — exactly as before; `pm` for the shipped `runtime/roles/pm.md`; or a path
+to a role file you wrote yourself. Session-start points every session at it with one line, in stream and
+perma-meta sessions alike. The shipped **PM role** makes Claude the owner's project manager: it holds the
+thread in each stream's `WIP.md`, decides the small things, puts the big ones to the owner, and asks before
+spending on subagents — naming the cost of any fan-out, and never retrying a failed one automatically.
+Roles are opt-in; a new install has none, and `install.sh` prints a one-line hint. Every binding passes
+session-start's output through unparsed, so Cursor, Devin and Antigravity get this with no change.
+
+**New: the nightly run time is a setting.** `runtime/.consolidate-time` (`HH:MM`, 24-hour); no file means
+05:30, as before. `install.sh` reads it and `perma-help.sh` shows it. A laptop that sleeps overnight should
+pick a time it is normally open. The template ships no such file, so your time survives upgrades instead of
+conflicting with `install.sh` on every release.
+
+**Fixed: `/perma-upgrade` could delete files you added.** Deletions were worked out from your current files
+against the new release, so any file you had added — one the template never shipped — looked like one the
+template had removed, and deletions applied "customized or not". A v1.2.1 → v1.4.0 dry run would have
+deleted eight such files although the template removed nothing in that range. A file now counts as deleted
+only if the template shipped it at your recorded version; anything else is listed as **kept**.
+
+**Fixed: template renames were silently dropped on upgrade.** A rename line carries two paths, which were
+read as one path containing a tab; the checkout failed quietly, so v1.2.2's `templates/*.template.md` rename
+never reached existing installs. Renames now arrive as delete-old + add-new.
+
+**Fixed: every customised file was flagged "needs review" on every upgrade, even when up to date.** Files
+are now sorted three ways against your recorded version: you and the template both changed it → needs
+review; only you changed it → **kept as it is**, reported, and no longer holds the version back; only the
+template changed it → applied. The middle case has its own bucket rather than falling through to "applied",
+which would have overwritten your change with an unchanged template file.
+
+**Fixed: the nightly consolidate stalled when the machine slept mid-run.** On a laptop, the scheduled run
+fired during a dark wake, the machine slept again, fanned-out subagents stalled, and each was retried on the
+next wake — double the spend, no report. An **awake gate** now waits until someone is actually using the
+machine (keyboard/trackpad idle under 10 minutes) and skips the day after 3 hours rather than start a run
+that will stall; the run itself is wrapped in `caffeinate -i`. The gate reads idle time from
+`/usr/sbin/ioreg` by absolute path — launchd's `PATH` has no `/usr/sbin` — and treats an unreadable probe as
+an error, never as an idle machine.
+
+**Fixed: the headless consolidate could die on its first step.** Step 1 of `/perma-consolidate` said
+"confirm this is a git repo" without naming a command; an unattended run that chose `git rev-parse` waited
+on an approval nobody could give. It now names `ls -d ~/permanence/.git`, which the nightly allowlist grants.
+
+**New: `_personal/claude/install-personal.sh`.** If present and executable, `install.sh` runs it at the end,
+so an owner can keep personal Claude config (skills, hooks, agents, a personal CLAUDE.md block) versioned in
+their own Permanence. `_personal/` is the owner's area and never part of the template; `SPEC.md` now says so.
+
+`SPEC.md` gains a *Per-install settings, roles, and `_personal/`* section, and its upgrade trigger states the
+three-way rule.
+
+No **Migration notes** — nothing in any existing stream changes shape. To take up the new settings, write the
+files yourself: `echo pm > ~/permanence/runtime/.role`, and on a laptop `echo 16:45 >
+~/permanence/runtime/.consolidate-time` (then re-run `install.sh`).
+
 ## [1.4.0] — the binding contract: decoupling Permanence from any one AI tool's mechanics
 
 **New in `SPEC.md` §3: the binding contract.** Permanence's support for an AI tool is now defined

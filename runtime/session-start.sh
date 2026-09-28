@@ -58,8 +58,43 @@ if [ -z "$BEST_STREAM" ]; then
   exit 0
 fi
 
+# --- role (v1.5.0): an optional standing role for Claude, chosen per install ---
+# runtime/.role holds one line: `none` (or no file at all) = no role, exactly as before v1.5.0;
+# `pm` = the shipped runtime/roles/pm.md; anything else = a path to the owner's own role file.
+# PERMA_ROLE overrides the file, as PERMA_UPDATE_SOURCE does for .update-source. The template never
+# ships a .role file, so an owner's choice is theirs and survives every upgrade untouched.
+# Output stays within this script's contract: one short pointer line, never the role file's contents.
+role_lines() {  # role_lines <dir-whose-WIP.md-to-mention>
+  local role file
+  role="${PERMA_ROLE:-$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.role" 2>/dev/null | head -n1 | tr -d '[:space:]')}"
+  # shellcheck disable=SC2088  # the "~/"* branch below deliberately matches a literal "~/"
+  # prefix stored in .role (a config value, not a shell word) and expands it via $HOME itself.
+  case "$role" in
+    ""|none) return 0 ;;
+    pm)      file="$PERMA/runtime/roles/pm.md" ;;
+    "~/"*)   file="$HOME/${role#\~/}" ;;
+    /*)      file="$role" ;;
+    *)       # A bare relative value (e.g. "roles/custom.md", by analogy with the shipped "pm" ->
+             # runtime/roles/pm.md convention) used to resolve against this process's cwd — for
+             # the real SessionStart hook that's the project workspace the session opened in,
+             # essentially never $PERMA/runtime, so it silently never resolved. Resolve against
+             # $PERMA/runtime explicitly instead, matching where "pm" itself resolves. Found by
+             # adversarial review, 2026-09-28 (axis/runs/2026-09-28-v1.5.0-update-sh-review),
+             # live-reproduced.
+             file="$PERMA/runtime/$role" ;;
+  esac
+  if [ ! -f "$file" ]; then
+    echo "[perma] runtime/.role names a role file that does not exist ($file) — no role applied. Tell the owner once."
+    return 0
+  fi
+  echo "[perma] ROLE: read $file now and follow it for the whole session — the owner chose this role for Claude in runtime/.role."
+  [ -f "$1/WIP.md" ] && echo "[perma] This workspace's working board is $1/WIP.md."
+  return 0
+}
+
 if [ "$BEST_STREAM" = "perma-meta" ]; then
   echo "[perma] Perma-meta context (this workspace matched a perma-meta row in the registry). No customer stream loads here. /perma-brief, /perma-consolidate, /perma-orchestrate, /perma-contents are available; Permanence root is ~/permanence."
+  role_lines "$PERMA/_meta"
   exit 0
 fi
 
@@ -67,4 +102,5 @@ STREAM_DIR="$PERMA/$BEST_STREAM"
 echo "[perma] Registered stream for this workspace: $BEST_STREAM ($STREAM_DIR)"
 echo "[perma] At session start, read the stream's operational files now: PROJECT.md and QUESTIONS.md, plus STRATEGY.md / PEOPLE.md if present, and the most recent entries of LOG.md (tail, not full history)."
 echo "[perma] Standing rule: this stream is the owner's externalised working memory. Update it whenever something material shifts (meetings, decisions, scope changes, Slack exchanges that move the picture) — without being asked. Never copy Permanence content or paths into team-facing artefacts or project repos (one-way flow). Anything persisted to Permanence is written in a gentle, accurate register."
+role_lines "$STREAM_DIR"
 exit 0

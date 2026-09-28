@@ -71,6 +71,59 @@ if [ -f "$PERMA/.perma-lock" ]; then
   exit 0
 fi
 
+# ── Awake gate ───────────────────────────────────────────────────────────────────────────────
+# Wait until the machine is genuinely IN USE before starting, and skip the day if it never is.
+#
+# WHY: launchd fires on schedule regardless of what the Mac is doing. At that moment it may be in
+# a Power Nap dark wake rather than properly awake. A run started in a dark wake gets a few minutes
+# before the machine sleeps again; every fanned-out subagent then stalls mid-analysis and the parent
+# retries each one on the next wake. That is exactly what happened on 16 September: 32 agent runs to
+# complete 5 of 16 streams, and no report written at all — double the spend for no artefact. Six of
+# the seven runs from 10-16 September produced no report.
+#
+# HOW: HIDIdleTime is nanoseconds since the last keyboard or trackpad input. Nobody types during a
+# dark wake, so it climbs; a machine being worked at reads seconds. That makes it a better "safe to
+# start" signal than any power-state probe, because it answers "is a human here to keep this awake"
+# rather than merely "is the CPU executing right now".
+#
+# The poll loop doubles as the sleep-waiter. A sleeping Mac suspends this process entirely and
+# resumes it on wake, so one `sleep 60` spans the whole nap and the next check lands after the
+# machine is back. Nothing needs to schedule a wake or detect one.
+AWAKE_IDLE_MAX=600        # seconds since last input that still counts as "in use"
+AWAKE_DEADLINE_MIN=180    # give up and skip the day if still not in use after this long
+
+_idle_seconds() {
+  # Absolute path: ioreg lives in /usr/sbin, which is NOT on the PATH this script sets for launchd.
+  # A bare `ioreg` worked in an interactive shell and failed under launchd — which blocked every
+  # run from 16 to 22 September, each logged as "machine not in use".
+  /usr/sbin/ioreg -c IOHIDSystem 2>/dev/null |
+    awk -F'= ' '/HIDIdleTime/ {print int($2/1000000000); exit}'
+}
+
+GATE_UNTIL=$(( $(date +%s) + AWAKE_DEADLINE_MIN * 60 ))
+GATE_WAITED=0
+while :; do
+  IDLE="$(_idle_seconds)"
+  # Unreadable idle time must mean "do not start", never "start anyway" — a broken probe should
+  # cost a skipped day, not another stalled 32-agent run.
+  case "$IDLE" in (*[!0-9]*|"") IDLE=999999;; esac
+  [ "$IDLE" -le "$AWAKE_IDLE_MAX" ] && break
+  if [ "$(date +%s)" -ge "$GATE_UNTIL" ]; then
+    if [ "$IDLE" -eq 999999 ]; then
+      note "ERROR: the awake gate could not read idle time (/usr/sbin/ioreg returned nothing) for ${AWAKE_DEADLINE_MIN}m — the probe is broken, not the machine idle. No run started."
+      alert "Nightly consolidate BLOCKED $(date '+%Y-%m-%d'): the awake gate cannot read idle time, so it will skip every day until fixed. See runtime/logs/nightly-consolidate.log."
+      exit 1
+    fi
+    note "SKIPPED: machine not in use in the ${AWAKE_DEADLINE_MIN}m after the scheduled start (idle ${IDLE}s) — declined to start a run that would stall on sleep. Nothing is wrong; the next attempt is tomorrow's schedule."
+    alert "Nightly consolidate SKIPPED $(date '+%Y-%m-%d'): the laptop was not in use during the ${AWAKE_DEADLINE_MIN}-minute window after its scheduled start, so no report was written today. This is the awake gate working as intended, not a failure."
+    exit 0
+  fi
+  [ "$GATE_WAITED" -eq 0 ] && note "waiting: machine idle ${IDLE}s — holding until it is in use (deadline ${AWAKE_DEADLINE_MIN}m)"
+  GATE_WAITED=1
+  sleep 60
+done
+[ "$GATE_WAITED" -eq 1 ] && note "resumed: machine in use again (idle ${IDLE}s) — starting"
+
 note "run start"
 cd "$PERMA" || exit 1
 
@@ -85,14 +138,43 @@ mkdir -p "$PERMA/.consolidation"
 # "$PERMA" itself — the first two alone silently broke any install using PERMA_DIR to point somewhere
 # other than $HOME/permanence, since neither literal matches a custom location.
 #
-# Write is scoped to .consolidation/ ONLY — this pass is documented (SPEC.md, perma-consolidate.md)
-# as read-only except for its own report file, and an unscoped "Write" would let an unattended,
-# nobody-watching run touch anything, not just its report. Same three-spelling reason as the Bash
-# grants below.
-"$CLAUDE_BIN" -p "/perma-consolidate" \
+# File writes are scoped to .consolidation/ ONLY — this pass is documented (SPEC.md,
+# perma-consolidate.md) as read-only except for its own report file, and an unscoped grant would let
+# an unattended, nobody-watching run touch anything, not just its report. Same three-spelling reason
+# as the Bash grants below.
+#
+# The rule MUST be spelled Edit(path), not Write(path). File-permission checks only evaluate
+# Edit(...) rules, and an Edit rule covers every file-editing tool (Write, Edit, NotebookEdit). A
+# Write(path) rule grants the tool NAME but its path spec is silently ignored, so the write falls
+# through to a prompt — and headless there is nobody to approve it. That is exactly what broke the
+# 10, 11 and 12 September runs: all three analysed fine, then could not save the report.
+# The 12 September run fanned out to three background analysis agents, hit the default 600s wait
+# ceiling, and was terminated mid-flight before it could assemble the report. The documented escape
+# is CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 (wait indefinitely) — but this is an unattended launchd
+# job with no `timeout` on macOS to bound it, so an indefinite wait risks a job that never returns.
+# 30 minutes is generous for a fan-out over ~14 streams and still guarantees the run ends.
+export CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=1800000
+
+# caffeinate -i holds off IDLE sleep for the duration of the run. The gate above already proved a
+# human was present when this started; this covers them walking away mid-run. It deliberately does
+# NOT try to fight a closed lid — nothing in userspace can, which is why the gate exists at all.
+#
+# Checked explicitly, with its own distinct log/alert line, rather than letting a missing
+# `caffeinate` fall through as a plain nonzero exit from this whole pipeline: the generic handler
+# below (`RC -ne 0`) says "most likely the subscription token expired" — actively wrong and
+# misleading for this specific cause, sending the owner to re-authenticate when the real fix is
+# unrelated. Found by adversarial review, 2026-09-28
+# (axis/runs/2026-09-28-v1.5.0-update-sh-review), live-reproduced (RC 127, generic message fired).
+if ! command -v caffeinate >/dev/null 2>&1; then
+  note "ERROR: caffeinate not found on PATH — cannot hold off idle sleep for this run, so it did not start"
+  alert "Nightly consolidate did NOT run on $(date '+%Y-%m-%d') — caffeinate is not on PATH (macOS-only tool; check PATH or the machine itself). NOT a token/auth problem. Log: runtime/logs/nightly-consolidate.log."
+  exit 69
+fi
+
+caffeinate -i "$CLAUDE_BIN" -p "/perma-consolidate" \
   --permission-mode default --model sonnet \
   --allowedTools "Read" "Glob" "Grep" \
-    "Write($PERMA/.consolidation/*)" "Write($HOME/permanence/.consolidation/*)" "Write(~/permanence/.consolidation/*)" \
+    "Edit($PERMA/.consolidation/*)" "Edit($HOME/permanence/.consolidation/*)" "Edit(~/permanence/.consolidation/*)" \
     "Bash(git -C $PERMA log:*)" "Bash(git -C $HOME/permanence log:*)" "Bash(git -C ~/permanence log:*)" "Bash(git log:*)" \
     "Bash(date:*)" "Bash(ls:*)" \
     "Bash(mkdir -p $PERMA/.consolidation:*)" "Bash(mkdir -p $HOME/permanence/.consolidation:*)" "Bash(mkdir -p ~/permanence/.consolidation:*)" \

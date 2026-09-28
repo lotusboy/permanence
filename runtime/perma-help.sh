@@ -106,7 +106,8 @@ for f in "$CMDS"/perma-*.md; do
 done
 
 printf '\n\033[1mRunning in the background\033[0m\n'
-job_loaded perma-consolidate     && on "nightly consolidate (05:30) — writes a report for you to review" \
+CT="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.consolidate-time" 2>/dev/null | head -n1 | tr -d '[:space:]')"
+job_loaded perma-consolidate     && on "nightly consolidate (${CT:-05:30}) — writes a report for you to review" \
                                  || off "nightly consolidate — not loaded"
 job_loaded perma-shutdown-nudge  && on "weekday nudge to run /perma-shutdown — $PERMA/runtime/shutdown-nudge.sh --uninstall to stop" \
                                  || off "weekday /perma-shutdown nudge — off ($PERMA/runtime/shutdown-nudge.sh --install 17:00)"

@@ -22,7 +22,9 @@ surface what's there to reconcile; you don't invent.
 
 ## Preconditions
 
-1. Confirm `~/permanence` exists and is a git repo. If not, say so plainly and stop.
+1. Confirm `~/permanence` exists and is a git repo with exactly `ls -d ~/permanence/.git`. If not, say so plainly and stop.
+   (Use that command, not `git rev-parse` or `git status`: the unattended nightly run grants
+   `ls` but not those, and a denied command there waits on a prompt nobody can answer.)
 2. That's it — no clean-tree requirement, because this pass writes nothing into the
    repo. (If the working tree has uncommitted edits, just note that the analysis
    reflects current file contents, committed or not.)

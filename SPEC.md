@@ -42,9 +42,31 @@ Any harness operating this Permanence must honour six triggers:
 - **Wind-down (write, human-triggered).** At the end of a working day (`/perma-shutdown`, optionally given a stream name for a working-directory-less session): refresh the active stream's *current state* — `PROJECT.md` surgically, `QUESTIONS.md` for newly-open threads, deliberately **not** `LOG.md` (chronology is captured elsewhere; a daily rewrite would churn it). Resume points must carry an exact re-entry anchor, since their purpose is that tomorrow's reader need not reconstruct where the work stopped. Then, if the workspace resolves to a group under `_meta/GROUPS.md`, follow that group's task doc with `role` + `members` as inputs. Strictly a wind-down: no new work, no investigation, no fixes. Its morning counterpart (`/perma-startup`) is read-only orientation for the same stream. Switching the active stream mid-session must not silently drop whatever the conversation surfaced about the one being left — offer to wind it down first.
 - **On-schedule (consolidate).** Nightly read-only convergent pass (`/perma-consolidate`) producing a report under `.consolidation/`; a human-in-the-loop review (`/perma-consolidate-review`) applies accepted items under invariant 5. Unreviewed reports and failed runs are surfaced by the morning brief — the schedule must never depend on remembering.
 - **On-commit (guard + refresh).** Pre-commit: the people-rule heuristic guard. Post-commit: regenerate derived `CONTENTS.md` indexes. (Reserved, deliberately unbuilt: an orchestration pressure gauge that would trigger `/perma-orchestrate` automatically instead of leaving it human-triggered.)
-- **On-upgrade (read + propose, human-triggered).** User-triggered (`/perma-upgrade`), never scheduled — pulling a new template release is a deliberate act, not ambient maintenance. Reads the configured source (`runtime/.update-source`) and the installed version (`_meta/VERSION`), fetches and diffs against the latest release, and proposes a plan: machinery changes to apply, any file the owner has customized that the template also changed (negotiated per file, never silently overwritten), and any `CHANGELOG.md` migration note that may apply to the owner's actual streams. Applies only on explicit accept, under invariant 5 — machinery and any accepted stream-content migration land as separate, clearly-labeled commits. Implemented in `runtime/update.sh` (the mechanical dry-run/apply engine) + `runtime/commands/perma-upgrade.md` (the negotiation and migration-notes judgment layer).
+- **On-upgrade (read + propose, human-triggered).** User-triggered (`/perma-upgrade`), never scheduled — pulling a new template release is a deliberate act, not ambient maintenance. Reads the configured source (`runtime/.update-source`) and the installed version (`_meta/VERSION`), fetches and diffs against the latest release, and proposes a plan: machinery changes to apply, any file the owner has customized that the template also changed (negotiated per file, never silently overwritten) — while a file the owner customized that the template did *not* change, and any file the owner added that the template never shipped, are kept exactly as they are, and any `CHANGELOG.md` migration note that may apply to the owner's actual streams. Applies only on explicit accept, under invariant 5 — machinery and any accepted stream-content migration land as separate, clearly-labeled commits. Implemented in `runtime/update.sh` (the mechanical dry-run/apply engine) + `runtime/commands/perma-upgrade.md` (the negotiation and migration-notes judgment layer).
 
 A separate, divergent pass — `/perma-orchestrate` — is **event/human-triggered, never scheduled** (an automatic trigger would need the pressure gauge noted above, which doesn't exist yet): it proposes cross-stream emergent hypotheses into `_meta/emergent.md` and never edits source streams.
+
+### Per-install settings, roles, and `_personal/`
+
+Three one-line files under `runtime/` configure an install. **The template ships none of the last two**, so
+an owner's value is theirs and no upgrade ever touches it (a missing file means the default):
+
+| File | Holds | Default when missing |
+|---|---|---|
+| `runtime/.update-source` | the template's git URL, for `/perma-upgrade` (`PERMA_UPDATE_SOURCE` overrides) | pre-filled on a clone of the public template |
+| `runtime/.role` | `none`, `pm`, or a path to the owner's own role file (`PERMA_ROLE` overrides) | `none` — no role |
+| `runtime/.consolidate-time` | the nightly run time, `HH:MM` 24-hour, read by `install.sh` | `05:30` |
+
+**Roles.** A role is a standing instruction file a session follows for its whole length. Session-start
+points the session at it with one line — never its contents — in stream and perma-meta sessions alike.
+Permanence ships one, `runtime/roles/pm.md` (Claude as the owner's project manager: holds the thread in
+`WIP.md`, decides small things, puts big ones to the owner, asks before spending on agents). An owner may
+write their own and put its path in `.role`. Roles are opt-in: a new install has none.
+
+**`_personal/`** is the owner's own area and never part of the template. If
+`_personal/claude/install-personal.sh` exists and is executable, `install.sh` runs it at the end, so an
+owner can keep personal Claude config (skills, hooks, agents, a personal CLAUDE.md block) versioned in their
+own Permanence and reinstalled on every run.
 
 ### The binding contract
 

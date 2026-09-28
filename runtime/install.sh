@@ -40,7 +40,17 @@ source "$PERMA/runtime/schedule-task.sh"
 # possibility — "/Users/Anna Smith") word-splits at that second parse: launchd tried to run
 # "/Users/Anna" as the command with "Smith/permanence/..." as its argument, confirmed by running
 # it. Embedding the quote characters now is what survives that second parse.
-schedule_task "perma-consolidate" "\"$PERMA\"/runtime/nightly-consolidate.sh >> \"$PERMA\"/runtime/logs/nightly-consolidate.log 2>&1" "daily 05:30"
+# The run time is a per-install setting (v1.5.0): runtime/.consolidate-time holds one line, HH:MM.
+# No file (the template ships none) means 05:30, as before. A laptop that sleeps overnight wants a
+# time when it is normally open — the awake gate in nightly-consolidate.sh skips a day it is not.
+CONSOLIDATE_TIME="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.consolidate-time" 2>/dev/null | head -n1 | tr -d '[:space:]')"
+case "$CONSOLIDATE_TIME" in
+  [01][0-9]:[0-5][0-9]|2[0-3]:[0-5][0-9]) ;;
+  "") CONSOLIDATE_TIME="05:30" ;;
+  *)  echo "  FAILED: runtime/.consolidate-time is '$CONSOLIDATE_TIME' — expected HH:MM (24-hour). Using 05:30."
+      INSTALL_FAILED=1; CONSOLIDATE_TIME="05:30" ;;
+esac
+schedule_task "perma-consolidate" "\"$PERMA\"/runtime/nightly-consolidate.sh >> \"$PERMA\"/runtime/logs/nightly-consolidate.log 2>&1" "daily $CONSOLIDATE_TIME"
 
 # Cognitive-debt scan removed (v1.2.0) — nothing here can reschedule it anymore, so clean up a
 # job an earlier install may have left behind. Gated on a job actually existing so this stays
@@ -128,6 +138,17 @@ echo "      $PERMA/runtime/shutdown-nudge.sh --install 17:00   (change the time,
 if [ -s "$PERMA_ATTENTION_FILE" ]; then
   n=$(wc -l < "$PERMA_ATTENTION_FILE" | tr -d ' ')
   echo "  NEEDS ATTENTION: $n standing-instruction file(s) have a malformed perma:begin/end marker and were left untouched — see the WARN line(s) above for which file(s) and how to fix."
+fi
+
+echo "  nightly consolidate: daily at $CONSOLIDATE_TIME (change it: echo HH:MM > $PERMA/runtime/.consolidate-time, then re-run install.sh)"
+if [ -z "$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.role" 2>/dev/null)" ]; then
+  echo "  role: none. Optional — have Claude act as your project manager in every session: echo pm > $PERMA/runtime/.role (see runtime/roles/pm.md)"
+fi
+
+# The owner's personal Claude config (skills, hooks, agents, a personal CLAUDE.md block), if this install
+# keeps one. It lives in _personal/, which never travels with the template; this line only runs it.
+if [ -x "$PERMA/_personal/claude/install-personal.sh" ]; then
+  bash "$PERMA/_personal/claude/install-personal.sh"
 fi
 
 if [ "$INSTALL_FAILED" -eq 0 ]; then
