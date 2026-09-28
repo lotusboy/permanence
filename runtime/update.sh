@@ -62,7 +62,11 @@ LATEST_TAG=$(git -C "$PERMA" tag --merged FETCH_HEAD --sort=-v:refname 2>/dev/nu
 TARGET="${LATEST_TAG:-FETCH_HEAD}"
 echo "installed: $CURRENT  →  latest: ${LATEST_TAG:-"(untagged, using $BRANCH HEAD)"}"
 
-CHANGED=$(git -C "$PERMA" diff --name-status HEAD "$TARGET" -- "${PATHS[@]}" 2>/dev/null)
+# --no-renames: a rename line has TWO tab-separated paths ("R100<TAB>old<TAB>new"), which the
+# `read -r status path` loop below took as one path containing a tab. Checkout of that path failed
+# silently (`|| true`), so upstream's templates/*.md -> *.template.md rename never landed and nothing
+# said so. Without rename detection it arrives as D old + A new, and each half is handled normally.
+CHANGED=$(git -C "$PERMA" diff --no-renames --name-status HEAD "$TARGET" -- "${PATHS[@]}" 2>/dev/null)
 
 # Deliberately no early-exit on CURRENT == LATEST_TAG alone — that string comparison is exactly
 # what let the tracked-path bug this file's own history records go undetected: _meta/VERSION can
@@ -94,22 +98,51 @@ echo "$CHANGED" | sed 's/^/  /'
 # anymore. It's still visible either way, in the "Changed machinery files" diff printed above.
 CHANGED_FILES=()
 DELETED_FILES=()
+KEPT_FILES=()
 while IFS=$'\t' read -r status path; do
   [ -n "${path:-}" ] || continue
   if [ "$status" = "D" ]; then
-    DELETED_FILES+=("$path")
+    # HEAD..TARGET shows a path as "D" whenever HEAD has it and TARGET does not — which is true both
+    # when the template removed it AND when you added it yourself. Only the first is a deletion. A
+    # path counts as template-deleted only if the template shipped it at your recorded version
+    # ($CURRENT). Anything else is yours, and is kept. Found 23 September 2026: a v1.2.1 -> v1.4.0
+    # dry run would have deleted 8 files the owner had added (a personal role file, a set of
+    # scripts) although the template deleted nothing in that range.
+    if [ "$CURRENT" != "unknown" ] && git -C "$PERMA" cat-file -e "$CURRENT:$path" 2>/dev/null; then
+      DELETED_FILES+=("$path")
+    else
+      KEPT_FILES+=("$path")
+    fi
   else
     CHANGED_FILES+=("$path")
   fi
 done <<< "$CHANGED"
 
-# --- conflict detection: did YOUR history touch a changed path since your recorded version? ---
+if [ "${#KEPT_FILES[@]}" -gt 0 ]; then
+  echo ""
+  echo "🛡  ${#KEPT_FILES[@]} file(s) you added are not in the template and will be KEPT, not deleted:"
+  printf '  %s\n' "${KEPT_FILES[@]}"
+fi
+
+# --- conflict detection: three buckets, decided per file against your recorded version ---
+#   you changed it, the template changed it   -> CONFLICTS  (negotiated in /perma-upgrade)
+#   you changed it, the template did NOT      -> YOURS      (left exactly as it is; nothing to decide)
+#   the template changed it, you did NOT      -> applied
+# Before v1.5.0 the middle case was flagged as a conflict: every customised file was reported as
+# "needs review" on every run, even when already up to date, so real conflicts hid among permanent
+# false ones. It must NOT simply fall through to "applied" either — that would overwrite your
+# customisation with a template version that has not changed. Hence its own bucket.
 CONFLICTS=()
+YOURS_FILES=()
 if [ "$CURRENT" != "unknown" ] && git -C "$PERMA" rev-parse -q --verify "$CURRENT" >/dev/null 2>&1; then
   for path in "${CHANGED_FILES[@]:-}"; do
     [ -n "$path" ] || continue
     if ! git -C "$PERMA" diff --quiet "$CURRENT" HEAD -- "$path" 2>/dev/null; then
-      CONFLICTS+=("$path")
+      if git -C "$PERMA" diff --quiet "$CURRENT" "$TARGET" -- "$path" 2>/dev/null; then
+        YOURS_FILES+=("$path")
+      else
+        CONFLICTS+=("$path")
+      fi
     fi
   done
 else
@@ -124,6 +157,12 @@ else
     echo "  (note: recorded version $CURRENT isn't a known ref here — treating all ${#CHANGED_FILES[@]} changed file(s) as needing review, not applying any blind)"
   fi
   CONFLICTS=("${CHANGED_FILES[@]:-}")
+fi
+
+if [ "${#YOURS_FILES[@]}" -gt 0 ]; then
+  echo ""
+  echo "🛡  ${#YOURS_FILES[@]} file(s) you customised that the template did not change — left exactly as they are:"
+  printf '  %s\n' "${YOURS_FILES[@]}"
 fi
 
 if [ "${#CONFLICTS[@]}" -gt 0 ]; then
@@ -148,12 +187,12 @@ if [ "$MODE" = "dry-run" ]; then
   exit 0
 fi
 
-# --- apply: only the non-conflicted FILES; conflicted ones are left for /perma-upgrade to negotiate ---
+# --- apply: only files the template changed and you did not; conflicts wait for /perma-upgrade, YOURS stay put ---
 APPLY_FILES=()
 for f in "${CHANGED_FILES[@]:-}"; do
   [ -n "$f" ] || continue
   conflicted=false
-  for c in "${CONFLICTS[@]:-}"; do
+  for c in "${CONFLICTS[@]:-}" "${YOURS_FILES[@]:-}"; do
     [ -n "$c" ] && [ "$c" = "$f" ] && { conflicted=true; break; }
   done
   $conflicted || APPLY_FILES+=("$f")

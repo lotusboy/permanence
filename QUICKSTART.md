@@ -81,7 +81,7 @@ This sets up everything global and hands-off. Specifically, it:
 
 - copies the `/perma-*` commands into `~/.claude/commands/`
 - points this repo's `core.hooksPath` at `.githooks` (the people-rule guard + contents refresh)
-- schedules the nightly consolidate (05:30)
+- schedules the nightly consolidate — 05:30 by default; put another time in `runtime/.consolidate-time` (one line, `HH:MM`) and re-run `install.sh`. On a laptop that sleeps overnight, pick a time it is normally open: the run waits for someone to be using the machine and skips the day otherwise
 - merges two hooks and the `~/permanence` permission into `~/.claude/settings.json` — **SessionStart**
   (`session-start.sh`) and **UserPromptSubmit** (`session-load.sh`, the one that actually forces the
   read on your first message)
@@ -135,7 +135,7 @@ A couple of things worth knowing:
 
 **Optional — a weekday reminder.** `~/permanence/runtime/shutdown-nudge.sh --install 17:00` pings you Mon–Fri to run `/perma-shutdown` (`--uninstall` to stop). Worth it in week one, while the habit is still new.
 
-**The nightly tidy needs a token.** `install.sh` schedules a nightly consolidate (05:30) that runs Claude unattended. Scheduled jobs get no shell config, so it can't see your normal login — give it a token of its own:
+**The nightly tidy needs a token.** `install.sh` schedules a nightly consolidate (05:30 unless `runtime/.consolidate-time` says otherwise) that runs Claude unattended. Scheduled jobs get no shell config, so it can't see your normal login — give it a token of its own:
 
 ```bash
 claude setup-token                       # prints a token

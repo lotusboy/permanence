@@ -18,8 +18,9 @@ the plan and applying it belong in the same conversation.
 
 Run `~/permanence/runtime/update.sh` (no `--apply` — dry-run is the default). This is pure git + shell,
 no judgment needed yet: it reports the installed version vs. the latest tag, the changed machinery files,
-which of those (if any) you've customized since your recorded version, and whether `CHANGELOG.md` changed
-in the range.
+which of those need review because **both** you and the template changed them since your recorded version,
+which you customised but the template left alone (reported and kept as they are — nothing to decide),
+which files you added yourself (kept, never deleted), and whether `CHANGELOG.md` changed in the range.
 
 If it says "No update source set", tell the owner and point at `runtime/.update-source` (pre-filled on a
 fresh clone of the public template; only needs setting by hand on a private fork). If it says "Already up
@@ -33,7 +34,7 @@ file needs a decision, CHANGELOG.md has a migration note to check."*
 
 ## Phase 3 — Negotiate conflicts, one at a time (only if `update.sh` flagged any)
 
-For each customized file `update.sh` flagged, show a 3-way comparison: what you started from (the file at
+For each file `update.sh` flagged as needing review (you and the template both changed it), show a 3-way comparison: what you started from (the file at
 your recorded `_meta/VERSION` tag), what you have now (your customized version), and what the template
 wants it to become (the file at the latest tag). Ask, per file:
 
