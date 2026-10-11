@@ -16,6 +16,40 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.7.1] — a tidy-up: one map of everything, and upgrades that deliver the docs
+
+No new features. v1.6.0 more than doubled the machinery, and the map of it had not kept up.
+
+**Docs.**
+
+- New `docs/TOOLS.md`: every command and every script on one page, what each is for, and whether it
+  is core or part of the experimental project team. Six of the seventeen commands were not in the
+  README at all.
+- `SPEC.md` §1 now names every file a stream can gain (`WIP.md`, the three ledgers, `repo/` and what
+  is in it). Four of them were in no specification.
+- The predicted-moves gate's 80 lines moved out of `README.md` into `docs/PREDICT-GATE.md`,
+  unchanged. It is one optional tool and had become a third of the front page.
+- The two design agents no longer point at a conventions file as if every project had one.
+
+**Fixes to upgrading.**
+
+- **Upgrades now deliver `docs/`.** `update.sh` never tracked it, so an upgraded install did not
+  receive `docs/PROJECT-TEAM.md` or `docs/TOOL-SUPPORT.md`, which shipped commands point at. An
+  install that has no `docs/` folder at all receives the whole folder on this upgrade: a top-level
+  folder that is missing entirely is now read as "never delivered", not as "you removed it".
+- **`update.sh --apply` no longer refuses because a stream has an open edit.** It refused on any
+  uncommitted change anywhere, so an open working board or log blocked every upgrade. It now refuses
+  only on uncommitted changes to the machinery, and on anything already staged. This takes effect
+  from the upgrade after this one: the upgrade *to* v1.7.1 is run by the `update.sh` you already
+  have, which still wants a clean tree.
+- **`install.sh` adds the ignore lines the machinery needs** (`__pycache__/`, `*.pyc`,
+  `runtime/.agent-roles-seen`, `.pytest_cache/`) to your `.gitignore` when they are missing. The
+  file is yours and no upgrade replaces it, so after v1.6.0 those files showed as untracked.
+- **Cursor and Devin are detected in `~/.local/bin`** as well as on `PATH`. From a shell without
+  that folder on `PATH`, `install.sh` used to skip both.
+
+No **Migration notes** — nothing in any stream changes shape.
+
 ## [1.7.0] — a health signal that works on any repository
 
 **New: `runtime/health-signal.py`.** Until now `/perma-health` and `/perma-refactor` needed the

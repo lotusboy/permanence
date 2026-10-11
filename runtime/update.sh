@@ -31,12 +31,25 @@ MODE="dry-run"
 
 [ -n "$SRC" ] || { echo "No update source set. Put your template git URL in $PERMA/runtime/.update-source (or export PERMA_UPDATE_SOURCE)."; exit 1; }
 git -C "$PERMA" rev-parse --git-dir >/dev/null 2>&1 || { echo "$PERMA is not a git repo."; exit 1; }
-if [ "$MODE" = "apply" ] && { ! git -C "$PERMA" diff --quiet || ! git -C "$PERMA" diff --cached --quiet; }; then
-  echo "Your Permanence has uncommitted changes — commit or stash them first, then re-run --apply (so the machinery update lands cleanly)."
-  exit 1
-fi
 
-PATHS=(runtime .githooks templates SPEC.md README.md QUICKSTART.md CHANGELOG.md design)   # machinery + the template's own planning docs
+# docs/ joined in v1.7.1: shipped commands and scripts point at docs/PROJECT-TEAM.md and
+# docs/TOOL-SUPPORT.md, and without it an upgraded install never received them.
+PATHS=(runtime .githooks templates docs SPEC.md README.md QUICKSTART.md CHANGELOG.md design)   # machinery + the template's own planning docs
+# Refuse over uncommitted changes to the MACHINERY only. An open edit in one of the owner's streams
+# (a working board, a log) is the normal state of a Permanence in use and is none of this script's
+# business: it stages and commits only the paths above. Anything already STAGED, anywhere, still
+# stops it, because the commit below would sweep it in.
+if [ "$MODE" = "apply" ]; then
+  if ! git -C "$PERMA" diff --cached --quiet; then
+    echo "Your Permanence has staged changes — commit or unstage them first, then re-run --apply (the upgrade's own commit would otherwise include them)."
+    exit 1
+  fi
+  if ! git -C "$PERMA" diff --quiet -- "${PATHS[@]}"; then
+    echo "Your Permanence has uncommitted changes to its machinery — commit or stash them first, then re-run --apply (so the machinery update lands cleanly):"
+    git -C "$PERMA" diff --name-only -- "${PATHS[@]}" | sed 's/^/  /'
+    exit 1
+  fi
+fi
 # 2>/dev/null must come before the < redirect: bash reports a missing input file's "No such file
 # or directory" to whatever stderr is in effect at the moment the < redirect is processed, in
 # left-to-right order — with 2>/dev/null written after it (the original order here), that report
@@ -155,6 +168,14 @@ YOURS_FILES=()
 if [ "$CURRENT" != "unknown" ] && git -C "$PERMA" rev-parse -q --verify "$CURRENT" >/dev/null 2>&1; then
   for path in "${CHANGED_FILES[@]:-}"; do
     [ -n "$path" ] || continue
+    # A whole top-level folder that does not exist here was never delivered, not removed by you:
+    # an install made before upgrades tracked that folder (docs/, until v1.7.1) has no way to have
+    # received it. Its files are plain additions. Without this they read as "you removed it" and
+    # were left out for ever, with the version still advancing.
+    top="${path%%/*}"
+    if [ "$top" != "$path" ] && [ ! -e "$PERMA/$top" ]; then
+      continue
+    fi
     if ! git -C "$PERMA" diff --quiet "$CURRENT" HEAD -- "$path" 2>/dev/null; then
       if git -C "$PERMA" diff --quiet "$CURRENT" "$TARGET" -- "$path" 2>/dev/null; then
         YOURS_FILES+=("$path")
@@ -288,7 +309,14 @@ fi
 
 chmod_applied_scripts "${APPLY_FILES[@]:-}"
 echo "re-running install.sh (re-wires hooks + commands) ..."
+# install.sh may append ignore lines to the owner's .gitignore. They belong in this upgrade's commit,
+# but only when the file had no edits of the owner's waiting in it beforehand.
+IGNORE_WAS_CLEAN=0
+git -C "$PERMA" diff --quiet -- .gitignore 2>/dev/null && IGNORE_WAS_CLEAN=1
 bash "$PERMA/runtime/install.sh"
+if [ "$IGNORE_WAS_CLEAN" = 1 ] && ! git -C "$PERMA" diff --quiet -- .gitignore 2>/dev/null; then
+  git -C "$PERMA" add -- .gitignore
+fi
 mkdir -p "$PERMA/_meta"
 
 # Only advance the recorded version when EVERY changed file in this range actually landed. A
