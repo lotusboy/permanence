@@ -12,3 +12,5 @@ __pycache__/
 !example/.consolidation/**
 _meta/events.jsonl
 _meta/.events-seen/
+runtime/.agent-roles-seen
+.pytest_cache/

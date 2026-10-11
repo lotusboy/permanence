@@ -16,6 +16,108 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.6.0] — an experimental project team: roles, agents, two gated jobs, and the ledgers behind them
+
+**Read this first.** Everything under "the project team" below is **experimental** and **Claude Code
+only**. It was built and used on one repository. It is opt-in per repository: it applies only where
+your stream holds `<stream>/repo/binding.json`, and with no binding nothing about your install
+changes. The Antigravity, Devin and Cursor bindings get neither the agents nor the role enforcement.
+Which other published agents could fill each role has not been surveyed. `docs/PROJECT-TEAM.md` is the
+reference for all of it, including the file shapes.
+
+**New: agent roles.** A role names a job (architect, engineer, reviewer, code review, design review,
+blast radius, count check, absence check, design authoring), not an agent. `runtime/agent-roles.json`
+lists, per role, an ordered list of providers — the first one installed is used — plus how it must be
+dispatched: a forced `model`, a `nested_model` ceiling for agents it spawns itself, text added to its
+prompt, and whether it must leave an `axis/runs/` record. Resolution reads three levels in order: the
+repo binding's `roles`, your own `_personal/agent-roles.json`, then the shipped table
+(`runtime/team_roles.py`). `runtime/agent-roles.py` enforces the table as three Claude Code hooks,
+wired by `bindings/claude-code/wire`: PreToolUse on Agent (resolves `role:<name>`, rewrites model and
+prompt, caps nested spawns), SubagentStop (sends a role's agent back once if its run record is
+missing), and SessionStart `--check-new` (names newly installed agents once, and warns every session
+when a provider in the table has gone missing while its plugin is still installed — the sign of an
+upstream rename). The hook fails open and logs every change to `runtime/logs/agent-roles.log`. The
+shipped table names no private provider; an owner- or employer-specific one goes in
+`_personal/agent-roles.json`, which no upgrade touches.
+
+**New: eight shipped agents**, in `runtime/agents/`: `absence-check`, `count-check`, `blast-radius`
+(read-only checkers), `design-author`, `design-reviewer`, and `architect`, `refactor-engineer`,
+`refactor-reviewer`. The Claude Code wire copies them into `~/.claude/agents/` with an installed-from
+marker, backs up a same-named agent of your own before replacing it, and removes a marked agent whose
+source is gone. An install with no plugins has every role but code review, which falls back to the
+built-in `general-purpose` agent.
+
+**New: three team commands.** `/perma-health` rewrites a repo's health register and lists the parts
+that are ready — it never starts work. `/perma-refactor <part>` restructures one part, every step
+byte-identical except a meaning change the owner named in advance. `/perma-change <work-order id>`
+makes a change behind a predicted-moves gate: the engineer writes every expected output move before
+its first edit, and any move not predicted stops the job. All three run
+`runtime/team-preflight.py` first, which checks the binding and stops before any work if it is wrong.
+`/perma-startup` runs the same preflight in a read-only `startup` mode when it knows the repo folder.
+
+**New: the per-repo binding.** `<stream>/repo/binding.json` holds what the team needs to know about
+one repository — who owns it, its tracker, its gates, its branch forms. It lives in your stream, never
+in the repo, so no repository ever names Permanence (SPEC §2 invariant 1). In a repo another party
+owns, the health watch only drafts a proposal, and a job runs only inside a recorded approval.
+**One piece is not shipped yet:** `/perma-health` and `/perma-refactor` need a command that writes the
+register, and in this release that command is the repo's own. A generic one is planned.
+
+**New: tools a session calls**, documented in `runtime/README.md`, each with tests. All are standard
+library only and keep append-only ledgers in your stream:
+
+- `decision.sh` — records every question put to the owner, the recommendation and the answer, and
+  scores agreement per category. `DECISIONS.md` beside the ledger is the generated view.
+- `spend.sh` — records the measured token figure per agent, groups agents into waves with a ceiling,
+  warns at 80% and stops at 100%.
+- `save-report.sh` — saves an agent's report byte-for-byte under a short header with its sha256.
+- `predict-gate.sh` — compares a written prediction with before/after measurements and exits
+  non-zero on any move nobody predicted. Opt-in pre-commit hook; never installed automatically.
+- `ratify.sh` — ratifies a closed vocabulary: samples real matches per entry, two isolated readers
+  judge each, and `check` works as a gate. Ships `templates/ratify-vocabulary-brief.md`.
+- `ops-event.sh`, `ops-gap.sh`, `repo-hooks.sh` — the ops ledger's one writer, its drift check, and
+  the post-commit hook that runs the check. The hook goes only into a repo whose binding says
+  `owned: true`, into the local hooks folder git never commits, and never over a hook Permanence did
+  not write.
+
+**Changed: a programme group's folder may live in your stream** (`SPEC.md` §2 invariant 8). When a
+group's report is your own working file, its folder sits at `<stream>/repo/programme/` and the row in
+`_meta/GROUPS.md` holds that absolute path. `/perma-shutdown`, `/perma-register-group`,
+`perma-help.sh` and `templates/programme-task-doc.md` read either form. A folder in a repo behaves
+exactly as before.
+
+**Changed: the PM role** (`runtime/roles/pm.md`) dispatches by role, asks one decision at a time, and
+offers a refactor rather than starting one.
+
+**Changed: `/perma-shutdown`** prints the age of the last local backup, and prompts for a new one at
+seven days.
+
+**Fixed: session start after compaction.** When the working folder is not registered but the session's
+project folder is, `session-start.sh` now resolves the stream from the project folder.
+
+**Fixed: the "no `WIP.md` yet" prompt is back.** When a role is set and the stream has no `WIP.md`,
+session start says so, so the PM can offer one once. It was lost in v1.5.0.
+
+**Fixed while preparing this release**, each found by running the package's own gates here rather
+than taking them as read:
+
+- Four tests exercised a one-off migration script that is deliberately not shipped; they are removed,
+  and the other 140 pass.
+- Five code comments cited a design document that is not published; they now point at
+  `docs/PROJECT-TEAM.md`.
+- The eight new shell tools had no `python3` check; each now stops with one plain line if it is missing.
+- `/perma-change` could dispatch the engineer a second time for a work order the session had already
+  fulfilled; such an item is now treated as in flight and goes to review.
+- `/perma-refactor` reserved a tracker id in a repo another party owns before stopping; it now stops
+  first, and names one condition for unblocking, not two.
+- `runtime/README.md` pointed at a skill this repo does not ship for the ratification reading steps;
+  it now points at the two brief files `ratify.sh sample` writes.
+
+**CI** now runs the test suite (`python3 -m unittest discover -s runtime/tests`), compiles every
+standalone Python file, and checks that a fresh install places the agents.
+
+No **Migration notes** — nothing in any existing stream changes shape. Every new file in a stream is
+created only when you use the tool that owns it.
+
 ## [1.5.0] — roles, a configurable nightly time, and upgrades that never touch what is yours
 
 **New: roles.** An optional standing role for Claude, chosen per install. `runtime/.role` holds one line:

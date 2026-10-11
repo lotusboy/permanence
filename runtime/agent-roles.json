@@ -1,0 +1,74 @@
+{
+  "_about": [
+    "Agent roles: which agent does each job, and how it must be dispatched. Shipped defaults.",
+    "A role names a job, not an agent. 'providers' is an ordered preference list; the first one installed is used.",
+    "Dispatch by role with subagent_type 'role:<role>', or 'role:<job>:<role>' from a team job (for example role:refactor:engineer); or by the agent's own name, and the rules below still apply.",
+    "Resolution order (docs/PROJECT-TEAM.md, \"Roles\"): the repo binding's 'roles', then _personal/agent-roles.json, then this file. At each level the key '<job>:<role>' is tried before '<role>'. A level naming only agents that are not installed is skipped and logged.",
+    "When no level matches, a review role (reviewer, code-review) goes to the built-in general-purpose agent, never to the session that did the work. Any other role is denied, and the session does the work itself.",
+    "Put an owner- or employer-specific provider in _personal/agent-roles.json, never here: this file is published.",
+    "Enforced by runtime/agent-roles.py (PreToolUse on Agent, SubagentStop), using runtime/team_roles.py. Edit the tables, not the hook.",
+    "model: forced on every dispatch of the role. Put [model-approved] in the dispatch description to keep a different model for one dispatch.",
+    "nested_model: ceiling for agents the role's agent spawns itself (opus, or no model given, is lowered to this).",
+    "prompt_append: added to the dispatch prompt once; {reviews} in it becomes the binding's 'reviews' folder (default axis/runs/). run_record: the agent may not stop until it has written a record folder under the binding's 'reviews' (default axis/runs/)."
+  ],
+  "roles": {
+    "architect": {
+      "providers": [
+        "architect"
+      ],
+      "model": "opus"
+    },
+    "engineer": {
+      "providers": [
+        "refactor-engineer"
+      ],
+      "model": "opus"
+    },
+    "reviewer": {
+      "providers": [
+        "refactor-reviewer"
+      ],
+      "model": "opus",
+      "nested_model": "sonnet",
+      "run_record": true
+    },
+    "absence-check": {
+      "providers": [
+        "absence-check"
+      ],
+      "model": "sonnet"
+    },
+    "count-check": {
+      "providers": [
+        "count-check"
+      ],
+      "model": "sonnet"
+    },
+    "blast-radius": {
+      "providers": [
+        "blast-radius"
+      ],
+      "model": "sonnet"
+    },
+    "tester": {
+      "providers": []
+    },
+    "design-author": {
+      "providers": [
+        "design-author"
+      ],
+      "model": "opus"
+    },
+    "design-reviewer": {
+      "providers": [
+        "design-reviewer"
+      ],
+      "model": "opus",
+      "nested_model": "sonnet"
+    },
+    "code-review": {
+      "providers": [],
+      "model": "sonnet"
+    }
+  }
+}

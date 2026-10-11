@@ -49,6 +49,36 @@ for existing in "$CMD_DST"/*.md; do
   fi
 done
 
+# Agents: the checkers and design agents that runtime/agent-roles.json names as Permanence's own
+# providers. Copied with the same installed-from marker as commands, and cleaned up the same way —
+# a user's own same-named agent without the marker is never removed (it is backed up, then replaced).
+AGENT_SRC="$PERMA/runtime/agents"
+AGENT_DST="$HOME/.claude/agents"
+mkdir -p "$AGENT_DST"
+for f in "$AGENT_SRC"/*.md; do
+  [ -f "$f" ] || continue
+  name=$(basename "$f")
+  if [ -f "$AGENT_DST/$name" ] && ! grep -q 'installed-from: ~/permanence/runtime/agents/' "$AGENT_DST/$name"; then
+    cp "$AGENT_DST/$name" "$AGENT_DST/$name.perma-bak"
+  fi
+  if cp "$f" "$AGENT_DST/$name"; then
+    printf '\n<!-- installed-from: ~/permanence/runtime/agents/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$AGENT_DST/$name"
+    echo "  agent: $name"
+  else
+    echo "  agent: $name — FAILED to copy"
+    WIRE_FAILED=1
+  fi
+done
+for existing in "$AGENT_DST"/*.md; do
+  [ -f "$existing" ] || continue
+  bn=$(basename "$existing")
+  [ -f "$AGENT_SRC/$bn" ] && continue
+  if grep -q 'installed-from: ~/permanence/runtime/agents/' "$existing" 2>/dev/null; then
+    rm -f "$existing"
+    echo "  agent: $bn — removed (no longer in runtime/agents/)"
+  fi
+done
+
 # CLAUDE.md: manage ONLY the delimited Permanence block, never the rest of a file we don't own.
 source "$PERMA/runtime/lib/block-merge.sh"
 CMD_MD="$HOME/.claude/CLAUDE.md"
@@ -89,13 +119,25 @@ try:
     ups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
     if not any(isinstance(e, dict) and any(h.get("command") == cmd_load for h in e.get("hooks", [])) for e in ups):
         ups.insert(0, {"hooks": [{"type": "command", "command": cmd_load, "timeout": 10}]}); changed = True
+    # Agent roles (runtime/agent-roles.json): enforce each role's model, prompt and run record on
+    # every Agent dispatch, cap what a role's agent spawns itself, and flag newly installed agents
+    # once at session start. Core, so auto-wired. The script fails open.
+    roles = f"{perma}/runtime/agent-roles.py"
+    for event, matcher, command in (("PreToolUse", "Agent", roles), ("SubagentStop", None, roles),
+                                    ("SessionStart", None, f"{roles} --check-new")):
+        lst = data["hooks"].setdefault(event, [])
+        if not any(isinstance(e, dict) and any(h.get("command") == command for h in e.get("hooks", [])) for e in lst):
+            entry = {"hooks": [{"type": "command", "command": command, "timeout": 10}]}
+            if matcher:
+                entry["matcher"] = matcher
+            lst.append(entry); changed = True
 except (AttributeError, TypeError):
     print("  settings.json: present but has an unexpected shape under an existing key (e.g. \"hooks.SessionStart\" isn't a list) — NOT touched. Add the hook + permission by hand.")
     sys.exit(1)
 if changed:
     if os.path.exists(path): shutil.copy(path, path + ".perma-bak")
     json.dump(data, open(path, "w"), indent=2)
-    print("  settings.json: SessionStart + session-load (auto context) hooks + ~/permanence permission merged in (backup: settings.json.perma-bak)")
+    print("  settings.json: SessionStart + session-load (auto context) + agent-roles hooks + ~/permanence permission merged in (backup: settings.json.perma-bak)")
 else:
     print("  settings.json: hook + permission already present")
 PY
@@ -113,5 +155,9 @@ else
       }
 SETTINGS
 fi
+
+# Repo hooks: the ops-ledger post-commit hook, in each repository whose binding says it is owned.
+# Writes only the local, uncommitted .git/hooks folder, and never a hook it did not write.
+"$PERMA/runtime/repo-hooks.sh" || WIRE_FAILED=1
 
 exit "$WIRE_FAILED"

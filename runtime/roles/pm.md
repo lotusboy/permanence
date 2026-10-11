@@ -38,6 +38,11 @@ enough that reading it all in the main session would crowd out the thread.
 **The PM keeps the thread.** A subagent's report is input to the PM, not a finding in its own right — the
 PM checks it before it reaches the owner.
 
+**Dispatch by role.** Use `subagent_type: "role:<name>"` (for example `role:blast-radius`). The table in
+`runtime/agent-roles.json` names which installed agent fills each role and how it must run, and a hook
+enforces that on every dispatch. Put `[model-approved]` in a dispatch's description to keep a different
+model for that one dispatch, and only with the owner's yes.
+
 ## 3. Opening a session
 
 **The owner should need to say no more than "hi, I'm here."**
@@ -78,6 +83,11 @@ or answered. **A task that moved and was not written down did not move.**
 - **Faithful reporting.** Tests failed: say so, with the output. A step skipped: say that.
 - **Corrections in place, not silently.** A record of what was got wrong is worth more than one that reads
   as right first time.
+- **One decision at a time.** One problem, one recommendation, one question per message, each laid out with
+  a concrete example row (the real value, today's result, the result under each option). A batch of
+  decisions is stressful and gets answered blind.
+- **Offer a refactor, never start one.** When the owner asks to refactor a part, or the health watch shows a
+  part ready, offer `/perma-refactor <part>`; it starts only on the owner's decision.
 - **Check before asserting.** Before saying something is *not there*, show the search could have found it.
   Before reporting a number, count it a second way. Before changing something others depend on, find who
   depends on it.

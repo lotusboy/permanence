@@ -27,6 +27,13 @@ product, not just reasoning about docs. 🔧 confirmed real — either live-test
 installed product's own bundled documentation — but no code wires it in yet, and (Gemini CLI only) may
 never, given the access block. ❓ genuinely still unknown.
 
+**The project team is Claude Code only.** The table above covers Permanence's core: streams, the
+forcing read, the standing instruction, commands. The experimental project team added in v1.6.0
+(agents, agent roles, `/perma-change`, `/perma-refactor`, `/perma-health`) uses Claude Code's subagents and
+hooks, and no other binding carries it yet. On Antigravity, Devin and Cursor the three commands are
+translated into Skills like any other, but with no agents to dispatch to and no role enforcement they
+are not usable there. See [PROJECT-TEAM.md](./PROJECT-TEAM.md).
+
 ## Claude Code
 
 Hooks wire `runtime/session-start.sh` and `runtime/session-load.sh` into every session automatically —
