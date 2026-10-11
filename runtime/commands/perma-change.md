@@ -1,6 +1,6 @@
 ---
 description: "Make the current repo's tool do something new, or fix a defect, from one work order — preflight, the work order as the decision, then one engineer step behind the binding's predicted-moves gates, a reviewer the PM dispatches, a fix round and one pull request. The engineer writes every expected output move before its first edit; any move not predicted stops the job. Every repo fact comes from the repo's binding and the work order. Usage: /perma-change <work-order id> [--dry-run [--from <file>]], where the id is the tracker item that holds the work order. Trigger phrases: \"make the change in <id>\", \"run work order <id>\", the owner approving a work order."
-harness: claude-code
+harness: claude-code, antigravity
 ---
 
 # Permanence — Change

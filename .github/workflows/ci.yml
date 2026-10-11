@@ -529,13 +529,22 @@ jobs:
           PY
           test -f "$HOME/.cursor/skills/perma-startup/SKILL.md" && echo "cursor skills: OK"
 
-          # A command marked `harness: claude-code` must not be offered on a tool that cannot run it.
-          for d in "$HOME/.gemini/config/skills" "$HOME/.config/devin/skills" "$HOME/.cursor/skills"; do
+          # A command's `harness:` line names the tools that can run it. The team commands name
+          # claude-code and antigravity, so Devin and Cursor must not be offered them.
+          for d in "$HOME/.config/devin/skills" "$HOME/.cursor/skills"; do
             for c in perma-change perma-refactor perma-health; do
-              if [ -e "$d/$c" ]; then echo "FAILED: $d/$c was installed, but it is marked claude-code only"; exit 1; fi
+              if [ -e "$d/$c" ]; then echo "FAILED: $d/$c was installed, but its harness line does not name this tool"; exit 1; fi
             done
           done
-          echo "harness-limited commands skipped on all three: OK"
+          echo "harness-limited commands skipped on devin and cursor: OK"
+          # Antigravity gets them, each with the note on how to read it there, plus the agents and the role hook.
+          for c in perma-change perma-refactor perma-health; do
+            grep -q "Running this on Antigravity" "$HOME/.gemini/config/skills/$c/SKILL.md" || { echo "FAILED: $c has no Antigravity note"; exit 1; }
+          done
+          grep -q "Running this on Antigravity" "$HOME/.gemini/config/skills/perma-startup/SKILL.md" && { echo "FAILED: a core command got the team note"; exit 1; }
+          test -f "$HOME/.gemini/config/agents/count-check/agent.md" || { echo "FAILED: antigravity agents not installed"; exit 1; }
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert 'perma-agent-roles' in d, 'role hook missing'" "$HOME/.gemini/config/hooks.json"
+          echo "antigravity team: commands with note, agents, role hook: OK"
 
           # Idempotency: re-run all three and confirm no error and no duplicate entries.
           bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"

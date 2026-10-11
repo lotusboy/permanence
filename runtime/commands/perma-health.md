@@ -1,6 +1,6 @@
 ---
 description: "Health watch for the current repo — run preflight, rewrite the repo's health register in its Permanence stream from the binding's signal, list the parts that are ready, then offer a refactor (a repo you own) or draft a proposal for the repo's approver (a repo another party owns). It never starts work. Trigger phrases: \"health check this repo\", \"what is ready to refactor\"."
-harness: claude-code
+harness: claude-code, antigravity
 ---
 
 # Permanence — Health

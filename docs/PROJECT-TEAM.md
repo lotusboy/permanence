@@ -4,9 +4,10 @@
 > shapes below may change in a later release; a change that affects an existing file will carry a
 > **Migration notes** section in `CHANGELOG.md`.
 >
-> **Claude Code only.** The team uses subagents and three Claude Code hooks. The Antigravity, Devin
-> and Cursor bindings get neither the agents nor the role enforcement. Everything else in Permanence
-> works on those tools as before.
+> **Claude Code, and Antigravity in part.** The team was built on Claude Code, where all of it runs.
+> v1.8.0 carries it to Antigravity with two enforcements missing (see "On Antigravity" below). The
+> Devin and Cursor bindings get neither the agents nor the role enforcement. Everything else in
+> Permanence works on those tools as before.
 >
 > **Opt-in by file.** A repository takes part only when its stream holds a `binding.json`. With no
 > binding, the team commands stop and say so, and nothing else in Permanence changes.
@@ -75,6 +76,36 @@ The shipped agents have plain names (`architect`, `design-author`, …). If the 
 their own agent with one of those names, the install leaves theirs in place and says so; that role
 is then filled by the owner's agent.
 
+## On Antigravity
+
+Added in v1.8.0, checked against Antigravity CLI 1.2.2. `runtime/bindings/antigravity/wire` installs
+three things:
+
+- **The eight agents**, translated into Antigravity's own agent files under
+  `~/.gemini/config/agents/<name>/agent.md`. Tool names are mapped to Antigravity's. A model name
+  becomes a tier: `opus` is `pro`; `sonnet` and `haiku` are `flash`.
+- **The role hook**, on Antigravity's `invoke_subagent` tool. A dispatch with `TypeName:
+  "role:<job>:<role>"` is resolved by the same rules and tables as on Claude Code and replaced by the
+  agent that fills the role. A role nothing fills is refused. A role's `prompt_append` is added.
+- **The three team commands**, each with a short note at the top that says how to read its dispatch
+  steps on Antigravity.
+
+What is different there, because Antigravity gives a hook no way to do it:
+
+| On Claude Code | On Antigravity |
+|---|---|
+| The hook forces the role's model on every dispatch. | The model is fixed in each installed agent's file. A `model` in a binding's or the owner's role entry has no effect. |
+| The hook caps what a role's agent spawns itself (`nested_model`). | Not enforced. |
+| The hook sends an agent back once if its run record is missing (`run_record`). | Not enforced. The command's note tells the session running the job to check for the record itself. |
+| A review role with no agent falls to `general-purpose`. | It falls to `self`: a fresh conversation of Antigravity's default agent. |
+
+What has been run on Antigravity: a `role:` dispatch through the hook to a shipped agent, which did
+its work and reported back; and `/perma-health` from start to finish. `/perma-refactor` and
+`/perma-change` have not been run there end to end.
+
+A subagent's shell commands ask for permission like any other on Antigravity. In a session with no
+one to answer, they are refused.
+
 ## The binding
 
 `<stream>/repo/binding.json`. JSON, read with the standard library only. An `_about` key carries
@@ -110,7 +141,8 @@ briefs reach committed review records.
 
 ### An example
 
-A small repo the owner owns, with tests as its gate and a markdown tracker:
+A small repo the owner owns, with tests as its gate and a markdown tracker. (A pointer, `file#key`,
+must name a JSON or YAML file; a Makefile target is written as the command that runs it.)
 
 ```json
 {
@@ -123,8 +155,8 @@ A small repo the owner owns, with tests as its gate and a markdown tracker:
     "commands": ["git log --no-merges --numstat -- src/{part}"]
   },
   "gates": {
-    "byteIdentical": "Makefile#check",
-    "predictedMoves": {"gates": "Makefile#check", "prediction": "prediction.md"}
+    "byteIdentical": "make check",
+    "predictedMoves": {"gates": "make check", "prediction": "prediction.md"}
   },
   "branches": {"refactor": "refactor/{id}-step{n}-{name}", "change": "fix/{id}-{name}"}
 }
