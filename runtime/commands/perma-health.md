@@ -40,8 +40,8 @@ binding and the register do not give you. A copied fact would bind every repo to
      `key` whose `id` is `id`. Its `command` is the signal command. A pointer that does not lead to
      exactly one command: stop and say so.
    - **Rules for the generic script** (an object with `script`): the command is
-     `python3 ~/permanence/runtime/<script>.py`, called as that script's own usage line says, with
-     the binding and `{register}`. If preflight noted that the script is not installed, or
+     `python3 ~/permanence/runtime/<script>.py --binding <the binding's path> --register {register}
+     --repo {root}`. If preflight noted that the script is not installed, or
      `~/permanence/runtime/<script>.py` does not exist, stop here and say "the generic signal script
      is not installed yet". Run nothing, write nothing, and skip steps 4 to 7. This is a clean stop,
      not an error.

@@ -249,7 +249,8 @@ class TestSignalRules(Fixture):
         perma = Path(self.tmp.name) / "perma"
         (perma / "runtime").mkdir(parents=True, exist_ok=True)
         env = dict(self.env, PERMA_DIR=str(perma))
-        sig = {"script": "health-signal", "ref": "HEAD", "fix": "^fix", "codeRoots": ["src/"]}
+        sig = {"script": "health-signal", "ref": "HEAD", "fix": "^fix", "codeRoots": ["src/"],
+               "part": "^(src)/"}
         self.binding.write_text(json.dumps({"owned": False, "approver": "PM", "register": "h.json", "signal": sig}))
         args = ("health", "--repo", str(self.repo), "--binding", str(self.binding))
         for job in ("health", "startup"):
@@ -277,6 +278,15 @@ class TestSignalRules(Fixture):
         sig.update(ref="HEAD", fix="^fix", codeRoots=["src/", "lib/"])
         self.binding.write_text(json.dumps({"owned": False, "approver": "PM", "register": "h.json", "signal": sig}))
         self.assertIn("signal.codeRoots 'lib/' does not exist at HEAD", run(*args, env=env)[1])
+        del sig["part"]
+        sig.update(codeRoots=["src/"])
+        self.binding.write_text(json.dumps({"owned": False, "approver": "PM", "register": "h.json", "signal": sig}))
+        self.assertIn("signal has no part rule", run(*args, env=env)[1])
+        sig.update(parts=[{"kind": "x", "match": "^src/"}, {"match": "("}])
+        self.binding.write_text(json.dumps({"owned": False, "approver": "PM", "register": "h.json", "signal": sig}))
+        out = run(*args, env=env)[1]
+        self.assertIn("signal.parts[0].match needs one group", out)
+        self.assertIn("signal.parts[1].match is missing or does not compile", out)
 
 
 if __name__ == "__main__":

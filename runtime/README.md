@@ -113,3 +113,18 @@ ratify.sh status                       # counts per stream
 - `--stream` may be left out when the current directory is registered in `_meta/REGISTRY.md`.
 
 Tests: `python3 -m unittest runtime/tests/test_ratify.py`.
+
+## health-signal.py — the health register for any repository
+
+Writes a repository's health register from rules in the binding's `signal` object: fix pressure per
+part (which decides each part's state), plus size and review findings (reported only). Standard
+library only. It reads the repository with read-only git commands and writes one file, the JSON
+register in the stream. `docs/PROJECT-TEAM.md`, "The signal", has the rule table.
+
+```bash
+python3 ~/permanence/runtime/health-signal.py --binding <stream>/repo/binding.json \
+    --register health.json --repo <repo> [--as-of YYYY-MM-DD] [--no-write]
+```
+
+`/perma-health` runs it when the binding's `signal` names it. `--no-write` prints the block and
+leaves the register as it is, which is the way to try a new set of rules.

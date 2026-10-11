@@ -90,7 +90,7 @@ in the binding, because preflight cannot check it.
 | `owned` | `true` when the owner owns the repo | always |
 | `approver` | who approves work when `owned` is false — a role, never a name | when `owned` is false |
 | `register` | the register's path | always |
-| `signal` | the command (or pointer) that rewrites the register | always |
+| `signal` | what rewrites the register: a command, a pointer, or rules for the shipped script (see "The signal") | always |
 | `tracker` | `file`: where a job opens or reads its item; `id`: the id form, as a regular expression | when owned |
 | `measure` | `commands`: what the architect runs; `layerRules`: where the layer rules are (optional) | `commands` when owned |
 | `gates.byteIdentical` | the gate list for `refactor` | when owned |
@@ -130,9 +130,65 @@ A small repo the owner owns, with tests as its gate and a markdown tracker:
 }
 ```
 
-**The signal is the repo's own command in this release.** `/perma-health` and `/perma-refactor`
-need a command that writes the register (each part's fix pressure and state). Permanence does not
-yet ship a generic one; it is planned. `/perma-change` does not need the register to run.
+## The signal
+
+`/perma-health` and `/perma-refactor` need something that writes the register: each part's fix
+pressure and state. `/perma-change` does not need the register to run. The binding's `signal` takes
+one of three forms:
+
+- **a command** the repo already has, such as `python3 tools/health.py --register {register}`;
+- **a pointer** to the repo file that holds that command (`file#key.id`);
+- **rules for the shipped script**, `runtime/health-signal.py` (added in v1.7.0). Use this when the
+  repo has no signal command of its own, or belongs to another party so that none can be added.
+
+The shipped script uses the Python standard library only. It reads the repository with read-only
+git commands at one ref and writes one file, a JSON register in the stream.
+
+```json
+"register": "health.json",
+"signal": {
+  "script": "health-signal",
+  "ref": "HEAD",
+  "fix": "(?i)^fix\\b",
+  "codeRoots": ["src/", "scripts/"],
+  "part": "^src/([^/]+)/"
+}
+```
+
+| Rule | Holds | Required |
+|---|---|---|
+| `script` | `health-signal` | yes |
+| `ref` | the commit or ref that is measured. For a repo another party owns, name a remote ref such as `origin/main`, so no branch is ever switched | yes |
+| `codeRoots` | the folders whose lines count as code. A fix's lines in tests, docs or data are left out, so they do not hide where the code was fixed | yes |
+| `part` | one pattern; group 1 is the part id of a file | `part` or `parts` |
+| `parts` | a list of `{"kind", "match", "id"}`; the first `match` that fits a file decides. `id` is optional and builds the part id from the groups, for example `"config/{1}"` | `part` or `parts` |
+| `fix` | a commit whose subject matches is a fix. Default: starts with `fix` | no |
+| `extensions` | only files ending in one of these belong to a part | no |
+| `reviewFinding` | what marks a review finding worth counting. Default: `\bP1\b` | no |
+
+The script measures three things per part:
+
+1. **Fix pressure.** Each fix commit's changed code lines are shared out over the parts they fall
+   in. A part's `signal` is the sum of its shares over the window. This is the only input that
+   decides `state`.
+2. **Size.** Files, lines and the longest file, at the ref. Reported only.
+3. **Review findings.** In each review folder (the binding's `reviews`) whose name starts with a
+   date inside the window, each paragraph that matches `reviewFinding` and names one of the part's
+   files adds one. Reported only. It is a text match, so read it as a pointer to go and look.
+
+A part at or over the threshold with no decision is `ready`. A person writes a part's `decision`
+(`restructure`, `redesign` or `accept`); the script never overwrites it, and raises the part again
+(`ready-again`) only when its signal reaches `signalAtDecision` times `regrowth`. The window,
+threshold and regrowth live in the register's own `settings` block, which the script also never
+overwrites. Defaults: 30 days, 8.0, 1.5.
+
+Run it by hand to try rules before trusting them; `--no-write` prints the block and leaves the
+register as it is:
+
+```bash
+python3 ~/permanence/runtime/health-signal.py --binding <stream>/repo/binding.json \
+    --register health.json --repo <repo> --no-write
+```
 
 ## Ownership
 
@@ -195,3 +251,9 @@ it once.
   branch from `origin/HEAD` and open a pull request with the repo host's own tool, or hand the owner
   the branch name and the pull request text.
 - The decision ledger scores calibration only for asks recorded with `--confidence`.
+- The shipped signal script reports file length but not the longest function, and it does not
+  count layer-rule breaks: both need a per-language rule the binding does not have yet.
+- The shipped signal script has been checked against one repository's own signal script, where it
+  gave the same result for every part. Its part rules for other kinds of repository are untested.
+- The shipped signal script reads and writes a JSON register. A register in another format has to
+  be converted once, keeping `settings` and every `decision`.

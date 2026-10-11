@@ -16,6 +16,38 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.7.0] — a health signal that works on any repository
+
+**New: `runtime/health-signal.py`.** Until now `/perma-health` and `/perma-refactor` needed the
+repository to bring its own command for the health register. This script is that command for any
+repository, driven by rules in the binding's `signal`: the ref to measure, what counts as a fix
+commit, which folders are code, and how a file path maps to a part. It uses the Python standard
+library only, reads the repository with read-only git commands at one ref, and writes one file, a
+JSON register in your stream. It can therefore run on a repository another party owns, where no
+script could be added.
+
+It measures three things per part. Fix pressure decides the part's state, exactly as before. Size
+(files, lines, longest file) and review findings (paragraphs in dated review folders that carry a
+finding mark and name one of the part's files) are new and are reported only. A person's `decision`
+and the register's `settings` are never overwritten.
+
+Checked against the one repository that already had its own signal script: on 217 parts, at two
+dates, every part's signal, fix count, state and decision came out the same, and so did the
+per-id table.
+
+`runtime/team-preflight.py` now also checks the `signal.parts` list and fails a `signal` object
+that has no part rule. `docs/PROJECT-TEAM.md` has a new section, "The signal", with the rule table.
+
+The project team stays **experimental** and **Claude Code only**.
+
+Not in this release: longest function and layer-rule breaks (both need a per-language rule the
+binding does not have yet).
+
+No **Migration notes** — nothing in any existing stream changes shape. A binding whose `signal` is
+a command or a pointer keeps working as it is. Moving a repository to the shipped script is the
+owner's choice: it means writing the `signal` rules, and converting an existing register to JSON
+once so its `settings` and decisions carry over.
+
 ## [1.6.0] — an experimental project team: roles, agents, two gated jobs, and the ledgers behind them
 
 **Read this first.** Everything under "the project team" below is **experimental** and **Claude Code
