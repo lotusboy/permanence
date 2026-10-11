@@ -33,8 +33,10 @@ THE THREE INPUTS
    under `passingShare` is also counted as `inPassing`.
 2. Size (reported only). Per part: files, lines, and the longest file, at the ref.
 3. Review findings (reported only). In each review folder whose name starts with a date inside the
-   window, every paragraph that matches `reviewFinding` and names a part's file path adds one to
-   that part. This is a text match, not a reading: treat it as a pointer to go and look.
+   window, every paragraph that matches `reviewFinding` and names one of a part's files adds one to
+   that part. A file is named by its full path, or by its bare file name (`runner.py:253`) when no
+   other part has a file of that name. This is a text match, not a reading: treat it as a pointer
+   to go and look. A count of 0 does not mean no review found anything.
 
 THE STATE. A part at or over the threshold with no decision is `ready`; under it, `settled`. A
 decision (`restructure`, `redesign` or `accept`) is written by a person under the part's
@@ -242,6 +244,15 @@ def review_findings(repo, rules, files, since, until):
         pid, _ = part_of(f, rules)
         if pid:
             paths[f] = pid
+    # Reviews mostly cite a file by its bare name and a line (`runner.py:253`), not its full path.
+    # A bare name counts when exactly one part file has it; a shared name (`__init__.py`) cannot
+    # say which part is meant, so it never counts. `test_runner.py` is not `runner.py`.
+    by_name = defaultdict(set)
+    for f in paths:
+        by_name[f.rsplit("/", 1)[-1]].add(f)
+    bare = {name: re.compile(r"(?<![\w.-])" + re.escape(name) + r"(?!\w)")
+            for name, fs in by_name.items() if len(fs) == 1}
+    bare_pid = {name: paths[next(iter(by_name[name]))] for name in bare}
     counts, folders = Counter(), 0
     for d in sorted(root.iterdir()):
         m = DATED.match(d.name)
@@ -261,7 +272,9 @@ def review_findings(repo, rules, files, since, until):
                 continue
             for para in re.split(r"\n\s*\n", text):
                 if rules["finding"].search(para):
-                    for pid in {pid for f, pid in paths.items() if f in para}:
+                    hit = {pid for f, pid in paths.items() if f in para}
+                    hit |= {bare_pid[name] for name, rx in bare.items() if name in para and rx.search(para)}
+                    for pid in hit:
                         counts[pid] += 1
     return dict(counts), folders
 

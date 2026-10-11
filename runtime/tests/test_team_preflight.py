@@ -287,6 +287,15 @@ class TestSignalRules(Fixture):
         out = run(*args, env=env)[1]
         self.assertIn("signal.parts[0].match needs one group", out)
         self.assertIn("signal.parts[1].match is missing or does not compile", out)
+        # the documented id template, a quantifier and a named group in a match, a finding pattern: all fine
+        sig.update(parts=[{"kind": "config", "match": "^src/(?P<n>[a-z]{1,}[^/]*)/", "id": "config/{1}"}],
+                   reviewFinding="\\bP[01]{1}\\b")
+        self.binding.write_text(json.dumps({"owned": False, "approver": "PM", "register": "h.json", "signal": sig}))
+        code, out = run(*args, env=env)
+        self.assertEqual(code, 0, out)
+        sig.update(parts=[{"match": "^(src)/", "id": "config/{part}"}])
+        self.binding.write_text(json.dumps({"owned": False, "approver": "PM", "register": "h.json", "signal": sig}))
+        self.assertIn("may only use group numbers such as '{1}', got '{part}'", run(*args, env=env)[1])
 
 
 if __name__ == "__main__":

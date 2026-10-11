@@ -16,6 +16,29 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.8.1] — two fixes to the health signal, found by its first real adoption
+
+Both were found the first time a repository other than a test fixture tried to adopt the `signal`
+rules.
+
+- **Preflight refused the part-id template that the signal script documents.** A `signal.parts`
+  entry such as `{"match": "^conf/([^/]+)/", "id": "config/{1}"}` failed check 2 with "uses
+  placeholder '{1}', which is not in the closed list". The closed list is for commands; `{1}` is a
+  group number from the entry's own `match`. Preflight now accepts group numbers there, and only
+  there. It also no longer reads `{…}` or `<…>` inside `signal.parts[].match` or
+  `signal.reviewFinding` as placeholders: they are regular expressions, where `{2,}` and `(?P<n>…)`
+  are ordinary.
+- **The review-findings count missed most findings.** It counted a paragraph only when it named a
+  part's file by its full path. Reviews mostly cite a bare name and a line (`runner.py:253`). A
+  bare file name now counts when exactly one part has a file of that name. On the repository that
+  reported this, the count went from 13 to 127 over the same reviews.
+
+**Still true, and now said in the docs:** the review-findings count is a text match. A review that
+describes a fault by what it does, and never names the file, is not counted, so a count of 0 does
+not mean that no review found anything. It never moves a part's state.
+
+No **Migration notes**.
+
 ## [1.8.0] — the project team on Antigravity (in part)
 
 The experimental project team ran on Claude Code only. This release carries it to Antigravity.

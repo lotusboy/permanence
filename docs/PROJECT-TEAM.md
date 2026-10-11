@@ -206,7 +206,10 @@ The script measures three things per part:
 2. **Size.** Files, lines and the longest file, at the ref. Reported only.
 3. **Review findings.** In each review folder (the binding's `reviews`) whose name starts with a
    date inside the window, each paragraph that matches `reviewFinding` and names one of the part's
-   files adds one. Reported only. It is a text match, so read it as a pointer to go and look.
+   files adds one. A file is named by its full path, or by its bare file name when no other part
+   has a file of that name. Reported only. It is a text match, so read it as a pointer to go and
+   look: a review that describes a fault without naming the file is not counted, and a count of 0
+   does not mean no review found anything.
 
 A part at or over the threshold with no decision is `ready`. A person writes a part's `decision`
 (`restructure`, `redesign` or `accept`); the script never overwrites it, and raises the part again
