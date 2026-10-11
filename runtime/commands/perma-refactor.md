@@ -1,5 +1,6 @@
 ---
 description: "Refactor one part of the current repo — preflight, the architect's restructure-or-accept decision for the owner, then one engineer step at a time behind the binding's gates, a reviewer the PM dispatches, a fix round and one pull request per step. Steps are byte-identical, except meaning changes the owner named in the decision, which are gated by predicted moves. Every repo fact comes from the repo's binding. Usage: /perma-refactor <part>, where <part> is a part id from the repo's health register. Trigger phrases: \"refactor <part>\", \"restructure <part>\", the owner accepting a ready part from /perma-health."
+harness: claude-code
 ---
 
 # Permanence — Refactor

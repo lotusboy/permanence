@@ -529,6 +529,14 @@ jobs:
           PY
           test -f "$HOME/.cursor/skills/perma-startup/SKILL.md" && echo "cursor skills: OK"
 
+          # A command marked `harness: claude-code` must not be offered on a tool that cannot run it.
+          for d in "$HOME/.gemini/config/skills" "$HOME/.config/devin/skills" "$HOME/.cursor/skills"; do
+            for c in perma-change perma-refactor perma-health; do
+              if [ -e "$d/$c" ]; then echo "FAILED: $d/$c was installed, but it is marked claude-code only"; exit 1; fi
+            done
+          done
+          echo "harness-limited commands skipped on all three: OK"
+
           # Idempotency: re-run all three and confirm no error and no duplicate entries.
           bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"
           bash "${PERMA_DIR}/runtime/bindings/devin/wire"

@@ -30,9 +30,9 @@ never, given the access block. ❓ genuinely still unknown.
 **The project team is Claude Code only.** The table above covers Permanence's core: streams, the
 forcing read, the standing instruction, commands. The experimental project team added in v1.6.0
 (agents, agent roles, `/perma-change`, `/perma-refactor`, `/perma-health`) uses Claude Code's subagents and
-hooks, and no other binding carries it yet. On Antigravity, Devin and Cursor the three commands are
-translated into Skills like any other, but with no agents to dispatch to and no role enforcement they
-are not usable there. See [PROJECT-TEAM.md](./PROJECT-TEAM.md).
+hooks, and no other binding carries it yet. The three commands carry `harness: claude-code` in their
+frontmatter, and the Antigravity, Devin and Cursor bindings skip any command so marked, so none of those
+tools is offered a command it cannot run. See [PROJECT-TEAM.md](./PROJECT-TEAM.md).
 
 ## Claude Code
 

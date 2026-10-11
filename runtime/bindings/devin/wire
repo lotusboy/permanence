@@ -137,9 +137,26 @@ def extract_description(content):
             return line
     return "A Permanence command."
 
+HARNESS = "devin"
+
+def only_for(content):
+    """The harness a command is limited to (frontmatter `harness:`), or None when it runs anywhere."""
+    m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    hm = re.search(r'^harness:\s*(\S+)\s*$', m.group(1), re.MULTILINE) if m else None
+    return hm.group(1) if hm else None
+
+def wanted(path):
+    try:
+        return only_for(open(path).read()) in (None, HARNESS)
+    except Exception:
+        return True   # unreadable: let the translation loop report it, as before
+
 failed = []
 for fname in sorted(os.listdir(cmd_src)):
     if not fname.endswith(".md"):
+        continue
+    if not wanted(os.path.join(cmd_src, fname)):
+        print(f"  skill: {fname[:-3]} — skipped (needs another harness; see docs/TOOL-SUPPORT.md)")
         continue
     name = fname[:-3]
     src_path = os.path.join(cmd_src, fname)
@@ -165,7 +182,8 @@ for fname in sorted(os.listdir(cmd_src)):
 # carries Permanence's own "installed-from" marker — never touch a user's own same-named skill.
 # Without this, a renamed/removed command stayed installed forever on every machine that had
 # already run wire once (Two-Pass review, 2026-09-14).
-current_names = {fn[:-3] for fn in os.listdir(cmd_src) if fn.endswith(".md")}
+current_names = {fn[:-3] for fn in os.listdir(cmd_src)
+                 if fn.endswith(".md") and wanted(os.path.join(cmd_src, fn))}
 if os.path.isdir(skills_dst):
     for entry in sorted(os.listdir(skills_dst)):
         if entry in current_names:

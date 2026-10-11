@@ -109,6 +109,10 @@ than taking them as read:
   fulfilled; such an item is now treated as in flight and goes to review.
 - `/perma-refactor` reserved a tracker id in a repo another party owns before stopping; it now stops
   first, and names one condition for unblocking, not two.
+- The Antigravity, Devin and Cursor bindings translate every command into a Skill, so the three team
+  commands would have appeared on tools that cannot run them. A command may now carry
+  `harness: <name>` in its frontmatter; a binding skips a command marked for another harness, and
+  removes a copy it installed earlier.
 - `runtime/README.md` pointed at a skill this repo does not ship for the ratification reading steps;
   it now points at the two brief files `ratify.sh sample` writes.
 
