@@ -186,6 +186,21 @@ class TestSizeAndReviews(Fixture):
         self.assertEqual(r["computed"]["reviewFolders"], 2)
         self.assertEqual(r["parts"]["a"]["state"], "settled")  # reported only: never moves the state
 
+    def test_a_bare_file_name_counts_when_only_one_part_has_it(self):
+        self.commit("init", {"src/a/runner.py": 1, "src/a/__init__.py": 1, "src/b/__init__.py": 1,
+                             "src/b/gaps.py": 1, "tests/test_runner.py": 1})
+        d = self.repo / "reviews" / "2026-06-12-step1"
+        d.mkdir(parents=True)
+        (d / "findings.md").write_text(
+            "A1 P1: `runner.py:253` drops the hold.\n\n"            # bare name with a line: counts for a
+            "A2 P1: see definition/runner.py lines 10-12.\n\n"       # under another folder name: still a
+            "A3 P1: test_runner.py has no case for it.\n\n"          # a different file: counts for nothing
+            "A4 P1: __init__.py re-exports it.\n\n"                  # two parts have this name: nothing
+            "A5 P1: capture_gaps.py is not gaps.py.\n")               # one real mention of gaps.py: b
+        self.run_signal()
+        p = self.reg()["parts"]
+        self.assertEqual((p["a"]["reviewFindings"], p["b"]["reviewFindings"]), (2, 1))
+
 
 class TestRefusals(Fixture):
     def test_binding_without_rules(self):

@@ -35,7 +35,11 @@ import team_roles  # noqa: E402
 
 PERMA = Path(os.environ.get("PERMA_DIR", Path.home() / "permanence"))
 PLACEHOLDERS = {"root", "register", "id", "n", "date", "part", "name"}
-REGEX_FIELDS = {("tracker", "id"), ("signal", "fix"), ("signal", "part")}
+REGEX_FIELDS = {("tracker", "id"), ("signal", "fix"), ("signal", "part"), ("signal", "parts", "match"),
+                ("signal", "reviewFinding")}
+# signal.parts[].id builds a part id from the match's groups: {1}, {2}, ... are its own placeholders
+# (runtime/health-signal.py). The closed list above is for commands, and does not apply there.
+GROUP_TEMPLATE_FIELDS = {("signal", "parts", "id")}
 PATH_FIELDS = (("tracker", "file"), ("measure", "layerRules"), ("reviews",), ("leaveAlone",))
 POINTER = re.compile(r"^([^\s#]+)#([^\s#]+)$")
 JOB_ROLES = {"refactor": ["architect", "engineer", "reviewer"], "change": ["engineer", "reviewer"]}
@@ -92,7 +96,13 @@ def check_fields(b):
         need += [("approver",)]
     fails += [f"check 2: required field '{label(p)}' is missing" for p in need if get(b, p) is None]
     for path, s in strings(b):
-        if tuple(p for p in path if isinstance(p, str)) in REGEX_FIELDS:
+        named = tuple(p for p in path if isinstance(p, str))
+        if named in REGEX_FIELDS:
+            continue
+        if named in GROUP_TEMPLATE_FIELDS:
+            bad = [ph for ph in re.findall(r"\{([^{}]*)\}", s) if not ph.isdigit() or ph == "0"]
+            if bad:
+                fails.append(f"check 2: field '{label(path)}' may only use group numbers such as '{{1}}', got '{{{bad[0]}}}'")
             continue
         if re.search(r"<[^<>]*>", s):
             fails.append(f"check 2: field '{label(path)}' uses a '<...>' placeholder; the binding allows only '{{...}}' from the closed list")
