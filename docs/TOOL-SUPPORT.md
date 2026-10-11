@@ -27,12 +27,13 @@ product, not just reasoning about docs. 🔧 confirmed real — either live-test
 installed product's own bundled documentation — but no code wires it in yet, and (Gemini CLI only) may
 never, given the access block. ❓ genuinely still unknown.
 
-**The project team is Claude Code only.** The table above covers Permanence's core: streams, the
-forcing read, the standing instruction, commands. The experimental project team added in v1.6.0
-(agents, agent roles, `/perma-change`, `/perma-refactor`, `/perma-health`) uses Claude Code's subagents and
-hooks, and no other binding carries it yet. The three commands carry `harness: claude-code` in their
-frontmatter, and the Antigravity, Devin and Cursor bindings skip any command so marked, so none of those
-tools is offered a command it cannot run. See [PROJECT-TEAM.md](./PROJECT-TEAM.md).
+**The project team runs on Claude Code, and on Antigravity in part.** The table above covers
+Permanence's core: streams, the forcing read, the standing instruction, commands. The experimental
+project team (agents, agent roles, `/perma-change`, `/perma-refactor`, `/perma-health`) was built on Claude
+Code's subagents and hooks. From v1.8.0 the Antigravity binding carries it too, with two enforcements
+missing; [PROJECT-TEAM.md](./PROJECT-TEAM.md), "On Antigravity", says which. The three commands carry
+`harness: claude-code, antigravity` in their frontmatter. A binding skips any command whose `harness:`
+line does not name it, so Devin and Cursor are not offered a command they cannot run.
 
 What each other tool has of the three things the team needs, tested 2026-10-11. Only the Antigravity
 row was tested by running the tool; the Cursor and Devin rows come from each tool's own program files
@@ -41,7 +42,7 @@ and error messages. Detail and method:
 
 | Tool | Subagents | Hook before launch that can rewrite it | Hook when a subagent stops |
 |---|---|---|---|
-| Antigravity | ✅ `invoke_subagent` | ✅ `PreToolUse` with `overwrite` | ⚠️ `Stop` fires, but does not say it is a subagent |
+| Antigravity (team shipped in v1.8.0) | ✅ `invoke_subagent`; named agents in `~/.gemini/config/agents/` | ✅ `PreToolUse` with `overwrite` | ⚠️ `Stop` fires, but does not say it is a subagent |
 | Cursor | ✅ (not run) | ⚠️ `subagentStart` can allow or deny, not rewrite (not run) | ✅ `subagentStop` (not run) |
 | Devin | ✅ `run_subagent` (not run) | ❓ no subagent event; `PreToolUse` untested | ❓ no subagent event |
 

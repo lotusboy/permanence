@@ -61,11 +61,26 @@ except (AttributeError, TypeError):
     print("  hooks.json: present but has an unexpected shape under an existing perma-* key — NOT touched. Add the hooks by hand.")
     sys.exit(1)
 
+# The project team's role hook: a second PreToolUse entry, on the subagent tool only.
+try:
+    roles_cmd = f"python3 {binding_dir}/agent-roles-hook.py"   # by interpreter: does not depend on the file's executable bit
+    ar = data.get("perma-agent-roles") or {}
+    ar_groups = ar.get("PreToolUse") or []
+    if not any(isinstance(g, dict) and any(isinstance(h, dict) and h.get("command") == roles_cmd
+                                           for h in g.get("hooks", [])) for g in ar_groups):
+        ar["PreToolUse"] = [{"matcher": "invoke_subagent",
+                             "hooks": [{"type": "command", "command": roles_cmd, "timeout": 10}]}]
+        data["perma-agent-roles"] = ar
+        changed = True
+except (AttributeError, TypeError):
+    print("  hooks.json: present but has an unexpected shape under perma-agent-roles — NOT touched. Add the hook by hand.")
+    sys.exit(1)
+
 if changed:
     if os.path.exists(path):
         shutil.copy(path, path + ".perma-bak")
     json.dump(data, open(path, "w"), indent=2)
-    print("  hooks.json: PreInvocation + PreToolUse hooks merged in (backup: hooks.json.perma-bak)")
+    print("  hooks.json: PreInvocation + PreToolUse + agent-roles hooks merged in (backup: hooks.json.perma-bak)")
 else:
     print("  hooks.json: hooks already present")
 PY
@@ -90,6 +105,14 @@ if _perma_block_merge "$GEMINI_MD" "$BLOCK_SRC"; then
   echo "  GEMINI.md: Permanence block refreshed"
 fi
 
+# Agents: the project team's shipped agents, as Antigravity custom agents (experimental). The
+# translation and its rules are in agents-install.py beside this file.
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$BINDING_DIR/agents-install.py" "$PERMA/runtime/agents" "$HOME/.gemini/config/agents" || WIRE_FAILED=1
+else
+  echo "  agents: python3 not found — skipped"
+fi
+
 # Skills: translate runtime/commands/*.md into ~/.gemini/config/skills/<name>/SKILL.md —
 # confirmed real, confirmed invokable both by description-matching and literal /name syntax.
 # Each command already carries a `description:` frontmatter field; reused directly rather than
@@ -98,10 +121,10 @@ fi
 CMD_SRC="$PERMA/runtime/commands"
 SKILLS_DST="$HOME/.gemini/config/skills"
 if command -v python3 >/dev/null 2>&1; then
-if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
+if ! python3 - "$CMD_SRC" "$SKILLS_DST" "$BINDING_DIR/team-note.md" <<'PY'
 import json, os, re, shutil, sys
 
-cmd_src, skills_dst = sys.argv[1], sys.argv[2]
+cmd_src, skills_dst, team_note = sys.argv[1], sys.argv[2], sys.argv[3]
 
 def extract_description(content):
     m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
@@ -126,14 +149,17 @@ def extract_description(content):
 HARNESS = "antigravity"
 
 def only_for(content):
-    """The harness a command is limited to (frontmatter `harness:`), or None when it runs anywhere."""
+    """The harnesses a command is limited to (frontmatter `harness:`, one name or several separated
+    by commas), or None when it runs anywhere."""
     m = re.match(r'^\ufeff?---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
-    hm = re.search(r'^\s*harness:\s*["\']?([\w-]+)', m.group(1), re.MULTILINE | re.IGNORECASE) if m else None
-    return hm.group(1).lower() if hm else None
+    hm = re.search(r'^\s*harness:\s*([^#\n]+)', m.group(1), re.MULTILINE | re.IGNORECASE) if m else None
+    names = re.findall(r'[\w-]+', hm.group(1).lower()) if hm else []
+    return names or None
 
 def wanted(path):
     try:
-        return only_for(open(path).read()) in (None, HARNESS)
+        names = only_for(open(path).read())
+        return names is None or HARNESS in names
     except Exception:
         return True   # unreadable: let the translation loop report it, as before
 
@@ -153,6 +179,10 @@ for fname in sorted(os.listdir(cmd_src)):
         os.makedirs(skill_dir, exist_ok=True)
         fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
         body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
+        # A command that names this harness in `harness:` is a project-team command written for
+        # another tool's subagent calls: it gets the note that says how to read it here.
+        if only_for(content):
+            body = "\n" + open(team_note).read() + body.lstrip("\n")
         skill_md = os.path.join(skill_dir, "SKILL.md")
         if os.path.exists(skill_md):
             shutil.copy(skill_md, skill_md + ".perma-bak")

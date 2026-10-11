@@ -16,6 +16,40 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.8.0] — the project team on Antigravity (in part)
+
+The experimental project team ran on Claude Code only. This release carries it to Antigravity.
+Everything was checked against Antigravity CLI 1.2.2 by running it.
+
+**What the Antigravity binding now installs.**
+
+- **The eight agents**, translated into Antigravity's agent files in `~/.gemini/config/agents/`. Tool
+  names are mapped; a model name becomes a tier (`opus` to `pro`, `sonnet` and `haiku` to `flash`). An
+  agent folder of your own with one of those names is left exactly as it is and reported.
+- **A role hook** on Antigravity's subagent tool (`runtime/bindings/antigravity/agent-roles-hook.py`).
+  A dispatch by `role:<job>:<role>` is resolved by the same rules and the same tables as on Claude
+  Code, and replaced by the agent that fills the role. With no binding, the shipped table changes no
+  dispatch made by plain agent name, as on Claude Code. The hook fails open.
+- **The three team commands**, `/perma-health`, `/perma-refactor` and `/perma-change`, each with a
+  short note at the top on how to read its dispatch steps on Antigravity.
+
+**What is missing there**, because Antigravity gives a hook no way to do it: forcing a model per
+dispatch (the model is fixed in each agent's file instead), capping what a role's agent spawns, and
+sending a reviewer back for a missing run record. `docs/PROJECT-TEAM.md`, "On Antigravity", has the
+table.
+
+**What has been run on Antigravity:** a `role:` dispatch through the hook to a shipped agent, which
+did its work and reported back; and `/perma-health` from start to finish. `/perma-refactor` and
+`/perma-change` have **not** been run there end to end.
+
+**A command's `harness:` line can now name several tools**, separated by commas. Devin and Cursor
+still skip the team commands.
+
+**Fixed:** the example binding in `docs/PROJECT-TEAM.md` pointed its gates at `Makefile#check`, which
+preflight refuses (a pointer must name a JSON or YAML file). It now uses the command `make check`.
+
+No **Migration notes** — nothing in any stream changes shape.
+
 ## [1.7.1] — a tidy-up: one map of everything, and upgrades that deliver the docs
 
 No new features. v1.6.0 more than doubled the machinery, and the map of it had not kept up.

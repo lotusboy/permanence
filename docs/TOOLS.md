@@ -2,7 +2,7 @@
 
 Two groups. **Core** is Permanence itself: streams, session loading, the daily and periodic
 commands. It works on every supported tool. **Team** is the experimental project team added in
-v1.6.0. It works in Claude Code only, and only in a repository whose stream holds a
+v1.6.0. It works in Claude Code, and from v1.8.0 in Antigravity in part, and only in a repository whose stream holds a
 `repo/binding.json` ([PROJECT-TEAM.md](./PROJECT-TEAM.md)).
 
 `/perma-help` prints the commands installed on your machine and which background pieces are
@@ -68,11 +68,12 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 | `predict-gate.sh` | The predicted-moves gate: refuses any measured move nobody predicted ([PREDICT-GATE.md](./PREDICT-GATE.md)). Usable in any repo, with or without the team. |
 | `save-report.sh` | Saves an agent's report to a file byte for byte. |
 
-### Team (experimental, Claude Code only)
+### Team (experimental; Claude Code, and Antigravity in part)
 
 | Script | What it is for | Writes |
 |---|---|---|
 | `agent-roles.py`, `team_roles.py`, `agent-roles.json` | The role table and the three hooks that enforce it. | `runtime/logs/agent-roles.log` |
+| `bindings/antigravity/agent-roles-hook.py`, `agents-install.py`, `team-note.md` | The same role rules as an Antigravity hook; the installer that translates the agents; the note added to each team command there. | `runtime/logs/agent-roles.log`; `~/.gemini/config/agents/` |
 | `team-preflight.py` | Checks a repo's binding before a job or the health watch. | nothing |
 | `health-signal.py` | Writes a repo's health register from rules in the binding. | the register, in the stream |
 | `decision.sh` | Records each question put to the owner, the recommendation, the answer and the outcome. | `<stream>/decisions/ledger.jsonl`, `DECISIONS.md` |

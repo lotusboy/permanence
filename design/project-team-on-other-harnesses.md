@@ -1,7 +1,7 @@
 # Can the project team run on Antigravity, Devin and Cursor?
 
-**Status:** findings only, 2026-10-11. Nothing is built from this yet. The project team stays
-Claude Code only in v1.6.0.
+**Status:** findings, 2026-10-11. The Antigravity part was built from them the same day and shipped
+in v1.8.0 (`docs/PROJECT-TEAM.md`, "On Antigravity"). Cursor and Devin are still findings only.
 
 ## The question
 
@@ -29,7 +29,9 @@ Each tool was tested on one machine. Every row says how the fact was learned:
 | That hook can rewrite | Yes. Returning `{"decision":"allow","overwrite":{"Subagents":[…]}}` replaced the subagent's prompt. The launching agent is told a hook changed the arguments. `overwrite` is a shallow merge: the whole `Subagents` list must be returned. | Live |
 | That hook can block | Yes: `"decision":"deny"`. | Tool's own text |
 | Hook when a subagent stops | Partly. `Stop` fires once in the subagent's conversation and once in the parent's. The input carries `conversationId` and `terminationReason`. It does not say the conversation is a subagent, and it does not name the parent. | Live |
-| Named custom agents | Unknown. `agy agents` lists none on this machine. The program names a folder `{workspace}/.agents/agents/{agent_name}/`. The live `TypeName` values seen were `research` and `self`. | Program code |
+| Named custom agents | Yes. A folder per agent holding `agent.md`: YAML frontmatter (`name`, `description`, `tools`, `subagent`, `model` as a tier such as `flash` or `pro`), then the instructions under one H1. `~/.gemini/config/agents/<name>/` is loaded for every workspace and listed by `agy agents`. `TypeName` selects one by name. | Live |
+| A name that is not an agent reaches the hook | Yes. `TypeName: "role:reviewer"` arrived in `PreToolUse` unchanged and unvalidated; the hook replaced it with a real agent and the call ran. | Live |
+| A subagent's shell commands | Ask for permission like any other. With no one to answer (print mode), they are refused. | Live |
 
 Side finding: every Antigravity hook also fires inside a subagent's conversation, under the
 subagent's own `conversationId`. The existing Permanence `PreInvocation` hook loads the stream on the

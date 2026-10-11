@@ -112,14 +112,17 @@ def extract_description(content):
 HARNESS = "cursor"
 
 def only_for(content):
-    """The harness a command is limited to (frontmatter `harness:`), or None when it runs anywhere."""
+    """The harnesses a command is limited to (frontmatter `harness:`, one name or several separated
+    by commas), or None when it runs anywhere."""
     m = re.match(r'^\ufeff?---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
-    hm = re.search(r'^\s*harness:\s*["\']?([\w-]+)', m.group(1), re.MULTILINE | re.IGNORECASE) if m else None
-    return hm.group(1).lower() if hm else None
+    hm = re.search(r'^\s*harness:\s*([^#\n]+)', m.group(1), re.MULTILINE | re.IGNORECASE) if m else None
+    names = re.findall(r'[\w-]+', hm.group(1).lower()) if hm else []
+    return names or None
 
 def wanted(path):
     try:
-        return only_for(open(path).read()) in (None, HARNESS)
+        names = only_for(open(path).read())
+        return names is None or HARNESS in names
     except Exception:
         return True   # unreadable: let the translation loop report it, as before
 

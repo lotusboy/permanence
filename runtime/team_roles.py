@@ -47,8 +47,21 @@ def enabled_plugins(cwd):
     return [k for k, v in enabled.items() if v]
 
 
+ANTIGRAVITY_AGENTS = (".gemini", "config", "agents")
+
+
 def installed_agents(cwd):
-    """Every agent name this session could dispatch: built-ins, user, project, enabled plugins."""
+    """Every agent name this session could dispatch: built-ins, user, project, enabled plugins.
+
+    On Antigravity (PERMA_HARNESS=antigravity, set by that binding's hook and named in its skills)
+    the agents are folders under ~/.gemini/config/agents/, each holding an agent.md. The name
+    general-purpose stays in the set: the binding maps it to Antigravity's own default agent."""
+    if os.environ.get("PERMA_HARNESS") == "antigravity":
+        names = {"general-purpose"}
+        for f in Path.home().joinpath(*ANTIGRAVITY_AGENTS).glob("*/agent.md"):
+            n = frontmatter_name(f)
+            names.add(n if n and n != "agent" else f.parent.name)
+        return names
     names = set(BUILT_IN)
     for d in (Path.home() / ".claude" / "agents", Path(cwd) / ".claude" / "agents"):
         for f in d.glob("*.md"):
