@@ -29,6 +29,12 @@ echo "Permanence install — runtime @ $SHA"
 # 1. Executable bits + git hooks path (re-run needed once after any re-clone)
 chmod +x "$PERMA/runtime/"*.sh "$PERMA/.githooks/"* "$PERMA/runtime/bindings/"*/detect "$PERMA/runtime/bindings/"*/wire 2>/dev/null
 git -C "$PERMA" config core.hooksPath .githooks
+# .gitignore is the owner's file and no upgrade replaces it, so a line the machinery starts to need
+# is added here, once, at the end. Without this an upgraded install showed runtime/__pycache__/ and
+# runtime/.agent-roles-seen as untracked files for ever.
+for ig in '__pycache__/' '*.pyc' 'runtime/.agent-roles-seen' '.pytest_cache/'; do
+  grep -qxF "$ig" "$PERMA/.gitignore" 2>/dev/null || { printf '%s\n' "$ig" >> "$PERMA/.gitignore"; echo "  .gitignore: added $ig"; }
+done
 echo "  hooks: core.hooksPath=.githooks (pre-commit people-guard + post-commit contents refresh)"
 
 # 2. Scheduled tasks — cross-platform via schedule-task.sh (launchd/cron/schtasks, per OS)

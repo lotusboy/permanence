@@ -18,8 +18,8 @@ logic from implication. Write the minimum that states the design completely.
 
 ## 1. Before writing
 
-1. Read the project's `CLAUDE.md` and the design set's conventions file (in this owner's projects,
-   `docs/**/design/README.md`, section *Conventions*). Project rules win over this file.
+1. Read the project's `CLAUDE.md` and, if the project has one, the design set's conventions file
+   (often `docs/**/design/README.md`, section *Conventions*). Project rules win over this file.
 2. Read the whole design you are changing. For references to the part you change, `grep` the
    design set for its section number and the names it defines, and read only the matching
    sections — not whole files.

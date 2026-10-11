@@ -4,4 +4,7 @@
 # a false positive from some unrelated tool coincidentally named `agent` on a user's PATH. No
 # side effects, per the detect/wire interface's own contract.
 command -v cursor-agent >/dev/null 2>&1 && exit 0
+# Its installer puts it in ~/.local/bin, which a non-login shell (a scheduled job, another tool's
+# shell) may not have on PATH. Installed there still counts as here.
+[ -x "$HOME/.local/bin/cursor-agent" ] && exit 0
 exit 1

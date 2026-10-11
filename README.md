@@ -106,90 +106,9 @@ Companion project: [`axis-engineering`](https://github.com/lotusboy/axis-enginee
 - **Events** (`/perma-emit`) — when you've two projects open, one can flag something material to the *other's* Claude (a decision, a blocker), agent-to-agent. Emitting works out of the box; *receiving* is two machine-wide hooks you enable deliberately: a **UserPromptSubmit** hook surfaces waiting messages on the other session's next prompt, and a **Stop** hook catches a message that lands *mid-turn* — right as that session would go idle — and has it read them before stopping. Both are free (a local file read; they cost a turn only when there's actually a message) and share one cursor, so each message arrives once. Pub/sub: the sender never sees its own event. *(Truly-idle wake — with no user turn at all — needs an external nudge; see SPEC.)*
 - **Shutdown nudge** — a weekday end-of-day reminder to run `/perma-shutdown`, so the habit survives past week one: `~/permanence/runtime/shutdown-nudge.sh --install 17:00` (`--uninstall` to stop).
 
-- **Predicted-moves gate** (`runtime/predict-gate.sh`) — a stop rule enforced by a machine. Before a change, you write which outputs it will move. After it, the repo measures. The gate refuses every move nobody predicted. See [Predicted-moves gate](#predicted-moves-gate) below.
+- **Predicted-moves gate** (`runtime/predict-gate.sh`) — a stop rule enforced by a machine. Before a change, you write which outputs it will move. After it, the repo measures. The gate refuses every move nobody predicted. See [docs/PREDICT-GATE.md](./docs/PREDICT-GATE.md).
 
 These are deliberately off by default — the core (streams + the loops above) is the whole point; reach for them when you feel the specific need. (Programme groups, described above, need no toggle at all — they're just there, inert until you actually add a real row.)
-
-## Predicted-moves gate
-
-**The problem.** A stop rule written in prose is enforced only when an agent chooses to stop. On
-2026-10-10 an engineer's change moved a gap count from 9 to 11. No move had been predicted. The
-engineer judged the move fine and committed. Nothing compared the prediction with the measurement.
-
-**What the gate does.** It compares a structured prediction with two flat measurements, taken
-before and after the change. It exits non-zero on any move nobody predicted. It is generic: it knows
-no repo. Each key is a name the repo's own measurement scripts emit.
-
-**The three files**, kept together in one run folder:
-
-| File | Written | Holds |
-|---|---|---|
-| `moves.prediction.json` | before the first edit | the predicted moves |
-| `moves.baseline.json` | measured before the change | flat `{key: value}` |
-| `moves.measured.json` | measured after the change | flat `{key: value}` |
-
-The prediction file is JSON. A `.yaml` file works too, when PyYAML is installed. Example:
-
-```json
-{
-  "about": "A496: the caveat drop rule",
-  "moves": [
-    {"what": "gaps:unfaithful-logic", "from": 9, "to": 11, "scope": "product-a"},
-    {"what": "rules:fired:product-a", "delta": 2},
-    {"what": "gaps:capture", "range": [360, 375]},
-    {"what": "definition:file-hash:product-a"}
-  ],
-  "mustNotMove": ["premium:*"],
-  "tolerance": 0.005
-}
-```
-
-Rules for the prediction:
-
-1. A move gives exactly one of: `to` (with `from` optional), `delta`, `range` [low, high] for the
-   value after, or nothing. Nothing means "moves, any value". Use it for a hash.
-2. `what` and `mustNotMove` entries may use `*` and `?`.
-3. A key a move names is judged by that move, even when a `mustNotMove` glob also matches it. So
-   `"mustNotMove": ["premium:*"]` beside one predicted premium move means "no other premium moves".
-4. `scope` is a label for the reader. It does not change matching.
-5. `tolerance` is an absolute numeric tolerance. The default is 0.
-
-**Run it.**
-
-```bash
-~/permanence/runtime/predict-gate.sh check --prediction moves.prediction.json --measured moves.measured.json
-# --baseline defaults to moves.baseline.json beside the measured file
-```
-
-It reports six sections:
-
-1. Predicted, and it happened.
-2. Predicted, and it did not happen. This is reported. It does not stop the commit.
-3. Predicted to move, and it moved to a different value. This stops the commit.
-4. Moved, and nobody predicted it. This stops the commit.
-5. A `mustNotMove` key moved. This stops the commit.
-6. A `mustNotMove` entry matched no measured key, so it is unproven. This stops the commit.
-
-A key that appears or disappears counts as a move. Exit codes: 0 pass, 1 refused, 2 bad input.
-
-**The owner's exception.** `--override "<reason>" [--task <id>]` turns a refusal into a pass. The
-gate writes one `gate-refused` line, outcome `done`, to the repository's ops ledger through
-`ops-event.sh`. The line carries the reason and the refused keys. If the line cannot be written, the
-override is refused. An override is never silent. An override on a passing check records nothing.
-
-**Before every commit.** `predict-gate.sh install-hook <repo>` writes a pre-commit hook into that
-repository's local `.git/hooks`, which git never commits. Nothing installs it for you.
-
-1. The hook acts only when a commit stages a `moves.measured.json`. A commit with only the
-   prediction (the "before the first edit" commit) passes through.
-2. It checks each folder that holds a staged `moves.measured.json`. It reads all three files from
-   the index, so it checks what is being committed, not the working tree.
-3. A staged measurement with no prediction or no baseline beside it is refused.
-4. The owner's exception: `PREDICT_GATE_OVERRIDE="<reason>" PREDICT_GATE_TASK=<id> git commit ...`.
-   The override is recorded as above.
-5. The installer leaves a pre-commit hook it did not write alone. It also skips a repository that
-   sets `core.hooksPath`. In both cases it prints the one line to add to the existing hook.
-6. To remove the gate, delete `.git/hooks/pre-commit`.
 
 ## What's in here
 
@@ -198,7 +117,7 @@ repository's local `.git/hooks`, which git never commits. Nothing installs it fo
 | `runtime/` | the machinery — `session-start.sh` (loads the right context per workspace), `session-load.sh` (the reliable trigger — forces the read on your first message), `generate-contents.sh`, `install.sh`, `nightly-consolidate.sh`, `schedule-task.sh` (cross-platform scheduling), `claude-md-block.md` + `agents-md-block.md`, and `commands/` (the `/perma-*` commands: help, brief, startup, shutdown, list, consolidate, consolidate-review, contents, orchestrate, register, unregister, register-group, upgrade). **Opt-in extras** (install prints how): cross-project **events** (`/perma-emit`), the **shutdown nudge**. |
 | `.githooks/` | a **people-rule pre-commit guard** + a post-commit inventory refresh |
 | `SPEC.md` | the system, harness-independently — data model, invariants, runtime contract |
-| `docs/` | reference for one specific situation, read only when you're in it: [`UPGRADE.md`](./docs/UPGRADE.md) (the `/perma-upgrade` walkthrough) [`TOOL-SUPPORT.md`](./docs/TOOL-SUPPORT.md) (which AI tools are automated vs. manual, including Claude Desktop), and [`PROJECT-TEAM.md`](./docs/PROJECT-TEAM.md) (the experimental project team: roles, agents, the per-repo binding and the ledgers — Claude Code only) |
+| `docs/` | reference for one specific situation, read only when you're in it: [`TOOLS.md`](./docs/TOOLS.md) (every command and script on one page) [`UPGRADE.md`](./docs/UPGRADE.md) (the `/perma-upgrade` walkthrough) [`TOOL-SUPPORT.md`](./docs/TOOL-SUPPORT.md) (which AI tools are automated vs. manual, including Claude Desktop), and [`PROJECT-TEAM.md`](./docs/PROJECT-TEAM.md) (the experimental project team: roles, agents, the per-repo binding and the ledgers — Claude Code only) |
 | `templates/` | blank skeletons for the canonical files, named `*.template.md` so they're never mistaken for a real stream |
 | `example/` | a **fictional** populated Permanence (home decorating/DIY) showing the shape + each mechanism in action. **Delete `example/` once your own streams are going.** |
 | `axis/` | archived [`axis-engineering`](https://github.com/lotusboy/axis-engineering)-methodology review runs — historical snapshots describing the codebase as it was on that date, not current docs |
@@ -207,7 +126,7 @@ repository's local `.git/hooks`, which git never commits. Nothing installs it fo
 
 > **Why root vs. `docs/`?** Root holds what everyone needs on day one (`QUICKSTART.md`), what convention already puts there (`README`, `LICENSE`, `CHANGELOG`), and the one file everything else answers to (`SPEC.md` — every command's behavior traces back to its invariants, so it's foundational even though most people never open it day one). `docs/` is reference for one specific situation — you open it when you're actually upgrading, or actually on a different tool, not before.
 >
-> New here, or forgotten what's available? **`/perma-help`** lists every command and shows which background pieces are actually switched on for your machine.
+> New here, or forgotten what's available? **`/perma-help`** lists every command and shows which background pieces are actually switched on for your machine. [`docs/TOOLS.md`](./docs/TOOLS.md) is the same list on one page: every command and every script, what each is for, and whether it is part of the core or of the experimental project team.
 
 ## Staying current
 

@@ -38,6 +38,15 @@ enough that reading it all in the main session would crowd out the thread.
 **The PM keeps the thread.** A subagent's report is input to the PM, not a finding in its own right — the
 PM checks it before it reaches the owner.
 
+**The brief is the lever.** A thin brief gives a confident wrong answer. Every brief carries:
+
+- the goal, and what "done" means;
+- what is already known, so the agent does not re-derive it;
+- where to start;
+- what must not change, and how to check that it did not;
+- what the agent must not do (commit, push, start further agents);
+- the shape of the report.
+
 **Dispatch by role.** Use `subagent_type: "role:<name>"` (for example `role:blast-radius`). The table in
 `runtime/agent-roles.json` names which installed agent fills each role and how it must run, and a hook
 enforces that on every dispatch. Put `[model-approved]` in a dispatch's description to keep a different
@@ -68,6 +77,10 @@ model for that one dispatch, and only with the owner's yes.
 - **Name the trade when scope grows.** *"That is a new thing. Park the current one, or finish it first?"*
 - **Flag a sidetrack as a sidetrack.** When something genuinely needs doing mid-task, say so, do it, and
   say when returning.
+- **Plan before building.** Where the project has a planning or design step, a task that changes code
+  starts there, and the design is agreed before anything is built. However the work arrived — a probe, a
+  test, a conversation — name the step and wait. A habit that lives only in someone's memory is skipped
+  the first time the work arrives by an unusual route.
 
 ## 5. Closing a session
 
@@ -100,7 +113,35 @@ or answered. **A task that moved and was not written down did not move.**
   decision.
 - ⛔ **Never write Permanence content or paths into a project repo.** The pointer is one-way.
 
-## 8. Per-stream setup
+## 8. The records the PM keeps
+
+Permanence ships five tools that turn a PM's good intentions into records. **Each rule below applies
+where the owner uses that tool; none is required.** A stream that has never used one has no file for it,
+and the PM does not start one unasked — offer it once when the need first shows. `docs/TOOLS.md` lists
+them, and each tool's header comment is its full reference.
+
+- **Decisions are recorded, so the agent's judgement can be measured.** Before sending the owner a
+  question, record it with `runtime/decision.sh ask` (the question as sent, the options, the
+  recommendation, a confidence between 0 and 1, and a one-line pointer to the evidence). When the reply
+  arrives, record it with `decision.sh answer`. Before asking, `decision.sh should-ask <category>` says
+  whether to ask, to ask without showing the recommendation, or to decide and log it. When later
+  evidence shows a decision held or was reversed, record that with `decision.sh outcome`.
+- **Spend is measured, not estimated.** When an agent finishes, record the token count the harness
+  reported with `runtime/spend.sh record` — the harness's figure, never the agent's own estimate. Open a
+  wave with its ceiling before a batch starts (`spend.sh wave open`). At 80% of the ceiling, say so in the
+  next update. At 100%, dispatch nothing more in that wave until the owner raises the ceiling or the wave
+  closes.
+- **Reports are saved, never re-typed.** When an agent's report must live in a file, pipe its text
+  exactly as returned into `runtime/save-report.sh`. A re-typed report is a paraphrase.
+- **A predicted-moves gate is a machine, not a choice.** In a repo that uses `runtime/predict-gate.sh`,
+  the prediction is written before the first edit. Nobody edits the prediction, a test or an output to
+  make the gate pass. Only the owner overrides it, and the override is recorded.
+- **Closed vocabularies are ratified, not eyeballed.** When a system maps patterns to classes (a rule
+  table, a mapping, a controlled list), do not ask the owner to judge the list by eye. `runtime/ratify.sh`
+  samples it for two readers who each work without seeing the other's answers; only entries both mark
+  right are ratified.
+
+## 9. Per-stream setup
 
 A stream is PM-ready when it has a `WIP.md` with four sections — **Now**, **Blocked**, **Parked**,
 **Done today** — and a `PROJECT.md` naming where the team's plan lives. Nothing else is required; a stream
