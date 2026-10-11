@@ -228,6 +228,17 @@ def check_signal_rules(sig, repo, job):
                 re.compile(sig[k])
             except (re.error, TypeError) as e:
                 fails.append(f"check 4: signal.{k} does not compile ({e})")
+    listed = sig.get("parts")
+    if listed is not None and not isinstance(listed, list):
+        fails.append("check 4: signal.parts is not a list")
+    for i, rule in enumerate(listed if isinstance(listed, list) else []):
+        try:
+            if re.compile(rule["match"]).groups < 1:
+                fails.append(f"check 4: signal.parts[{i}].match needs one group, the part id")
+        except (re.error, TypeError, KeyError) as e:
+            fails.append(f"check 4: signal.parts[{i}].match is missing or does not compile ({e})")
+    if "part" not in sig and not listed:
+        fails.append("check 4: signal has no part rule (signal.part or signal.parts)")
     ref = sig.get("ref")
     if not ref or git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}").returncode:
         return fails + [f"check 4: signal.ref '{ref}' does not resolve in {repo}"], notes
