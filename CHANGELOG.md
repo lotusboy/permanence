@@ -30,6 +30,11 @@ No new features. v1.6.0 more than doubled the machinery, and the map of it had n
 - The predicted-moves gate's 80 lines moved out of `README.md` into `docs/PREDICT-GATE.md`,
   unchanged. It is one optional tool and had become a third of the front page.
 - The two design agents no longer point at a conventions file as if every project had one.
+- **`runtime/roles/pm.md` now says how to use the tools that shipped beside it.** v1.6.0 shipped the
+  decision ledger, the spend ledger, `save-report.sh`, the predicted-moves gate and `ratify.sh`, and the
+  role file never mentioned them, so a PM had the tools and no instruction to use them. A new section 8,
+  "The records the PM keeps", gives one rule per tool; each applies only where the owner uses that tool.
+  The role also gains what a subagent brief must carry, and "plan before building".
 
 **Fixes to upgrading.**
 
