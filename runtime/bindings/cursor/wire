@@ -113,9 +113,9 @@ HARNESS = "cursor"
 
 def only_for(content):
     """The harness a command is limited to (frontmatter `harness:`), or None when it runs anywhere."""
-    m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
-    hm = re.search(r'^harness:\s*(\S+)\s*$', m.group(1), re.MULTILINE) if m else None
-    return hm.group(1) if hm else None
+    m = re.match(r'^\ufeff?---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    hm = re.search(r'^\s*harness:\s*["\']?([\w-]+)', m.group(1), re.MULTILINE | re.IGNORECASE) if m else None
+    return hm.group(1).lower() if hm else None
 
 def wanted(path):
     try:
@@ -168,10 +168,16 @@ if os.path.isdir(skills_dst):
             existing = open(os.path.join(entry_path, "SKILL.md")).read()
         except Exception:
             continue
-        if "installed-from: ~/permanence/runtime/commands/" not in existing:
+        # The marker must name THIS skill: a user's copy under another name keeps the old marker
+        # text and is theirs. Files a user added beside SKILL.md are kept (review 2026-10-11, C1).
+        if f"installed-from: ~/permanence/runtime/commands/{entry}.md " not in existing:
             continue
-        shutil.rmtree(entry_path)
-        print(f"  skill: {entry} — removed (no longer in runtime/commands/)")
+        if os.listdir(entry_path) == ["SKILL.md"]:
+            shutil.rmtree(entry_path)
+            print(f"  skill: {entry} — removed (no longer in runtime/commands/)")
+        else:
+            os.remove(os.path.join(entry_path, "SKILL.md"))
+            print(f"  skill: {entry} — SKILL.md removed (no longer in runtime/commands/); your other files in {entry}/ kept")
 
 if failed:
     sys.exit(1)

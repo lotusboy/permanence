@@ -110,13 +110,21 @@ def pre_tool_use(d):
         notes.append(f"role:{spec} -> {st} ({src})")
         role_entry = res["entry"]
 
+    # Without a `role:` dispatch, the SHIPPED table touches a plain agent name only in a repository
+    # that has opted in with a binding: anywhere else a same-named agent may be the user's own
+    # (review 2026-10-11, H2). The owner's own table (_personal/) is their explicit choice and
+    # applies everywhere.
+    if binding is None and (team_roles.role_of(st, tabs)[1] or team_roles.role_of(d.get("agent_type"), tabs)[1]):
+        binding = team_roles.load_binding(PERMA, cwd, log)
+        if not binding:
+            tabs = tabs[:1]
     rname, r = team_roles.role_of(st, tabs)
     if not r and role_entry:
         # an agent no table lists takes only the dispatched role's model
         r = {"model": role_entry.get("model")}
     if r:
         want = r.get("model")
-        if want and ti.get("model") != want and APPROVED not in (ti.get("description") or ""):
+        if isinstance(want, str) and want and ti.get("model") != want and APPROVED not in (ti.get("description") or ""):
             notes.append(f"model {ti.get('model')} -> {want}")
             ti["model"] = want
         extra = r.get("prompt_append")
@@ -132,7 +140,7 @@ def pre_tool_use(d):
     if parent:
         pname, pr = team_roles.role_of(parent, tabs)
         cap = (pr or {}).get("nested_model")
-        if cap and is_above(ti.get("model"), cap):
+        if isinstance(cap, str) and cap and is_above(ti.get("model"), cap):
             notes.append(f"nested spawn by {parent}: model {ti.get('model')} -> {cap}")
             ti["model"] = cap
 
@@ -156,16 +164,24 @@ def repo_root(cwd):
 
 
 def subagent_stop(d):
-    rname, r = team_roles.role_of(d.get("agent_type"), tables())
+    tabs = tables()
+    rname, r = team_roles.role_of(d.get("agent_type"), tabs)
     if not r or not r.get("run_record"):
         return None
+    personal = bool(team_roles.role_of(d.get("agent_type"), tabs[:1])[1])
     try:
         st = os.stat(d["agent_transcript_path"])
         started = getattr(st, "st_birthtime", st.st_mtime)
     except (KeyError, OSError):
         started = time.time() - 3600
     cwd = d.get("cwd") or os.getcwd()
-    folder, why = reviews_folder(team_roles.load_binding(PERMA, cwd, log))
+    binding = team_roles.load_binding(PERMA, cwd, log)
+    # The shipped table demands a record only in a repository that has opted in with a binding and
+    # that the owner owns (or whose binding names a reviews folder). A rule in the owner's own table
+    # is their explicit choice and applies everywhere (review 2026-10-11, H1).
+    if not personal and (not binding or (binding.get("owned") is not True and "reviews" not in binding)):
+        return None
+    folder, why = reviews_folder(binding)
     if not folder:
         log(f"RUN-RECORD check skipped for {d.get('agent_type')}: binding {why}")
         return None
@@ -196,9 +212,12 @@ def check_new(cwd):
     # A provider that has gone missing while its plugin is still installed is almost always a rename
     # upstream. Said every session until the table is fixed. A plugin that is not installed at all is
     # the normal case for someone without it, so that stays silent.
+    # A missing shipped agent is said only in a repository with a binding: someone who does not use
+    # the team may have removed the agents on purpose (review L1).
     plugins = {n.split(":")[0] for n in have if ":" in n}
+    bound = bool(team_roles.load_binding(PERMA, cwd, log))
     gone = [(rn, p) for rn, r in entries for p in team_roles.providers(r)
-            if p not in have and (":" not in p or p.split(":")[0] in plugins)]
+            if p not in have and (p.split(":")[0] in plugins if ":" in p else bound)]
     for rn, p in gone:
         print(f"[perma] Agent role '{rn}': provider '{p}' is not installed"
               + (f", but the {p.split(':')[0]} plugin is — it was probably renamed or removed. "

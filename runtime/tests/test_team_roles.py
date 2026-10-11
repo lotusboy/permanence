@@ -28,13 +28,14 @@ class Fixture(unittest.TestCase):
         self.repo, self.other = t / "repo", t / "other"
         for d in (self.home / ".claude" / "agents", self.perma / "runtime", self.perma / "_meta",
                   self.repo, self.other):
-            d.mkdir(parents=True)
+            d.mkdir(parents=True, exist_ok=True)
         (self.perma / "runtime" / "resolve-stream.sh").symlink_to(RUNTIME / "resolve-stream.sh")
         (self.perma / "runtime" / "agent-roles.json").write_text(SHIPPED.read_text())
         (self.perma / "_meta" / "REGISTRY.md").write_text(
             f"| workspace path | stream | notes |\n|---|---|---|\n| {self.repo} | team/repo | x |\n")
         self.install("refactor-engineer", "refactor-reviewer", "architect", "design-author", "absence-check",
                      "blast-radius")
+        self.binding({})  # self.repo has opted in; self.other has no binding
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -86,6 +87,38 @@ class Fixture(unittest.TestCase):
 
     def log(self):
         return (self.perma / "runtime" / "logs" / "agent-roles.log").read_text()
+
+
+class TestNoBinding(Fixture):
+    """Review 2026-10-11 (H1, H2): with no binding, the shipped table changes nothing by name."""
+
+    def test_shipped_name_is_untouched_without_a_binding(self):
+        self.assertIsNone(self.dispatch("architect", cwd=self.other))
+        self.assertIsNone(self.dispatch("general-purpose", cwd=self.other, agent_type="refactor-reviewer"))
+
+    def test_shipped_name_is_ruled_with_a_binding(self):
+        self.assertEqual(self.dispatch("refactor-engineer")["model"], "opus")
+
+    def test_role_prefix_works_without_a_binding(self):
+        self.assertEqual(self.dispatch("role:engineer", cwd=self.other)["subagent_type"], "refactor-engineer")
+
+    def test_stop_asks_nothing_without_a_binding(self):
+        self.assertEqual(self.stop(cwd=str(self.other)), "")
+
+    def test_stop_asks_nothing_in_a_repo_the_owner_does_not_own(self):
+        d = self.perma / "team" / "repo" / "repo"
+        (d / "binding.json").write_text(json.dumps({"owned": False}))
+        self.assertEqual(self.stop(), "")
+
+    def test_owners_own_table_applies_everywhere(self):
+        self.install("plugin-review")
+        self.personal({"code-review": {"providers": ["plugin-review"], "model": "sonnet"}})
+        self.assertEqual(self.dispatch("plugin-review", cwd=self.other)["model"], "sonnet")
+
+    def test_non_string_model_is_ignored(self):
+        self.install("plugin-review")
+        self.personal({"code-review": {"providers": ["plugin-review"], "model": 7}})
+        self.assertIsNone(self.dispatch("plugin-review"))
 
 
 class TestGate(Fixture):
@@ -148,7 +181,7 @@ class TestRules(Fixture):
     def test_run_record_reads_reviews_from_binding(self):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         d = self.perma / "team" / "repo" / "repo"
-        d.mkdir(parents=True)
+        d.mkdir(parents=True, exist_ok=True)
         (d / "binding.json").write_text(json.dumps({"owned": True, "reviews": "records/"}))
         t = self.repo / "t.jsonl"
         t.write_text("")
@@ -206,7 +239,7 @@ class TestReview(Fixture):
         (self.perma / "_meta" / "REGISTRY.md").write_text(
             f"| workspace path | stream | notes |\n|---|---|---|\n| {self.repo} | perma-meta | x |\n")
         d = self.perma / "perma-meta" / "repo"
-        d.mkdir(parents=True)
+        d.mkdir(parents=True, exist_ok=True)
         (d / "binding.json").write_text(json.dumps({"owned": True, "roles": {"engineer": "design-author"}}))
         self.assertEqual(self.dispatch("role:engineer")["subagent_type"], "refactor-engineer")
 
@@ -234,7 +267,7 @@ class TestReview(Fixture):
                                        "prompt_append": "create {reviews}<date>-x/"}})
         self.assertIn("create axis/runs/<date>-x/", self.dispatch("design-author")["prompt"])
         d = self.perma / "team" / "repo" / "repo"
-        d.mkdir(parents=True)
+        d.mkdir(parents=True, exist_ok=True)
         (d / "binding.json").write_text(json.dumps({"owned": True, "reviews": "records"}))
         self.assertIn("create records/<date>-x/", self.dispatch("design-author")["prompt"])
 
@@ -263,7 +296,7 @@ class TestReview(Fixture):
     def test_p3_3_bad_reviews_skip_the_run_record_check(self):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         d = self.perma / "team" / "repo" / "repo"
-        d.mkdir(parents=True)
+        d.mkdir(parents=True, exist_ok=True)
         for bad in (["x"], "/tmp", "../up"):
             (d / "binding.json").write_text(json.dumps({"owned": True, "reviews": bad}))
             self.assertEqual(self.stop(), "", bad)

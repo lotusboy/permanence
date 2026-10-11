@@ -24,6 +24,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+try:
+    import fcntl
+except ImportError:  # no fcntl on native Windows: single-writer behaviour, as before
+    fcntl = None
+
 PERMA = Path(os.environ.get("PERMA_DIR") or Path.home() / "permanence")
 LEDGER = "decisions/ledger.jsonl"
 STREAM_CONFIG = "decisions/config.json"
@@ -63,6 +68,8 @@ def resolve_stream(explicit):
         stream = out.stdout.strip()
         if not stream:
             fail(f"no stream is registered for {os.getcwd()} in _meta/REGISTRY.md; pass --stream")
+    if ".." in Path(stream).parts or os.path.isabs(stream):
+        fail(f"stream {stream} is not a folder inside {PERMA}")
     if not (PERMA / stream).is_dir():
         fail(f"stream {stream} has no folder in {PERMA}")
     return stream
@@ -106,7 +113,44 @@ def read_events(stream):
     return rows
 
 
+class locked:
+    """Hold the stream's one lock: two writers must not interleave a read-modify-write of
+    QUESTIONS.md or DECISIONS.md (review 2026-10-11, M3). The lock is on the ledger file, which is
+    only ever appended to, so it is never swapped out from under the lock. Re-entrant in one process."""
+    depth = 0
+
+    def __init__(self, stream):
+        self.path = PERMA / stream / LEDGER
+
+    def __enter__(self):
+        locked.depth += 1
+        if locked.depth > 1 or fcntl is None:
+            self.f = None
+            return self
+        self.path.parent.mkdir(exist_ok=True)
+        self.f = self.path.open("a")
+        fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        locked.depth -= 1
+        if self.f:
+            self.f.close()
+
+
+def write_whole(path, text):
+    """Replace a file in one step, so a reader never sees half of it."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def append(stream, event):
+    with locked(stream):
+        _append(stream, event)
+
+
+def _append(stream, event):
     p = PERMA / stream / LEDGER
     p.parent.mkdir(exist_ok=True)
     with p.open("a", encoding="utf-8") as f:
@@ -134,7 +178,12 @@ def heading_question(line):
 
 
 def add_pointer(stream, heading, text):
-    """Insert one line at the end of the entry under `heading`. Every other byte is left as it was."""
+    """Insert one line at the end of the entry under `heading`. Every other line is left as it was."""
+    with locked(stream):
+        _add_pointer(stream, heading, text)
+
+
+def _add_pointer(stream, heading, text):
     p = PERMA / stream / QUESTIONS
     lines = p.read_text(encoding="utf-8").split("\n")
     if heading not in lines:
@@ -144,7 +193,7 @@ def add_pointer(stream, heading, text):
     while end > i + 1 and lines[end - 1].strip() == "":
         end -= 1
     lines.insert(end, text)
-    p.write_text("\n".join(lines), encoding="utf-8")
+    write_whole(p, "\n".join(lines))
 
 
 def fold(events):
@@ -453,7 +502,7 @@ def render(stream):
             out.append(f"- **Later ({o['ts'][:10]}):** {o['verdict']}, shown by {o['by']}"
                        + (f" ({o['pointer']})" if o.get("pointer") else "") + ".")
         out.append("")
-    (PERMA / stream / HUMAN).write_text("\n".join(out), encoding="utf-8")
+    write_whole(PERMA / stream / HUMAN, "\n".join(out))
 
 
 def cmd_render(a):

@@ -16,6 +16,10 @@
 set -u
 command -v python3 >/dev/null 2>&1 || { echo "$(basename "$0"): python3 not found on PATH — this tool needs it (standard library only)." >&2; exit 127; }
 PERMA="${PERMA_DIR:-$HOME/permanence}"
+# Run from inside a git hook or `git rebase --exec`, git's own variables would point every
+# `git -C <repo>` below at the calling repository instead (review 2026-10-11, M1).
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
+[ -f "$PERMA/_meta/REGISTRY.md" ] || exit 0
 MARKER="# installed-by: permanence runtime/repo-hooks.sh"
 FAILED=0
 
@@ -49,6 +53,12 @@ while IFS= read -r repo; do
   fi
   if ! git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
     echo "  repo hook: $repo — not a git repository here; skipped"
+    continue
+  fi
+  # The registered folder must be the repository's own root: owning a sub-folder is not owning
+  # the repository around it.
+  if [ "$(cd "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null && pwd -P)" != "$(cd "$repo" && pwd -P)" ]; then
+    echo "  repo hook: $repo — is a folder inside a larger repository, not its root; skipped"
     continue
   fi
   if hp="$(git -C "$repo" config --get core.hooksPath)"; then

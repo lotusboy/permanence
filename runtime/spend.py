@@ -48,6 +48,8 @@ def resolve_stream(explicit):
         stream = out.stdout.strip()
         if not stream:
             fail(f"no stream is registered for {os.getcwd()} in _meta/REGISTRY.md; pass --stream")
+    if ".." in Path(stream).parts or os.path.isabs(stream):
+        fail(f"stream {stream} is not a folder inside {PERMA}")
     if not (PERMA / stream).is_dir():
         fail(f"stream {stream} has no folder in {PERMA}")
     return stream

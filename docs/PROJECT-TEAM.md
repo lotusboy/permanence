@@ -67,6 +67,14 @@ A review role never falls to the session that did the work: with no match it goe
 `runtime/agent-roles.py` enforces them as hooks and logs every change to
 `runtime/logs/agent-roles.log`. The hook fails open.
 
+Outside a repository with a binding, the shipped table acts only on a `role:` dispatch. It does not
+change a dispatch made by plain agent name, and it never sends an agent back for a run record. The
+owner's own table in `_personal/` is the owner's explicit choice and applies everywhere.
+
+The shipped agents have plain names (`architect`, `design-author`, …). If the owner already has
+their own agent with one of those names, the install leaves theirs in place and says so; that role
+is then filled by the owner's agent.
+
 ## The binding
 
 `<stream>/repo/binding.json`. JSON, read with the standard library only. An `_about` key carries

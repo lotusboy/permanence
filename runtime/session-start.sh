@@ -99,7 +99,7 @@ role_lines() {  # role_lines <dir-whose-WIP.md-to-mention>
   if [ -f "$1/WIP.md" ]; then
     echo "[perma] This workspace's working board is $1/WIP.md."
   elif [ -n "${1:-}" ] && [ -d "$1" ]; then
-    echo "[perma] This stream has no WIP.md yet. Offer the owner ONCE to create one at $1/WIP.md (four sections: Now, Blocked, Parked, Done today); do not create it unasked."
+    echo "[perma] This stream has no WIP.md yet. Offer the owner once in this session to create one at $1/WIP.md (four sections: Now, Blocked, Parked, Done today); do not create it unasked, and do not ask again if they decline."
   fi
   return 0
 }

@@ -23,8 +23,8 @@ RESOLVE_TIMEOUT = 2  # seconds; the hook's whole budget is 10
 
 def frontmatter_name(path):
     try:
-        lines = open(path).read().split("\n")
-    except OSError:
+        lines = open(path, encoding="utf-8", errors="replace").read().split("\n")
+    except (OSError, ValueError):
         return None
     if not lines or lines[0].strip() != "---":
         return path.stem

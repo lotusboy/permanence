@@ -34,6 +34,17 @@ hooks, and no other binding carries it yet. The three commands carry `harness: c
 frontmatter, and the Antigravity, Devin and Cursor bindings skip any command so marked, so none of those
 tools is offered a command it cannot run. See [PROJECT-TEAM.md](./PROJECT-TEAM.md).
 
+What each other tool has of the three things the team needs, tested 2026-10-11. Only the Antigravity
+row was tested by running the tool; the Cursor and Devin rows come from each tool's own program files
+and error messages. Detail and method:
+[design/project-team-on-other-harnesses.md](../design/project-team-on-other-harnesses.md).
+
+| Tool | Subagents | Hook before launch that can rewrite it | Hook when a subagent stops |
+|---|---|---|---|
+| Antigravity | ✅ `invoke_subagent` | ✅ `PreToolUse` with `overwrite` | ⚠️ `Stop` fires, but does not say it is a subagent |
+| Cursor | ✅ (not run) | ⚠️ `subagentStart` can allow or deny, not rewrite (not run) | ✅ `subagentStop` (not run) |
+| Devin | ✅ `run_subagent` (not run) | ❓ no subagent event; `PreToolUse` untested | ❓ no subagent event |
+
 ## Claude Code
 
 Hooks wire `runtime/session-start.sh` and `runtime/session-load.sh` into every session automatically —

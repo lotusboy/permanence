@@ -20,8 +20,9 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 **Read this first.** Everything under "the project team" below is **experimental** and **Claude Code
 only**. It was built and used on one repository. It is opt-in per repository: it applies only where
-your stream holds `<stream>/repo/binding.json`, and with no binding nothing about your install
-changes. The Antigravity, Devin and Cursor bindings get neither the agents nor the role enforcement.
+your stream holds `<stream>/repo/binding.json`. With no binding, the shipped role table changes no
+agent dispatch and asks nothing of any agent; what every Claude Code install does gain is eight agent
+files in `~/.claude/agents/` and three hooks that then do nothing. The Antigravity, Devin and Cursor bindings get neither the agents nor the role enforcement.
 Which other published agents could fill each role has not been surveyed. `docs/PROJECT-TEAM.md` is the
 reference for all of it, including the file shapes.
 
@@ -43,8 +44,10 @@ shipped table names no private provider; an owner- or employer-specific one goes
 **New: eight shipped agents**, in `runtime/agents/`: `absence-check`, `count-check`, `blast-radius`
 (read-only checkers), `design-author`, `design-reviewer`, and `architect`, `refactor-engineer`,
 `refactor-reviewer`. The Claude Code wire copies them into `~/.claude/agents/` with an installed-from
-marker, backs up a same-named agent of your own before replacing it, and removes a marked agent whose
-source is gone. An install with no plugins has every role but code review, which falls back to the
+marker. If you already have your own agent with one of those names, yours is left exactly as it is
+and the install says so. An installed copy you edited in place is kept as `<name>.md.perma-bak` before
+it is replaced. A marked agent whose source is gone is moved to `<name>.md.perma-removed`, never
+deleted. An install with no plugins has every role but code review, which falls back to the
 built-in `general-purpose` agent.
 
 **New: three team commands.** `/perma-health` rewrites a repo's health register and lists the parts
@@ -118,6 +121,11 @@ than taking them as read:
 
 **CI** now runs the test suite (`python3 -m unittest discover -s runtime/tests`), compiles every
 standalone Python file, and checks that a fresh install places the agents.
+
+**Reviewed before release.** One adversarial pass (record: `axis/runs/2026-10-11-v1.6.0-team-layer-review/`)
+found that the first cut could delete a user's own agent file, replace a same-named agent, and act on
+plain agent names in repositories with no binding. All fifteen findings are fixed in this release;
+`03-fixes.md` in that folder lists each one and what stayed unknown.
 
 No **Migration notes** — nothing in any existing stream changes shape. Every new file in a stream is
 created only when you use the tool that owns it.
