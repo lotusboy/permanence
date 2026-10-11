@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "health-signal.py"
-ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com", GIT_COMMITTER_NAME="t",
-           GIT_COMMITTER_EMAIL="t@example.com")
+ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+           GIT_COMMITTER_EMAIL="t@t")
 for k in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
     ENV.pop(k, None)
 
