@@ -1,6 +1,7 @@
 # Updating the programme folder
 
-> **Scaffold.** Copy this into the target repo (conventionally `docs/programme/UPDATING.md`), then fill in
+> **Scaffold.** Copy this into the programme folder (conventionally the target repo's
+> `docs/programme/UPDATING.md`, or the owner's stream when the report is personal: SPEC §2 invariant 8), then fill in
 > every `<PLACEHOLDER>`. Delete this blockquote and the `» localise` notes as you go.
 >
 > Two kinds of content live here, and the difference matters:

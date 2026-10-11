@@ -161,7 +161,10 @@ else:
         gone = [r for r, lf in members.get(g, []) if lf]
         print(f"  {G} {B}{g}{R} — {len(cur)} current: {', '.join(cur) or 'none'}"
               + (f"  {D}(left: {', '.join(gone)}){R}" if gone else ""))
-        print(f"     folder: {D}{os.path.join(tgt, folder) if tgt != '?' else 'unknown'}{R}")
+        # A folder kept outside the target repo (SPEC §2 invariant 8) is written as an absolute or ~ path.
+        fx = os.path.expanduser(folder)
+        where = fx if os.path.isabs(fx) else os.path.join(tgt, folder) if tgt != '?' else 'unknown'
+        print(f"     folder: {D}{where}{R}")
     print(f"     {D}a goodnight in any member repo refreshes the whole folder — it converges{R}")
 PY
 

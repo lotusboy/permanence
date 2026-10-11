@@ -43,6 +43,14 @@ fi
 #     missed this, the one path every session actually goes through first.
 BEST_STREAM="$("$PERMA/runtime/resolve-stream.sh" "$CWD" 2>/dev/null)"
 
+# After a compaction the hook's cwd is wherever the shell last was — a scratchpad, say — not the project.
+# On 2026-10-08 that unloaded a stream and the PM role for the rest of a session. So when cwd resolves
+# to nothing, try the session's project folder, which Claude Code sets for every hook.
+if [ -z "$BEST_STREAM" ] && [ -n "$CLAUDE_PROJECT_DIR" ] && [ "$CLAUDE_PROJECT_DIR" != "$CWD" ]; then
+  BEST_STREAM="$("$PERMA/runtime/resolve-stream.sh" "$CLAUDE_PROJECT_DIR" 2>/dev/null)"
+  [ -n "$BEST_STREAM" ] && echo "[perma] The working folder ($CWD) is not registered; resolved from the project folder ($CLAUDE_PROJECT_DIR) instead."
+fi
+
 if [ -z "$BEST_STREAM" ]; then
   # Is this a container folder rather than a project? A session opened without its working folder set
   # lands in $HOME, and registering THAT as a stream is the classic wrong turn: every home-defaulted
@@ -88,7 +96,11 @@ role_lines() {  # role_lines <dir-whose-WIP.md-to-mention>
     return 0
   fi
   echo "[perma] ROLE: read $file now and follow it for the whole session — the owner chose this role for Claude in runtime/.role."
-  [ -f "$1/WIP.md" ] && echo "[perma] This workspace's working board is $1/WIP.md."
+  if [ -f "$1/WIP.md" ]; then
+    echo "[perma] This workspace's working board is $1/WIP.md."
+  elif [ -n "${1:-}" ] && [ -d "$1" ]; then
+    echo "[perma] This stream has no WIP.md yet. Offer the owner once in this session to create one at $1/WIP.md (four sections: Now, Blocked, Parked, Done today); do not create it unasked, and do not ask again if they decline."
+  fi
   return 0
 }
 

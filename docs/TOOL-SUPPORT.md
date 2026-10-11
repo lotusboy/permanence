@@ -27,6 +27,24 @@ product, not just reasoning about docs. 🔧 confirmed real — either live-test
 installed product's own bundled documentation — but no code wires it in yet, and (Gemini CLI only) may
 never, given the access block. ❓ genuinely still unknown.
 
+**The project team is Claude Code only.** The table above covers Permanence's core: streams, the
+forcing read, the standing instruction, commands. The experimental project team added in v1.6.0
+(agents, agent roles, `/perma-change`, `/perma-refactor`, `/perma-health`) uses Claude Code's subagents and
+hooks, and no other binding carries it yet. The three commands carry `harness: claude-code` in their
+frontmatter, and the Antigravity, Devin and Cursor bindings skip any command so marked, so none of those
+tools is offered a command it cannot run. See [PROJECT-TEAM.md](./PROJECT-TEAM.md).
+
+What each other tool has of the three things the team needs, tested 2026-10-11. Only the Antigravity
+row was tested by running the tool; the Cursor and Devin rows come from each tool's own program files
+and error messages. Detail and method:
+[design/project-team-on-other-harnesses.md](../design/project-team-on-other-harnesses.md).
+
+| Tool | Subagents | Hook before launch that can rewrite it | Hook when a subagent stops |
+|---|---|---|---|
+| Antigravity | ✅ `invoke_subagent` | ✅ `PreToolUse` with `overwrite` | ⚠️ `Stop` fires, but does not say it is a subagent |
+| Cursor | ✅ (not run) | ⚠️ `subagentStart` can allow or deny, not rewrite (not run) | ✅ `subagentStop` (not run) |
+| Devin | ✅ `run_subagent` (not run) | ❓ no subagent event; `PreToolUse` untested | ❓ no subagent event |
+
 ## Claude Code
 
 Hooks wire `runtime/session-start.sh` and `runtime/session-load.sh` into every session automatically —

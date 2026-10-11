@@ -109,9 +109,26 @@ def extract_description(content):
             return line
     return "A Permanence command."
 
+HARNESS = "cursor"
+
+def only_for(content):
+    """The harness a command is limited to (frontmatter `harness:`), or None when it runs anywhere."""
+    m = re.match(r'^\ufeff?---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
+    hm = re.search(r'^\s*harness:\s*["\']?([\w-]+)', m.group(1), re.MULTILINE | re.IGNORECASE) if m else None
+    return hm.group(1).lower() if hm else None
+
+def wanted(path):
+    try:
+        return only_for(open(path).read()) in (None, HARNESS)
+    except Exception:
+        return True   # unreadable: let the translation loop report it, as before
+
 failed = []
 for fname in sorted(os.listdir(cmd_src)):
     if not fname.endswith(".md"):
+        continue
+    if not wanted(os.path.join(cmd_src, fname)):
+        print(f"  skill: {fname[:-3]} — skipped (needs another harness; see docs/TOOL-SUPPORT.md)")
         continue
     name = fname[:-3]
     src_path = os.path.join(cmd_src, fname)
@@ -138,7 +155,8 @@ for fname in sorted(os.listdir(cmd_src)):
 # carries Permanence's own "installed-from" marker — never touch a user's own same-named skill.
 # Without this, a renamed/removed command stayed installed forever on every machine that had
 # already run wire once (Two-Pass review, 2026-09-14).
-current_names = {fn[:-3] for fn in os.listdir(cmd_src) if fn.endswith(".md")}
+current_names = {fn[:-3] for fn in os.listdir(cmd_src)
+                 if fn.endswith(".md") and wanted(os.path.join(cmd_src, fn))}
 if os.path.isdir(skills_dst):
     for entry in sorted(os.listdir(skills_dst)):
         if entry in current_names:
@@ -150,10 +168,16 @@ if os.path.isdir(skills_dst):
             existing = open(os.path.join(entry_path, "SKILL.md")).read()
         except Exception:
             continue
-        if "installed-from: ~/permanence/runtime/commands/" not in existing:
+        # The marker must name THIS skill: a user's copy under another name keeps the old marker
+        # text and is theirs. Files a user added beside SKILL.md are kept (review 2026-10-11, C1).
+        if f"installed-from: ~/permanence/runtime/commands/{entry}.md " not in existing:
             continue
-        shutil.rmtree(entry_path)
-        print(f"  skill: {entry} — removed (no longer in runtime/commands/)")
+        if os.listdir(entry_path) == ["SKILL.md"]:
+            shutil.rmtree(entry_path)
+            print(f"  skill: {entry} — removed (no longer in runtime/commands/)")
+        else:
+            os.remove(os.path.join(entry_path, "SKILL.md"))
+            print(f"  skill: {entry} — SKILL.md removed (no longer in runtime/commands/); your other files in {entry}/ kept")
 
 if failed:
     sys.exit(1)

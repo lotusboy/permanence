@@ -322,6 +322,24 @@ jobs:
             echo "see CHANGELOG.md's v1.4.0 entry and docs/UPGRADE.md for why."
           fi
 
+  tests:
+    name: Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run runtime/tests with the standard library's own runner
+        shell: bash
+        run: |
+          set -e
+          # Several tests commit in scratch repos; a fresh runner has no git identity.
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+          python3 -m unittest discover -s runtime/tests
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -346,6 +364,13 @@ jobs:
               python3 -m py_compile /tmp/_heredoc_check.py
             fi
           done
+
+      - name: Compile-check every standalone Python file
+        run: |
+          set -e
+          # The heredoc step above only sees Python embedded in shell scripts. Standalone files
+          # (runtime/*.py, runtime/tests/*.py) had no check at all until v1.6.0 added the first ones.
+          find . -name "*.py" -not -path "./.git/*" -print0 | xargs -0 -n1 python3 -m py_compile
 
       - name: ShellCheck
         run: |
@@ -386,6 +411,17 @@ jobs:
           test -f "$HOME/.claude/commands/perma-shutdown.md"
           test -f "$HOME/.claude/commands/perma-upgrade.md"
           echo "commands installed OK"
+
+      - name: Verify the shipped agents were installed, each with its installed-from marker
+        shell: bash
+        run: |
+          set -e
+          for a in "${PERMA_DIR}"/runtime/agents/*.md; do
+            n="$(basename "$a")"
+            test -f "$HOME/.claude/agents/$n" || { echo "FAILED: agent $n was not installed"; exit 1; }
+            grep -q "installed-from:" "$HOME/.claude/agents/$n" || { echo "FAILED: agent $n has no installed-from marker"; exit 1; }
+          done
+          echo "agents installed OK: $(ls "$HOME/.claude/agents" | wc -l | tr -d ' ')"
 
       - name: Verify the migrated Claude Code binding actually wired everything
         shell: bash
@@ -492,6 +528,14 @@ jobs:
           print("cursor hooks.json: OK")
           PY
           test -f "$HOME/.cursor/skills/perma-startup/SKILL.md" && echo "cursor skills: OK"
+
+          # A command marked `harness: claude-code` must not be offered on a tool that cannot run it.
+          for d in "$HOME/.gemini/config/skills" "$HOME/.config/devin/skills" "$HOME/.cursor/skills"; do
+            for c in perma-change perma-refactor perma-health; do
+              if [ -e "$d/$c" ]; then echo "FAILED: $d/$c was installed, but it is marked claude-code only"; exit 1; fi
+            done
+          done
+          echo "harness-limited commands skipped on all three: OK"
 
           # Idempotency: re-run all three and confirm no error and no duplicate entries.
           bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"

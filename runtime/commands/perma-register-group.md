@@ -44,6 +44,10 @@ task doc receives what it needs as inputs instead. That is what keeps the pointe
      identical across every programme so one reader can scan them side by side. Localising them silently
      destroys that. Keep the REPORT SPEC version line.
    - Strip the scaffold's own instructional blockquote and the `» localise` notes once filled in.
+   - **When the report is the owner's own working file**, the Groups row names a folder in the owner's
+     stream for the target repo (`<stream>/repo/programme/`) instead of the repo. Scaffold the task doc
+     there; in steps 4 and 6, "the target repo" then means that stream folder, and nothing goes in the
+     repo (SPEC §2 invariant 8).
 
 4. **Scaffold the initial folder** beside it, in the target repo:
    - `<PLAN-DOC>` (e.g. `build-plan.md`) — **human-owned**: seed the phase skeleton with the owner, or leave a clearly-marked stub. Never invent phases.
