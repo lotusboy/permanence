@@ -16,6 +16,32 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.9.0] — three small habits: marked shortcuts, "if not fixed", and the smallest complete change
+
+Three ideas borrowed from [Ponytail](https://github.com/dietrichgebert/ponytail) (MIT licence), each
+reworded for this project. Nothing of Ponytail is installed or copied; these are its ideas, not its
+files.
+
+- **Shortcuts are marked, and found again.** The PM role now puts one rule in every brief it gives
+  an engineer: a shortcut taken on purpose gets a comment at that line,
+  `shortcut: <the limit>, <when to upgrade>`. `/perma-health` gains a last step that lists every
+  marker in the repo with its file and line, and flags one that has no upgrade condition as
+  `no-trigger`. The step only reads; it changes no part's state.
+- **Every review finding says what happens if it is not fixed.** The `design-reviewer` and
+  `refactor-reviewer` agents add one sentence to each finding: who or what is affected, and when.
+  A severity says how bad; this says what the owner is choosing when they leave it.
+- **The smallest complete change, in order.** The PM role's engineer brief now carries an ordered
+  list to try, taking the first that fully works: does it need to exist; is it already in the
+  codebase; the standard library or a platform feature; an installed dependency; one line a reader
+  gets at a glance; otherwise the least code that works. It states its limits (never cut validation
+  at a trust boundary, error handling that prevents data loss, security, or what the owner asked
+  for) and that smallest is not partial: callers, tests and fixtures are finished too.
+
+All three live in opt-in files: the PM role (`runtime/roles/pm.md`), the team's health command and
+two of its agents. Nothing every session loads has changed, and no hook was added.
+
+No **Migration notes**.
+
 ## [1.8.1] — two fixes to the health signal, found by its first real adoption
 
 Both were found the first time a repository other than a test fixture tried to adopt the `signal`

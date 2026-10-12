@@ -43,8 +43,8 @@ binding and the register do not give you. A copied fact would bind every repo to
      `python3 ~/permanence/runtime/<script>.py --binding <the binding's path> --register {register}
      --repo {root}`. If preflight noted that the script is not installed, or
      `~/permanence/runtime/<script>.py` does not exist, stop here and say "the generic signal script
-     is not installed yet". Run nothing, write nothing, and skip steps 4 to 7. This is a clean stop,
-     not an error.
+     is not installed yet". Run no signal, write nothing, and skip steps 4 to 7 (step 8 still
+     runs). This is a clean stop, not an error.
 
    Fill `{root}`, `{register}` and `{date}`. If any `{…}` or `<…>` is left, stop and say which: the
    health watch has no value for it.
@@ -80,6 +80,25 @@ binding and the register do not give you. A copied fact would bind every repo to
    its path and commit it: `health(<stream>): register as of <computed.asOf>`. Never `git add -A`:
    other sessions may have writes in flight. Nothing changed: say so; make no empty commit. Never
    push.
+
+8. **List the shortcut markers.** A shortcut taken on purpose is marked in the code with a comment,
+   `shortcut: <the limit>, <when to upgrade>`. From the repo root, run:
+
+   ```bash
+   git grep -nI 'shortcut:'
+   ```
+
+   `git grep` reads tracked files only, so `.git`, installed dependencies and build output are
+   already left out. Exit code 1 with no output means none: say "no shortcut markers" and stop.
+   - Give one line per marker: `file:line`, the limit, and the upgrade condition.
+   - A marker with no upgrade condition after the limit: give it with the word `no-trigger` in
+     place of the condition.
+   - A line that only talks about the marker (documentation, a test of this rule) is not a marker.
+     Leave it out.
+   - Say the count outright, and how many are `no-trigger`.
+
+   This step is a read. It writes nothing, in a repo of any ownership, and it changes no part's
+   state. It still runs when step 3 stopped the signal: it does not need the register.
 
 ## Guardrails
 

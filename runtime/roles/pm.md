@@ -47,6 +47,29 @@ PM checks it before it reaches the owner.
 - what the agent must not do (commit, push, start further agents);
 - the shape of the report.
 
+**A brief to an engineer also carries two rules**, word for word, because an agent told only "keep it
+simple" decides for itself what simple means.
+
+*The smallest complete change.* Try these in order, and take the first that fully does the job:
+
+1. Does it need to exist at all?
+2. Is it already in this codebase?
+3. Does the standard library or a platform feature do it?
+4. Does a dependency that is already installed do it?
+5. Is it one line a reader understands at a glance?
+6. Otherwise: the least code that works.
+
+Smallest does not mean cut corners. Never drop validation where data crosses a trust boundary, error
+handling that prevents data loss, anything security depends on, or anything the owner asked for. And
+smallest does not mean partial: finish every part the change reaches — its callers, its tests, its
+fixtures.
+
+*Shortcuts are marked.* When the engineer takes a shortcut on purpose, it leaves a comment at that
+line: `shortcut: <the limit>, <when to upgrade>`. For example: `shortcut: holds the whole file in
+memory, upgrade when files pass 50 MB`. A shortcut with no upgrade condition is not a decision, it is
+a guess; write the condition. `/perma-health` lists every marker, so a shortcut is found again without
+anyone having to remember it.
+
 **Dispatch by role.** Use `subagent_type: "role:<name>"` (for example `role:blast-radius`). The table in
 `runtime/agent-roles.json` names which installed agent fills each role and how it must run, and a hook
 enforces that on every dispatch. Put `[model-approved]` in a dispatch's description to keep a different

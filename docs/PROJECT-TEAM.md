@@ -20,7 +20,7 @@ that says where to look.
 
 | Command | What it does |
 |---|---|
-| `/perma-health` | Rewrites the repo's health register and lists the parts that are ready for a refactor. It never starts work. |
+| `/perma-health` | Rewrites the repo's health register and lists the parts that are ready for a refactor. Also lists every `shortcut:` marker in the code. It never starts work. |
 | `/perma-refactor <part>` | Restructures one part. Every step must leave outputs byte-identical, except a meaning change the owner named in advance. |
 | `/perma-change <work-order id>` | Makes the tool do something new, or fixes a defect. The engineer writes every expected output move before its first edit; any move not predicted stops the job. |
 

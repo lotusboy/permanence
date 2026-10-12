@@ -53,7 +53,10 @@ quote is a hypothesis; say so.
 ## 4. Report
 
 - Result line: counts by severity.
-- One table: id, finding in one sentence, the quoted text it rests on with its section, severity.
+- One table: id, finding in one sentence, the quoted text it rests on with its section, severity, and
+  "if not fixed": what happens if the owner leaves it, in one sentence. Say the consequence, not the
+  severity again: who or what is affected, and when. If you cannot say what happens, say that; it is
+  a reason to doubt the finding.
 - What holds: the mechanisms checked and found sound, one line each.
 - Mechanical checks, with their output:
 
