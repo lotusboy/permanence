@@ -84,6 +84,11 @@ Two things stop `--apply` before it changes anything. Each prints one plain line
 - **Anything staged** (`git add` done, not yet committed), anywhere. The upgrade makes its own
   commit, which would otherwise include your staged files.
 
+**Your install can fetch from the template but cannot push to it.** The upgrade keeps a link named
+`_machinery` to the template, for fetching releases. Your Permanence holds private notes, so from
+v1.10.0 every upgrade sets that link's push address to a dead value. A mistaken
+`git push _machinery` then fails instead of publishing your streams. Fetching is not affected.
+
 Your `.gitignore` is yours and is never replaced. When the machinery starts producing a file that
 should not be tracked, the installer adds the one line for it at the end of your `.gitignore`, and
 that line goes into the upgrade's commit.

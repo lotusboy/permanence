@@ -60,6 +60,14 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 | `shutdown-nudge.sh` | Optional weekday reminder to run `/perma-shutdown`. |
 | `migrate-from-brain.sh` | One-time migration for an install from before the rename. |
 
+### Core: git hooks (`.githooks/`)
+
+| Hook | What it is for |
+|---|---|
+| `pre-commit` | The people-rule guard: checks what you are about to commit in your notes. |
+| `post-commit` | Refreshes the `CONTENTS.md` inventories. |
+| `pre-push` | Stops a push to the public template when a commit it would add contains a word from your private list, `~/permanence/_personal/private-words.txt`. Does nothing without that file, and ignores a push to anywhere else. |
+
 ### Core: optional extras
 
 | Script | What it is for |

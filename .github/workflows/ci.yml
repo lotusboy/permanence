@@ -212,6 +212,50 @@ jobs:
           fi
           echo "PASS: a future release's new tracked path is delivered in one --apply, automatically."
 
+          # The install's link to the template is for fetching only: it holds private notes, so its
+          # push address must be a dead value after an upgrade, and fetching must still work.
+          PUSH_URL=$(git -C "$SCRATCH" remote get-url --push _machinery)
+          FETCH_URL=$(git -C "$SCRATCH" remote get-url _machinery)
+          if [ "$PUSH_URL" != "DISABLED-private-notes-never-push" ] || [ "$FETCH_URL" = "$PUSH_URL" ]; then
+            echo "FAILED: _machinery push address is '$PUSH_URL' (fetch '$FETCH_URL'); it must be the dead value"
+            exit 1
+          fi
+          if git -C "$SCRATCH" push --dry-run _machinery HEAD >/dev/null 2>&1; then
+            echo "FAILED: a push to _machinery was not refused"
+            exit 1
+          fi
+          git -C "$SCRATCH" fetch -q _machinery
+          echo "PASS: _machinery fetches and cannot be pushed to."
+
+      - name: A release that changes little but update.sh still records its version and re-runs install
+        shell: bash
+        run: |
+          set -e
+          # Regression, found 2026-10-12: when every changed file lands in the pass that updates
+          # update.sh itself, the restarted script found nothing left to do and stopped without
+          # recording the version or running install.sh. Build exactly that release and upgrade to it.
+          SRC2="$RUNNER_TEMP/small-release-src"; INST2="$RUNNER_TEMP/small-release-install"
+          rm -rf "$SRC2" "$INST2"
+          git clone -q "$GITHUB_WORKSPACE" "$SRC2"
+          git -C "$SRC2" config user.email "ci@example.com"; git -C "$SRC2" config user.name "CI"
+          git -C "$SRC2" checkout -q -B main
+          git -C "$SRC2" tag -d v97.0.0 v97.0.1 2>/dev/null || true
+          git -C "$SRC2" tag v97.0.0
+          echo "# a comment-only change" >> "$SRC2/runtime/update.sh"
+          git -C "$SRC2" commit -qam "small release: update.sh only"
+          git -C "$SRC2" tag v97.0.1
+          git clone -q --branch v97.0.0 "$SRC2" "$INST2"
+          git -C "$INST2" config user.email "ci@example.com"; git -C "$INST2" config user.name "CI"
+          git -C "$INST2" checkout -q -B main
+          printf 'v97.0.0' > "$INST2/_meta/VERSION"; git -C "$INST2" commit -qam "an install on v97.0.0"
+          OUT=$(HOME="$RUNNER_TEMP/small-release-home" PERMA_DIR="$INST2" PERMA_UPDATE_SOURCE="$SRC2" bash "$INST2/runtime/update.sh" --apply 2>&1) || { echo "$OUT"; exit 1; }
+          GOT=$(tr -d '[:space:]' < "$INST2/_meta/VERSION")
+          if [ "$GOT" != "v97.0.1" ]; then echo "$OUT" | tail -20; echo "FAILED: version is $GOT, expected v97.0.1"; exit 1; fi
+          echo "$OUT" | grep -q "re-running install.sh" || { echo "FAILED: install.sh was not re-run"; exit 1; }
+          [ -z "$(git -C "$INST2" status --porcelain)" ] || { echo "FAILED: the tree is not clean after the upgrade"; git -C "$INST2" status --short; exit 1; }
+          HOME="$RUNNER_TEMP/small-release-home" PERMA_DIR="$INST2" PERMA_UPDATE_SOURCE="$SRC2" bash "$INST2/runtime/update.sh" | grep -q "Already up to date" || { echo "FAILED: a second run is not up to date"; exit 1; }
+          echo "PASS: a small release records its version, re-runs install.sh, and leaves a clean tree."
+
       - name: Verify the real transition (latest shipped release -> this PR) never loses data silently
         shell: bash
         run: |
@@ -348,7 +392,7 @@ jobs:
       - name: Syntax-check every shell script
         run: |
           set -e
-          for f in $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit runtime/bindings/*/detect runtime/bindings/*/wire; do
+          for f in $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit .githooks/pre-push runtime/bindings/*/detect runtime/bindings/*/wire; do
             echo "checking $f"
             bash -n "$f"
           done
@@ -374,7 +418,7 @@ jobs:
 
       - name: ShellCheck
         run: |
-          shellcheck --severity=warning $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit runtime/bindings/*/detect runtime/bindings/*/wire
+          shellcheck --severity=warning $(find . -name "*.sh" -not -path "./.git/*") .githooks/pre-commit .githooks/post-commit .githooks/pre-push runtime/bindings/*/detect runtime/bindings/*/wire
 
   install-matrix:
     strategy:

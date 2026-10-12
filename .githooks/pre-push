@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# pre-push — stop private words from being pushed to the PUBLIC template repository.
+#
+# Permanence holds private notes; its machinery is developed in the open. This guard is for the
+# owner who does both: it reads a list of words that must never be published (customer names,
+# product names, an employer's name) and refuses a push to the public template whose new commits
+# contain one. The list lives in the owner's private notes and is never part of the template:
+#
+#     ~/permanence/_personal/private-words.txt        (or the file named by PERMA_PRIVATE_WORDS)
+#
+# One pattern per line, matched without regard to case. A line is an extended regular expression,
+# so a plain word works as it is and `\bk2\b` matches only the whole word. Blank lines and lines
+# starting with # are ignored.
+#
+# WHEN IT ACTS. Only when the push goes to the repository named in runtime/.update-source — the
+# public template. A push anywhere else (for example your own private backup of your notes, which
+# is full of these words by design) is not looked at. No list file: it does nothing.
+#
+# WHAT IT READS. For every commit this push would add: the commit message, the names of the files
+# it touches, and the lines it adds. Also the name of the branch or tag being pushed.
+# WHAT IT CANNOT SEE: pull-request titles and descriptions, issue text, and anything typed into
+# the hosting site. Those never pass through a push.
+#
+# To push anyway, once, after reading the lines it shows:  PERMA_PUSH_PRIVATE_OK=1 git push ...
+set -u
+remote_name="${1:-origin}"
+remote_url="${2:-}"
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+src_file="$root/runtime/.update-source"
+[ -f "$src_file" ] || exit 0
+words="${PERMA_PRIVATE_WORDS:-$HOME/permanence/_personal/private-words.txt}"
+[ -f "$words" ] || exit 0
+
+# Same repository whether written https://host/owner/repo(.git) or git@host:owner/repo(.git).
+norm() {
+  printf '%s' "$1" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' \
+    | sed -E -e 's#^[a-z+]+://([^@/]*@)?##' -e 's#^[^@/]*@##' -e 's#:#/#' -e 's#\.git$##' -e 's#/+$##'
+}
+[ -n "$remote_url" ] || remote_url="$(git remote get-url "$remote_name" 2>/dev/null)"
+[ "$(norm "$remote_url")" = "$(norm "$(cat "$src_file")")" ] || exit 0
+
+tmp="$(mktemp -d)" || exit 0
+trap 'rm -rf "$tmp"' EXIT
+grep -v -E '^[[:space:]]*(#|$)' "$words" > "$tmp/patterns" || true
+[ -s "$tmp/patterns" ] || exit 0
+if ! printf 'x\n' | grep -i -E -f "$tmp/patterns" >/dev/null 2>"$tmp/err"; then
+  if [ -s "$tmp/err" ]; then
+    echo "pre-push: $words holds a pattern grep cannot read — fix it, the push is stopped:" >&2
+    sed 's/^/  /' "$tmp/err" >&2
+    exit 1
+  fi
+fi
+
+zero="0000000000000000000000000000000000000000"
+: > "$tmp/hits"
+while read -r _ local_sha remote_ref remote_sha; do
+  [ -n "${local_sha:-}" ] || continue
+  [ "$local_sha" = "$zero" ] && continue                      # deleting a remote ref adds nothing
+  if printf '%s\n' "$remote_ref" | grep -i -E -f "$tmp/patterns" >/dev/null; then
+    printf 'ref name: %s\n' "$remote_ref" >> "$tmp/hits"
+  fi
+  if [ "$remote_sha" = "$zero" ]; then
+    range=("$local_sha" --not "--remotes=$remote_name")          # a new ref: every commit the remote lacks
+  else
+    range=("$remote_sha..$local_sha")
+  fi
+  for c in $(git rev-list "${range[@]}" 2>/dev/null); do
+    short="$(git rev-parse --short "$c")"
+    {
+      git show -s --format='message: %B' "$c"
+      git show --format= --no-color --unified=0 "$c" | grep -E '^(\+|\+\+\+ )' | grep -v '^+++ /dev/null'
+    } | grep -n -i -E -f "$tmp/patterns" | cut -c1-200 | sed "s/^/$short  /" >> "$tmp/hits"
+  done
+done
+
+[ -s "$tmp/hits" ] || exit 0
+n="$(wc -l < "$tmp/hits" | tr -d ' ')"
+if [ "${PERMA_PUSH_PRIVATE_OK:-}" = "1" ]; then
+  echo "pre-push: $n line(s) match your private-words list; pushing anyway because PERMA_PUSH_PRIVATE_OK=1." >&2
+  exit 0
+fi
+{
+  echo "pre-push: STOPPED. This push goes to the public template, and $n line(s) it would add match"
+  echo "your private-words list ($words):"
+  head -20 "$tmp/hits" | sed 's/^/  /'
+  [ "$n" -gt 20 ] && echo "  ... and $((n - 20)) more"
+  echo "Nothing was pushed. Remove the words (amend or rebase the commits), or, if every line above"
+  echo "is fine to publish, push once with:  PERMA_PUSH_PRIVATE_OK=1 git push ..."
+} >&2
+exit 1

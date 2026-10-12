@@ -16,6 +16,39 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.10.0] — two guards against publishing private notes, and an upgrade bug fixed
+
+Permanence holds private notes and its machinery is developed in the open. Both guards are for the
+gap between the two.
+
+- **An install can no longer push to the template.** Every install keeps a git link named
+  `_machinery` to the template, for fetching releases. It could also push. For anyone with write
+  access to the template (its author, the owner of a fork) one mistaken `git push _machinery` would
+  have published every stream. `update.sh` now sets that link's push address to a dead value on
+  every run. Fetching is unaffected. Until you have upgraded to this release, you can set it by hand:
+  `git -C ~/permanence remote set-url --push _machinery DISABLED-private-notes-never-push`.
+- **New: a pre-push guard for private words** (`.githooks/pre-push`). You list the words that must
+  never be published — customer names, product names, an employer's name — one pattern per line in
+  `~/permanence/_personal/private-words.txt`. A push to the public template is refused when a commit
+  it would add contains one: in an added line, a commit message, a file name, or the name of the
+  branch. It shows the lines and pushes nothing. With no list file it does nothing. It acts only on
+  a push to the repository named in `runtime/.update-source`, so a push of your notes to your own
+  private backup is never looked at. It cannot see pull-request text, which never passes through a
+  push. The list stays in your private notes: it could not be part of the template or of CI without
+  publishing the very words it protects.
+
+**Fixed: a small release could leave the version unrecorded.** When every changed file landed in
+the same pass that updated `update.sh` itself, the restarted script found nothing left to do and
+stopped. It did not record the new version and did not re-run `install.sh`, so each later run
+showed "installed: old → latest: new" beside "Already up to date", and new commands were not
+installed. It now re-runs `install.sh` and records the version, and an install already in that state
+is put right by its next `--apply`. Found by testing this release's own upgrade.
+
+**Tested:** 13 tests for the guard; CI now checks that an upgraded install fetches but cannot push,
+and upgrades to a release that changes only `update.sh`.
+
+No **Migration notes**.
+
 ## [1.9.1] — the front-page docs catch up
 
 Docs only. Each recent release documented its own feature on its own page; the pages a new user
