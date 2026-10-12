@@ -135,10 +135,10 @@ class TestGuard(Fixture):
         self.assertEqual(self.on_public(), self.head())
 
     def test_the_same_repository_written_another_way_still_counts(self):
-        (self.repo / "runtime" / ".update-source").write_text("https://Example.com/Owner/Repo.git\n")
-        self.git("remote", "set-url", "origin", "git@example.com:owner/repo")
+        (self.repo / "runtime" / ".update-source").write_text("https://Example/Owner/Repo.git\n")
+        self.git("remote", "set-url", "origin", "git@example:owner/repo")
         self.commit("x", {"a.txt": "Acme Widgets\n"})
-        p = subprocess.run([str(self.repo / ".githooks" / "pre-push"), "origin", "git@example.com:owner/repo"],
+        p = subprocess.run([str(self.repo / ".githooks" / "pre-push"), "origin", "git@example:owner/repo"],
                            cwd=str(self.repo), capture_output=True, text=True, env=self.env,
                            input=f"refs/heads/main {self.head()} refs/heads/main {self.on_public()}\n")
         self.assertEqual(p.returncode, 1, p.stderr)
