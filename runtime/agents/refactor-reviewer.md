@@ -58,5 +58,9 @@ what the old one let through". Test both halves.
 Write `contract.md`, `pass1.md`, `pass2.md` and `findings.md` in the run directory you were given (a
 subfolder if it already holds another record — never overwrite one). Then report: the verdict line,
 counts by severity, each ANDON/P0/P1 in two or three lines with file:line, the mutations you
-performed and their results, what you verified and what you did not. Disposition is not yours: leave
+performed and their results, what you verified and what you did not. Every finding in `findings.md`,
+and each one you list in the report, ends with one more sentence headed "If not fixed:" that says
+what happens if the owner leaves it — who or what is affected, and when, not the severity again. If
+you cannot say what happens, say that, and re-check the finding before you report it. The sentence
+does not change the severity. Disposition is not yours: leave
 it to whoever commissioned the review. Never edit code.

@@ -47,6 +47,41 @@ PM checks it before it reaches the owner.
 - what the agent must not do (commit, push, start further agents);
 - the shape of the report.
 
+**A brief for new or changed code also carries two rules.** An agent told only "keep it simple"
+decides for itself what simple means, so the brief says it.
+
+*Where they apply.* Work that writes or changes code. Not a byte-identical refactor step: there the
+engineer's own contract wins — move verbatim, delete nothing, reuse nothing, add no comment. Where a
+command supplies the brief (`/perma-change`), its template already carries a short form of both rules
+and the template wins; add nothing to it. In any other engineer brief the PM writes, include the two
+blocks below as they stand.
+
+*Least change that is still complete.* Go down this list and stop at the first line that fully meets
+the need:
+
+1. Is the need already met? Then build nothing, and say so in the report.
+2. Does this codebase already have it, in a layer this code may depend on? Then use it, the way the
+   code around it does.
+3. Does the standard library or a platform feature do it? Then use that.
+4. Does a dependency that is already installed do it? Then use that; add no new one.
+5. Can it be one line that a reader understands without stopping? Then write that line.
+6. Otherwise write the least code that works.
+
+Keep the structure the codebase already has: its layers, its interfaces, its conventions. Least does
+not mean unsafe: never leave out a check where data crosses a trust boundary, error handling that
+keeps data from being lost, anything security depends on, or anything the owner asked for. Least does
+not mean partial: finish every part the change reaches — its callers, its tests, its fixtures.
+
+*A shortcut is marked.* A shortcut is a simpler way that is right for today's inputs and has a known
+limit. It is never one of the things in the paragraph above. When the engineer takes one on purpose,
+it leaves a comment at that line: `shortcut: <the limit>, <when to upgrade>`. For example:
+`# shortcut: holds the whole file in memory, upgrade when files pass 50 MB`. A shortcut with no
+upgrade condition is a guess, not a decision: write the condition.
+
+The health watch lists every marker it can find, so a shortcut is found again without anyone having
+to remember it. (That sentence is for the PM. It names a Permanence command, so it does not go into a
+brief: briefs reach records committed in the project's repo.)
+
 **Dispatch by role.** Use `subagent_type: "role:<name>"` (for example `role:blast-radius`). The table in
 `runtime/agent-roles.json` names which installed agent fills each role and how it must run, and a hook
 enforces that on every dispatch. Put `[model-approved]` in a dispatch's description to keep a different

@@ -26,7 +26,7 @@ switched on. This page is the fixed reference.
 | `/perma-emit` | core, opt-in | Sends a note from this project to your other open sessions. |
 | `/perma-upgrade` | core | Upgrades the machinery to the latest release; shows the plan first. |
 | `/perma-help` | core | Lists the installed commands and what is switched on. |
-| `/perma-health` | team | Rewrites the repo's health register and lists the parts that are ready. Never starts work. |
+| `/perma-health` | team | Rewrites the repo's health register, lists the parts that are ready, and lists the `shortcut:` markers it finds. Never starts work. |
 | `/perma-refactor` | team | Restructures one part behind byte-identical gates. |
 | `/perma-change` | team | Makes one change from a work order behind predicted-moves gates. |
 

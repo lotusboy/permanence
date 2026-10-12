@@ -378,6 +378,14 @@ Work order {id}: [work order: need]
 Decided: [work order: decided].
 Evidence: [work order: evidence]. Reproduce it on BASE first.
 Owning layer: [work order: layer]. Fix it there; a fix in another layer is an andon.
+Least change that is still complete: in that layer, stop at the first of these that fully meets the
+  need — the need is already met (build nothing, report it); code this repo already has there; the
+  standard library or the platform; a dependency already installed; one plain line; otherwise the
+  least code that works. Never leave out a check at a trust boundary, error handling that keeps data
+  from being lost, anything security depends on, or anything the work order asks for. Finish what
+  the change reaches: callers, tests, fixtures.
+A shortcut taken on purpose (right for today's inputs, with a known limit) gets a comment at its
+  line: shortcut: <the limit>, <when to upgrade>. Never without the upgrade condition.
 Expected moves: [work order: expected].
 Must not move: [work order: mustNotMove].
 Record folder: [binding.reviews + binding.reviewName, filled].

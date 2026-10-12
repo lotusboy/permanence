@@ -53,7 +53,10 @@ quote is a hypothesis; say so.
 ## 4. Report
 
 - Result line: counts by severity.
-- One table: id, finding in one sentence, the quoted text it rests on with its section, severity.
+- One table: id, finding in one sentence, the quoted text it rests on with its section, severity, and
+  "if not fixed": what happens if the owner leaves it, in one sentence. Say the consequence, not the
+  severity again: who or what is affected, and when. If you cannot say what happens, say that, and
+  re-check the finding before you report it. The sentence does not change the severity.
 - What holds: the mechanisms checked and found sound, one line each.
 - Mechanical checks, with their output:
 
@@ -63,7 +66,7 @@ grep -nE '^#{2,4} [^0-9]' <file>
 ```
 
 When told a run directory, write `00-contract.md` (section 1 step 3) and `02-pass-output.md` (this
-report) there, in the format of the previous runs. Adjudication is not yours: leave
+report) there, in the format of the previous runs plus the "if not fixed" column. Adjudication is not yours: leave
 `04-adjudication.md` to whoever commissioned the review.
 
 Never edit the design.

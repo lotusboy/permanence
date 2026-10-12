@@ -16,6 +16,43 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.9.0] — three small habits: marked shortcuts, "if not fixed", and the least complete change
+
+Three ideas from [Ponytail](https://github.com/dietrichgebert/ponytail) (MIT licence). Nothing of
+Ponytail is installed, and none of its files or hooks is copied. To be exact about what is the same:
+the marker format `shortcut: <the limit>, <when to upgrade>`, the tag `no-trigger` and the order of
+the six-step list are Ponytail's, kept as they are so that a repo marked for one tool reads correctly
+in the other. The rest is written for this project.
+
+- **Shortcuts are marked, and found again.** A shortcut taken on purpose gets a comment at its line
+  in the marker format above. The `/perma-change` engineer brief now says so, and the PM role says
+  so for any other brief it writes for new or changed code. `/perma-health` gains a last step that
+  lists the markers it finds, with file and line, and flags one that has no upgrade condition as
+  `no-trigger`. The step only reads, and changes no part's state. It searches comments in tracked
+  and new files; it does not see ignored files, submodules or other branches, so it reports what it
+  found, not a guarantee that there are no others.
+- **Every review finding says what happens if it is not fixed.** The `design-reviewer` and
+  `refactor-reviewer` agents add one sentence to each finding: who or what is affected, and when.
+  A severity says how bad; this says what the owner is choosing by leaving it. It does not change
+  the severity.
+- **The least change that is still complete, in order.** For new or changed code, the brief carries
+  a list to go down, stopping at the first line that fully meets the need: the need is already met;
+  the codebase already has it; the standard library or a platform feature; an installed dependency;
+  one plain line; otherwise the least code that works. It keeps the codebase's own structure, never
+  leaves out a check at a trust boundary, data-protecting error handling, security or what the
+  owner asked for, and finishes what the change reaches: callers, tests, fixtures. It does **not**
+  apply to a byte-identical refactor step, where the engineer moves code verbatim.
+
+Where the changes are: the PM role (`runtime/roles/pm.md`, opt-in); two team commands
+(`/perma-health`, `/perma-change`); and the bodies of two agents, which load only when that agent is
+dispatched. Nothing every session loads has changed, and no hook was added.
+
+Reviewed before release: `axis/runs/2026-10-12-v1.9.0-ponytail-ideas-review/`. The first draft
+contradicted the refactor engineer's verbatim rule and claimed that nothing was copied when three
+tokens were identical. Both are corrected above; `03-fixes.md` there lists every finding.
+
+No **Migration notes**.
+
 ## [1.8.1] — two fixes to the health signal, found by its first real adoption
 
 Both were found the first time a repository other than a test fixture tried to adopt the `signal`
