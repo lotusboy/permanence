@@ -7,10 +7,11 @@ harness: claude-code, antigravity
 
 The health watch for *this* repo. It says where to look. It never starts work.
 
-The watch is deterministic and costs no AI spend: it runs one command and reads one file. Every repo
-fact — the register's name, the signal, who owns the repo, who approves — comes from the repo's
+Steps 1 to 7 are deterministic and cost no AI spend: they run one command and read one file. Every
+repo fact — the register's name, the signal, who owns the repo, who approves — comes from the repo's
 binding, `<stream>/repo/binding.json`. Never use a path, command, threshold or part name that the
-binding and the register do not give you. A copied fact would bind every repo to the one it came from.
+binding and the register do not give you. The one exception is step 8, which runs one fixed command
+that is the same for every repo, and asks you to read its output. A copied fact would bind every repo to the one it came from.
 
 ## How to run it
 
@@ -43,8 +44,8 @@ binding and the register do not give you. A copied fact would bind every repo to
      `python3 ~/permanence/runtime/<script>.py --binding <the binding's path> --register {register}
      --repo {root}`. If preflight noted that the script is not installed, or
      `~/permanence/runtime/<script>.py` does not exist, stop here and say "the generic signal script
-     is not installed yet". Run no signal, write nothing, and skip steps 4 to 7 (step 8 still
-     runs). This is a clean stop, not an error.
+     is not installed yet". Run nothing, write nothing, and skip steps 4 to 7. This is a clean stop,
+     not an error.
 
    Fill `{root}`, `{register}` and `{date}`. If any `{…}` or `<…>` is left, stop and say which: the
    health watch has no value for it.
@@ -82,30 +83,44 @@ binding and the register do not give you. A copied fact would bind every repo to
    push.
 
 8. **List the shortcut markers.** A shortcut taken on purpose is marked in the code with a comment,
-   `shortcut: <the limit>, <when to upgrade>`. From the repo root, run:
+   `shortcut: <the limit>, <when to upgrade>`. This step runs whenever step 1 passed: after step 7,
+   and also when step 3 or step 4 stopped the signal. It does not run after a stop in step 1, and it
+   is not part of "steps 3 and 4" when another command refreshes the register.
+
+   From the repo root, count first:
 
    ```bash
-   git grep -nI 'shortcut:'
+   git grep -cI --untracked -E '(#|//|/\*|<!--|--|;|%)[[:space:]]*shortcut:'
    ```
 
-   `git grep` reads tracked files only, so `.git`, installed dependencies and build output are
-   already left out. Exit code 1 with no output means none: say "no shortcut markers" and stop.
-   - Give one line per marker: `file:line`, the limit, and the upgrade condition.
-   - A marker with no upgrade condition after the limit: give it with the word `no-trigger` in
-     place of the condition.
-   - A line that only talks about the marker (documentation, a test of this rule) is not a marker.
-     Leave it out.
+   The pattern needs a comment opener before the word, so a setting named `shortcut:`, a string and
+   a URL do not match. Exit code 1 with no output means none: say "no shortcut markers found" and
+   stop. Any other error: show it and stop.
+   - **More than 200 matching lines in total:** give the count per file and say the lines were not
+     read. Do not read them.
+   - **Otherwise** run the same command with `-n` in place of `-c` and ` | cut -c1-300` on the
+     end (a minified file can put a whole program on one line), and give one line per marker:
+     `file:line`, the limit, and the upgrade condition. The upgrade condition is the last clause,
+     the one that says when to upgrade; a limit may hold commas of its own. When no clause says
+     when, give the marker with the word `no-trigger` in place of the condition.
+   - Leave out a line that only talks about the marker (documentation, a test of this rule), and a
+     hit inside a dependency or build folder that happens to be tracked; say how many you left out.
    - Say the count outright, and how many are `no-trigger`.
 
+   What this search does and does not see: tracked files in the checked-out tree, and new files not
+   yet added, unless they are ignored. It does not see ignored files, submodules, other branches, a
+   marker written with a capital letter, or a comment style outside the list above. So report "found",
+   never "all".
+
    This step is a read. It writes nothing, in a repo of any ownership, and it changes no part's
-   state. It still runs when step 3 stopped the signal: it does not need the register.
+   state.
 
 ## Guardrails
 
 - **Watch only.** It reads, counts and writes the register. It never starts a refactor or a change,
   whatever the figures say, and even when the work looks small.
 - **Facts from the binding.** Every repo path, command and owner rule comes from the binding or the
-  register. If the binding lacks something this procedure needs, stop and say which field.
+  register; step 8's one fixed command is the only exception. If the binding lacks something this procedure needs, stop and say which field.
 - **A repo another party owns is read-only.** The checkout is never written: no file, branch, hook,
   tracker item or commit. The only output is a proposal, which stays in the stream.
 - **One-way flow.** The register lives in the stream. Never write a Permanence path or name into the
