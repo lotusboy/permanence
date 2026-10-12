@@ -69,6 +69,12 @@ if git -C "$PERMA" remote get-url _machinery >/dev/null 2>&1; then
 else
   git -C "$PERMA" remote add _machinery "$SRC"
 fi
+# _machinery is for FETCHING releases only. This repository holds the owner's private notes, and an
+# owner who also has write access to the template (its author, or a fork's owner) could publish
+# every stream with one mistaken `git push _machinery`. So its push address is a dead value. It is
+# set on every run, and it never affects fetching. An owner who really wants to push there can
+# set the address back by hand.
+git -C "$PERMA" remote set-url --push _machinery DISABLED-private-notes-never-push 2>/dev/null || true
 # --force on the tags: _machinery is single-purpose (only ever used to check for updates), so its
 # tags are always authoritative here — nothing in this install relies on a *local* tag under one of
 # these names (_meta/VERSION is the real version record). Without --force, a fetch fails outright,
@@ -95,6 +101,35 @@ CHANGED=$(git -C "$PERMA" diff --no-renames --name-status HEAD "$TARGET" -- "${P
 # fetched, not worth trusting a cached string to skip.
 if [ -z "$CHANGED" ]; then
   echo ""
+  # Every tracked file already matches the release, but the recorded version may still be behind.
+  # That is the state after a release whose changes all landed in the pass that updated update.sh
+  # itself: that pass commits them, restarts this script, and the restart finds nothing left to
+  # do. Before v1.10.0 it stopped here without recording the version, so every later run printed
+  # "installed: <old> -> latest: <new>" beside "Already up to date", for good. The content check
+  # just above is the evidence, so recording the version here claims nothing that is not true.
+  if [ -n "${LATEST_TAG:-}" ] && [ "$CURRENT" != "$LATEST_TAG" ]; then
+    if [ "$MODE" = "apply" ]; then
+      # The files are new even though this pass fetched none of them: the pass that did has not
+      # run install.sh yet (it restarts before reaching it), so commands, agents and hooks are
+      # still the old ones until it runs here.
+      echo "re-running install.sh (re-wires hooks + commands) ..."
+      IGNORE_WAS_CLEAN=0
+      git -C "$PERMA" diff --quiet -- .gitignore 2>/dev/null && IGNORE_WAS_CLEAN=1
+      bash "$PERMA/runtime/install.sh"
+      if [ "$IGNORE_WAS_CLEAN" = 1 ] && ! git -C "$PERMA" diff --quiet -- .gitignore 2>/dev/null; then
+        git -C "$PERMA" add -- .gitignore
+      fi
+      printf '%s' "$LATEST_TAG" > "$PERMA/_meta/VERSION"
+      git -C "$PERMA" add "$PERMA/_meta/VERSION" 2>/dev/null
+      if ! git -C "$PERMA" diff --cached --quiet; then
+        git -C "$PERMA" commit -q -m "perma-upgrade: machinery already matches $LATEST_TAG; version recorded ($SRC)"
+      fi
+      echo "✅ Machinery matches $LATEST_TAG; version recorded. Start a fresh session so the new hooks load."
+    else
+      echo "Machinery already matches $LATEST_TAG, but the recorded version is $CURRENT. Re-run with --apply to record it."
+    fi
+    exit 0
+  fi
   echo "Already up to date."
   exit 0
 fi
