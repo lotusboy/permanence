@@ -16,6 +16,22 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.9.1] — the front-page docs catch up
+
+Docs only. Each recent release documented its own feature on its own page; the pages a new user
+reads first had not been re-read as a whole.
+
+- `README.md`: the optional extras now introduce **roles** (the PM role and how to switch it on)
+  and the **project team**, each in a few lines with a link. Until now the team appeared only as
+  one link in a table, and roles not at all. The docs list no longer says the team is "Claude Code
+  only" (Antigravity carries it in part since v1.8.0), and it now lists `docs/PREDICT-GATE.md`.
+- `QUICKSTART.md`: one optional paragraph on the role and the team.
+- `docs/UPGRADE.md`: a new section, "What an upgrade touches, and what stops it" — the paths an
+  upgrade refreshes (including `docs/` since v1.7.1), the two things that stop `--apply`, and how
+  `.gitignore` lines are added.
+
+No **Migration notes**.
+
 ## [1.9.0] — three small habits: marked shortcuts, "if not fixed", and the least complete change
 
 Three ideas from [Ponytail](https://github.com/dietrichgebert/ponytail) (MIT licence). Nothing of

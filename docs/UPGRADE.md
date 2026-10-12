@@ -69,6 +69,28 @@ only the working-tree copies of the machinery paths are refreshed, same as any o
 per install; after that you're on the same footing as a fresh install and `/perma-upgrade` works normally
 from then on.
 
+## What an upgrade touches, and what stops it
+
+An upgrade refreshes the machinery only: `runtime/`, `.githooks/`, `templates/`, `docs/`, `design/`,
+and `SPEC.md`, `README.md`, `QUICKSTART.md`, `CHANGELOG.md`. It never touches a stream or `_personal/`, and in `_meta/`
+it writes only the version it has reached (`_meta/VERSION`). (`docs/` joined that list in v1.7.1. An install with no `docs/` folder at all receives
+the whole folder on its next upgrade.)
+
+Two things stop `--apply` before it changes anything. Each prints one plain line saying which:
+
+- **An uncommitted change to a machinery file.** Commit or stash it, then run the upgrade again. An
+  open edit in one of your streams does not stop it: a working board or a log in mid-edit is the
+  normal state of a Permanence in use.
+- **Anything staged** (`git add` done, not yet committed), anywhere. The upgrade makes its own
+  commit, which would otherwise include your staged files.
+
+Your `.gitignore` is yours and is never replaced. When the machinery starts producing a file that
+should not be tracked, the installer adds the one line for it at the end of your `.gitignore`, and
+that line goes into the upgrade's commit.
+
+One case to know about: these two rules arrived in v1.7.1. An install older than that is upgraded by
+the older script it already has, which wants a fully clean tree, streams included.
+
 ## If something goes wrong
 
 Every apply lands as a normal git commit in your own `~/permanence` history — `git log` shows exactly what
