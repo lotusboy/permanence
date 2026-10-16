@@ -47,6 +47,12 @@ work names its own working branch there. If the item has no `branch:` line, the 
 it opens its own branch (step 5). The job works only on the branch that line names. It never opens a
 second branch for the same item, and it never copies a work order from one branch to another.
 
+Beside them, too, the item carries a **`serves:` line**: the outcome this change moves for the
+owner, in the owner's own terms, with a count of the in-scope items it reaches. "In scope" is what
+the owner needs now; where the repo's gate list has a scope gate, that gate says how to count. A
+slice or a sample the work was framed on is counted the same way. Whoever writes the work order
+writes this line; the job never fills it.
+
 The job writes back to the same item, on that branch: `BASE`, the record folder, the prediction file,
 the owner's go on the prediction, each gate's result, the commits and the pull request. The item is
 the job's re-entry state. The stream holds only a pointer to it, in `WIP.md`.
@@ -191,6 +197,9 @@ Find where this work order stands before doing anything else. Run `git fetch` fi
    - `expected` lists at least one move, or says `none` with a reason;
    - `mustNotMove` names outputs, or says `none` with a reason;
    - `decided` names who decided, as a role, and a date;
+   - the item carries a `serves:` line with a count. A change whose count of in-scope items is zero,
+     or is the smaller share, stops here and goes to the owner as one decision before any spend:
+     passing every gate does not make a change worth making;
    - when the part being changed has an architecture decision on record (a restructure or redesign
      decision in the health register, or an architect's report the work order or binding names), the
      work order names the design step or stage the change belongs to. A change that fits no stage, or
@@ -201,7 +210,7 @@ Find where this work order stands before doing anything else. Run `git fetch` fi
    order. Offer to write the missing field with them.
 3. **Put it to the owner** as one message, in this order: the `need`; the `evidence`; the `layer`;
    the gates that prove it and the rest of the job's list; the `expected` moves and the `mustNotMove`
-   outputs; the branch the job will work on (the `branch:` line, or the one it will open); the size in hours and tokens; one question: go or not. A
+   outputs; the `serves` line and its count; the branch the job will work on (the `branch:` line, or the one it will open); the size in hours and tokens; one question: go or not. A
    work order from a repo procedure was already decided there; the go here is the go on the spend
    and the branch.
 4. **Record the pointer.** On the owner's go, add one pointer line to the stream's `WIP.md`: the id
@@ -317,7 +326,9 @@ not a gate.
    - a **static scan** of every stated value in the latest outputs and their data files, rows
      included, for the cases no input reaches.
 2. Each predicted move names the output, the case, the value before and the value after. Each
-   `mustNotMove` output is listed as unchanged.
+   `mustNotMove` output is listed as unchanged. A bounded count (a test count, for example) is
+   written in the prediction file as a `range`, never as words under `to`: the check compares `to`
+   for equality.
 3. The prediction goes to the owner before any site is switched (step 6.2).
 4. Then measure into `moves.measured.json` (the binding's measurement, flat key → value), with
    `moves.baseline.json` measured on BASE, and run `~/permanence/runtime/predict-gate.sh check
@@ -339,6 +350,14 @@ approved prediction file, and nothing else.
   ask for a reading at each stop point. A usage reading never goes into the repo: not into a branch,
   a commit, a review record or the tracker.
 - Recommend the proper fix. Never offer a stopgap as an equal option.
+- Open every report to the owner with two lines: what the change reaches, in scope against out of
+  scope, as counts; and what has moved in the owner's live outputs since this chain of work began.
+  "Nothing has moved" is a warning, not a reassurance.
+- Step back before the next dispatch — use the `step-back` skill, whose helicopter view is the page
+  for the owner (the goal, the scope count, what has moved in the live outputs, the spend) — when
+  either happens: a second review finds a P1 whose
+  cause lies outside the diff under review; or a second architect run is asked for in the same
+  chain. The cause is then upstream of the step being built: look at what feeds it first.
 - Say the result as a win: what now holds, measured, not what changed.
 
 ## Lessons
@@ -388,6 +407,9 @@ A shortcut taken on purpose (right for today's inputs, with a known limit) gets 
   line: shortcut: <the limit>, <when to upgrade>. Never without the upgrade condition.
 Expected moves: [work order: expected].
 Must not move: [work order: mustNotMove].
+Serves: [tracker: the item's serves: line]. The FIRST line of your prediction and of your result is
+a count of what the change touches or is judged on, in scope against out of scope; the result also
+says what moved in a live output, as a number ("nothing" is said plainly).
 Record folder: [binding.reviews + binding.reviewName, filled].
 Gate (predicted moves): every gate in [binding.gates.predictedMoves.gates, resolved: each gate's id,
 command, pass and when]. The gates that prove the need: [work order: gates].
@@ -424,6 +446,8 @@ must-not-move output byte-identical; the evidence no longer shows the failure.
 Gate commands: [as given to the engineer, resolved from the binding].
 Prose gates to run and record: [preflight: check 4 ids, read from the binding's gate list, or "none"].
 Known suspects: [the engineer's report: its found-not-fixed list].
+Serves: [tracker: the item's serves: line]. Open findings.md with your own count of what the change
+touches, in scope against out of scope, and say whether the prediction's first line is true.
 RUN the risky case and the work order's evidence on real inputs in a scratch dir (a constructed case
 is fine); say "read, not run" where you could not run it.
 Write contract.md first, then each pass file as you finish it, then findings.md, into

@@ -85,11 +85,18 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 | `team-preflight.py` | Checks a repo's binding before a job or the health watch. | nothing |
 | `health-signal.py` | Writes a repo's health register from rules in the binding. | the register, in the stream |
 | `decision.sh` | Records each question put to the owner, the recommendation, the answer and the outcome. | `<stream>/decisions/ledger.jsonl`, `DECISIONS.md` |
-| `spend.sh` | Records measured tokens per agent, grouped into waves with a ceiling. | `<stream>/spend/ledger.jsonl` |
+| `spend.sh` | Records measured tokens per agent, and what each run was for and produced, grouped into waves with a ceiling. | `<stream>/spend/ledger.jsonl`; a lesson stub in `<stream>/TOOLS.md` when a run did worse than predicted |
 | `ratify.sh` | Records which entries of a closed vocabulary two blind readers agreed on. | `<stream>/ratifications/ledger.jsonl` |
 | `ops-event.sh` | Appends one event to the repo's ops ledger. | `<stream>/repo/ops/events.jsonl` |
 | `ops-gap.sh` | Says how many commits the ops ledger is behind. | nothing |
 | `repo-hooks.sh` | Writes the post-commit hook that calls `ops-gap.sh`, in repos the owner owns. | `.git/hooks/post-commit` in those repos |
 
-`runtime/agents/` holds the eight agents the team's roles are filled by, and `runtime/roles/` holds
-the role an owner can give the main session (`pm.md`).
+`runtime/agents/` holds the nine agents the team's roles are filled by, and `runtime/roles/` holds
+the role an owner can give the main session (`pm.md`). `runtime/skills/` holds three method skills,
+installed into `~/.claude/skills/` (Claude Code only for now; the Antigravity binding installs the agents but not yet the skills):
+
+| Skill | Use it when |
+|---|---|
+| `dev-team` | deciding whether to do work yourself or hand it to one agent or several, which model, and which checker to run before a finding or a change ships |
+| `step-back` | a chain of work shows strain — an estimate overrunning twice, a fix round producing a new finding of the same kind, a third agent on one item |
+| `live-prism` | one item keeps resisting a fix — look at its real input from at least three sides before writing another rule |

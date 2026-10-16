@@ -6,9 +6,14 @@
 # directory through _meta/REGISTRY.md (as decision.sh does), or is named with --stream.
 #
 #   spend.sh wave open s2-slice --ceiling 400000
-#   spend.sh record --agent a1b2c3 --label "S2 answers r1" --tokens 131204 [--wave s2-slice]
+#   spend.sh record --agent a1b2c3 --label "S2 answers r1" --tokens 131204 \
+#       --why "answer the 40 open rows" --predicted "36 of 40 answered" --predicted-tokens 120000 \
+#       --result "38 of 40 answered" --outcome better [--wave s2-slice]
 #       [--kind agent|answering-agent|reviewer|architect] [--task A508] [--model M] [--note "..."]
 #       [--source harness|self-reported|estimate] [--correct] [--no-ops]
+#   A first record states the tool's result, not only its cost: --why, --predicted, --predicted-tokens,
+#   --result and --outcome are required (since v1.11.0). --kind architect also needs --task, and a
+#   second architect run on one task needs --stepped-back.
 #   spend.sh status [--wave W] [--all] [--json]
 #   spend.sh report [--since 2026-10-10] [--json]
 #   spend.sh wave close [s2-slice]

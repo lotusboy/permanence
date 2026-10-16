@@ -44,8 +44,64 @@ class Spend(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         return p
 
+    RESULT = ["--why", "a build agent for engine work", "--predicted", "the gate passes",
+              "--predicted-tokens", "10000", "--result", "the gate passed", "--outcome", "as-predicted"]
+
     def rec(self, agent, tokens, *extra, **kw):
-        return self.run_("record", "--agent", agent, "--label", f"job {agent}", "--tokens", str(tokens), *extra, **kw)
+        res = [] if "--correct" in extra or "--outcome" in extra else self.RESULT
+        return self.run_("record", "--agent", agent, "--label", f"job {agent}", "--tokens", str(tokens),
+                         *res, *extra, **kw)
+
+    def test_a_first_record_states_the_tools_result_not_only_its_cost(self):
+        p = self.run_("record", "--agent", "x1", "--label", "j", "--tokens", "100", ok=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--outcome", p.stderr)
+        self.assertFalse(self.ledger.exists())
+        self.rec("x1", 10000)
+        row = json.loads(self.ledger.read_text().splitlines()[-1])
+        self.assertEqual((row["outcome"], row["predictedTokens"], row["why"]),
+                         ("as-predicted", 10000, "a build agent for engine work"))
+        self.rec("x1", 12000, "--correct")
+
+    def test_a_second_architect_run_for_a_task_needs_a_step_back(self):
+        self.rec("ar1", 10000, "--kind", "architect", "--task", "A9")
+        p = self.rec("ar2", 10000, "--kind", "architect", "--task", "A9", ok=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--stepped-back", p.stderr)
+        self.rec("ar2", 10000, "--kind", "architect", "--task", "A9", "--stepped-back", "looked upstream first")
+        self.rec("ar3", 10000, "--kind", "architect", "--task", "A10")
+
+    def test_review_2026_10_16_the_spend_gates_need_real_values(self):
+        # the example in runtime/README.md and spend.sh's header passes as written
+        self.run_("record", "--agent", "a1b2c3", "--label", "S2 answers r1", "--tokens", "131204",
+                  "--kind", "answering-agent", "--task", "A508", "--why", "answer the 40 open rows",
+                  "--predicted", "36 of 40 answered", "--predicted-tokens", "120000",
+                  "--result", "38 of 40 answered", "--outcome", "better")
+        # empty values are refused
+        p = self.run_("record", "--agent", "e1", "--label", "L", "--tokens", "10", "--why", " ", "--predicted", "",
+                      "--predicted-tokens", "1", "--result", "", "--outcome", "as-predicted", ok=False)
+        self.assertIn("--why", p.stderr)
+        # an architect run names its task; a second one on the same task, whatever its case, needs a real step-back
+        self.assertIn("--task", self.rec("ar0", 10, "--kind", "architect", ok=False).stderr)
+        self.rec("ar1", 10, "--kind", "architect", "--task", "T9")
+        self.assertNotEqual(self.rec("ar2", 10, "--kind", "architect", "--task", "t9", ok=False).returncode, 0)
+        self.assertNotEqual(self.rec("ar2", 10, "--kind", "architect", "--task", "T9", "--stepped-back", " .",
+                                     ok=False).returncode, 0)
+
+    def test_a_worse_or_far_off_run_gets_a_lesson_stub_in_tools_md(self):
+        tools = self.perma / "a/proj/TOOLS.md"
+        tools.write_text("# TOOLS\n")
+        self.rec("x2", 10500)
+        self.assertEqual(tools.read_text(), "# TOOLS\n")
+        self.rec("x3", 10000, "--why", "w", "--predicted", "8 of 15 right", "--predicted-tokens", "10000",
+                 "--result", "2 of 15 right", "--outcome", "worse")
+        self.rec("x4", 30000, "--why", "w", "--predicted", "p", "--predicted-tokens", "10000",
+                 "--result", "r", "--outcome", "as-predicted")
+        text = tools.read_text()
+        self.assertIn("x3", text)
+        self.assertIn("2 of 15 right", text)
+        self.assertIn("x4", text)
+        self.assertEqual(text.count("**Lesson:** TODO"), 2)
 
     def status(self, *extra):
         return json.loads(self.run_("status", "--json", *extra).stdout)["waves"]
@@ -112,7 +168,7 @@ class Spend(unittest.TestCase):
     def test_report_totals_by_day_wave_kind_and_source_with_since(self):
         self.run_("wave", "open", "w1", "--ceiling", "1000")
         self.rec("old", 100, "--note", "backfilled from the 9 Oct notification", env={"SPEND_TS": "2026-10-09T10:00:00+01:00"})
-        self.rec("a1", 30, "--kind", "architect")
+        self.rec("a1", 30, "--kind", "architect", "--task", "R1")
         self.rec("a2", 5, "--source", "self-reported")
         rep = json.loads(self.run_("report", "--json").stdout)
         self.assertEqual(rep["total"], 135)

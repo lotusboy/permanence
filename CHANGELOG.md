@@ -16,6 +16,78 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.11.0] — three method skills: dev-team, step-back and live-prism
+
+**New: three method skills, the template's first.** `runtime/skills/` holds `dev-team` (the playbook for
+running the project team: do it yourself, one agent or several; which model; which of the three
+checkers to run before a finding or a change ships), `step-back` (when a chain of work shows strain,
+stop and give a bird's-eye view with one recommendation instead of another round) and `live-prism`
+(when one item keeps resisting a fix, look at its input from at least three sides). The Claude Code
+wire installs them into `~/.claude/skills/` with the same installed-from marker as commands and agents;
+a same-named skill of your own is left alone, and an installed copy you edited is kept in
+`~/.claude/skills-perma-bak/` — outside the skills folder, because any folder there holding a
+`SKILL.md` would load as a second copy of the skill. The PM role points at all three, and
+`docs/PROJECT-TEAM.md` points at `dev-team`. This also makes `/perma-refactor`'s existing reference to
+the step-back skill resolve for every Claude Code install. The skills install for Claude Code only for now; the
+Antigravity binding does not yet carry them. `live-prism` borrows Prism and Seesaw from
+axis-engineering (optional) and runs without it.
+
+**Step back, enforced.** The PM role now names the signals that mean a chain of work is straining —
+an estimate overrunning twice, a fix round producing a new finding of the same kind, a third agent on
+one item, two rounds in which nothing moved for the owner, a second serious review finding whose
+cause lies outside the code, a second architect run in one chain — and says to stop and use the
+`step-back` skill, whose helicopter view is "the step-back page". Where the owner keeps the decision
+ledger, two tools enforce it:
+
+- `decision.sh ask` refuses a question that opens a task's third fix round (or a further round after
+  two) without `--stepped-back`, a one-line summary of the step-back. Round 2 needs `--rechecked`,
+  what was re-checked at the source. A question that proposes a fix needs `--upstream`, what feeds
+  the failing step and what was seen there; on a task it also names its `--fix-round`, which is
+  counted from the ledger, so an earlier number cannot be reused. Each of those flags must hold a
+  statement, not a placeholder. A question needs `--read`, a source file the asker opened itself —
+  never an agent's report — except in the categories listed in `groundingExempt` (default: spend,
+  process, scope), which no source file settles. A guess word must be labelled `guess:` in its own
+  sentence. `--recheck` records a review of an existing fix round without opening a new one.
+- `spend.sh record --kind architect` now needs `--task`, and refuses a second architect run on one
+  task without `--stepped-back`. This gate is on the record: the tool runs after an agent finishes,
+  so the PM role puts the step-back before the dispatch.
+- **Breaking for existing callers of `spend.sh record`:** a first record now needs `--why`,
+  `--predicted`, `--predicted-tokens`, `--result` and `--outcome` — what the run was for, what was
+  expected and what came out — and none may be empty. The header example and `runtime/README.md`
+  show a call that passes.
+
+**The PM counts scope and says what moved.** Before any dispatch over a population of items, the PM
+says how many are in scope and how many are not; a majority out of scope means stop and ask. Every
+update says what has changed in the owner's live outputs since the chain began. A chain of dependent
+work opens a spend wave with a ceiling. `/perma-change` work orders carry a `serves:` line — the
+outcome the change moves, with a count of the in-scope items it reaches — and a change whose count is
+zero or the smaller share goes to the owner before any spend.
+
+**Five working habits added to the PM role**, each from a rule its source project kept having to
+restate: log a defect the moment it is seen; when findings repeat, build one mechanism instead of
+another case-by-case fix; never illustrate with invented data; say when a run starts and how long it
+should take; and investigate before asking — the owner gets only questions that need their judgement.
+
+**New agent: `human-expert`, filling the new role `expert`.** An independent, blind reading of one
+question about what a source means, standing in for a human expert in the project's field; the project
+names the expertise in the brief. It advises and never rules. The `dev-team` skill says when to use it.
+
+These came from a project that has used the team daily since v1.6.0. Its domain wording was taken
+out before release.
+
+**Reviewed before release** (`axis/runs/2026-10-16-v1.11.0-skills-and-gates-review/`). The first cut's
+gates refused the tools' own header examples, accepted "." as evidence, and could be dodged by
+repeating a fix-round number; the PM role and the step-back skill disagreed on when to step back; and
+the skills installer could report a copy as kept when the move had failed. All fixed; `03-fixes.md`
+lists every finding.
+
+**Upgrading an install that already has a hand-copied `human-expert.md`** in `~/.claude/agents/`: the
+installer leaves a same-named agent of yours alone and says so. Delete your copy and re-run
+`install.sh` to get the released one.
+
+No **Migration notes** — nothing in any stream changes shape. The new `decision.sh` refusals apply only
+to new questions; a ledger already written is read as before.
+
 ## [1.10.0] — two guards against publishing private notes, and an upgrade bug fixed
 
 Permanence holds private notes and its machinery is developed in the open. Both guards are for the
