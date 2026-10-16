@@ -16,6 +16,23 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.11.0] — three method skills: dev-team, step-back and live-prism
+
+**New: three method skills, the template's first.** `runtime/skills/` holds `dev-team` (the playbook for
+running the project team: do it yourself, one agent or several; which model; which of the three
+checkers to run before a finding or a change ships), `step-back` (when a chain of work shows strain,
+stop and give a bird's-eye view with one recommendation instead of another round) and `live-prism`
+(when one item keeps resisting a fix, look at its input from at least three sides). The Claude Code
+wire installs them into `~/.claude/skills/` with the same installed-from marker as commands and agents;
+a same-named skill of your own is left alone, and an installed copy you edited is kept in
+`~/.claude/skills-perma-bak/` — outside the skills folder, because any folder there holding a
+`SKILL.md` would load as a second copy of the skill. The PM role points at all three, and
+`docs/PROJECT-TEAM.md` points at `dev-team`. This also makes `/perma-refactor`'s existing reference to
+the step-back skill resolve for every install. Claude Code only, like the agents. `live-prism` borrows
+Prism and Seesaw from axis-engineering (optional) and runs without it.
+
+No **Migration notes** — nothing in any stream changes shape.
+
 ## [1.10.0] — two guards against publishing private notes, and an upgrade bug fixed
 
 Permanence holds private notes and its machinery is developed in the open. Both guards are for the

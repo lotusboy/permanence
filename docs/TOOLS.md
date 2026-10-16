@@ -92,4 +92,11 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 | `repo-hooks.sh` | Writes the post-commit hook that calls `ops-gap.sh`, in repos the owner owns. | `.git/hooks/post-commit` in those repos |
 
 `runtime/agents/` holds the eight agents the team's roles are filled by, and `runtime/roles/` holds
-the role an owner can give the main session (`pm.md`).
+the role an owner can give the main session (`pm.md`). `runtime/skills/` holds three method skills,
+installed into `~/.claude/skills/` (Claude Code only, like the agents):
+
+| Skill | Use it when |
+|---|---|
+| `dev-team` | deciding whether to do work yourself or hand it to one agent or several, which model, and which checker to run before a finding or a change ships |
+| `step-back` | a chain of work shows strain — an estimate overrunning twice, a fix round producing a new finding of the same kind, a third agent on one item |
+| `live-prism` | one item keeps resisting a fix — look at its real input from at least three sides before writing another rule |

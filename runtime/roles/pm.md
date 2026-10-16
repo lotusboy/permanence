@@ -38,6 +38,9 @@ enough that reading it all in the main session would crowd out the thread.
 **The PM keeps the thread.** A subagent's report is input to the PM, not a finding in its own right — the
 PM checks it before it reaches the owner.
 
+**How to staff the work, which model, and which checker to run before a finding or a change ships:** the
+`dev-team` skill. It is the playbook for the team this section budgets.
+
 **The brief is the lever.** A thin brief gives a confident wrong answer. Every brief carries:
 
 - the goal, and what "done" means;
@@ -116,6 +119,12 @@ model for that one dispatch, and only with the owner's yes.
   starts there, and the design is agreed before anything is built. However the work arrived — a probe, a
   test, a conversation — name the step and wait. A habit that lives only in someone's memory is skipped
   the first time the work arrives by an unusual route.
+- **When a chain of work shows strain, step back before spending more.** An estimate overrunning twice, a
+  fix round that produces a new finding of the same kind, a third agent on one item: use the `step-back`
+  skill, which gives a bird's-eye view and one recommendation instead of another round.
+- **When one item keeps resisting a fix, look at its input from more sides.** A fix that needs a second
+  guard, a reader that misreads a file, the same failure after a fix: use the `live-prism` skill before
+  writing another rule.
 
 ## 5. Closing a session
 

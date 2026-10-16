@@ -93,6 +93,58 @@ for existing in "$AGENT_DST"/*.md; do
   fi
 done
 
+# Skills: the method skills in runtime/skills/ (one folder each, holding a SKILL.md). Installed the
+# way agents are: an installed-from marker on the last line of SKILL.md, a user's own same-named skill
+# (no marker) left exactly as it is, and an installed copy the user edited kept before it is replaced.
+# One difference from agents: a kept or retired copy can NOT stay inside ~/.claude/skills/, because
+# every folder there holding a SKILL.md is loaded as a skill and would appear twice. They go to
+# ~/.claude/skills-perma-bak/ and ~/.claude/skills-perma-removed/ instead. Claude Code only for now.
+SKILL_SRC="$PERMA/runtime/skills"
+SKILL_DST="$HOME/.claude/skills"
+SKILL_KEEP="$HOME/.claude/skills-perma-bak"
+SKILL_GONE="$HOME/.claude/skills-perma-removed"
+mkdir -p "$SKILL_DST"
+for d in "$SKILL_SRC"/*/; do
+  [ -f "$d/SKILL.md" ] || continue
+  name=$(basename "$d")
+  dst="$SKILL_DST/$name"
+  mark="installed-from: ~/permanence/runtime/skills/$name @ "
+  if [ -d "$dst" ]; then
+    if ! tail -n 1 "$dst/SKILL.md" 2>/dev/null | grep -qF "$mark"; then
+      echo "  skill: $name — ATTENTION: you already have your own skill with this name; left as it is, Permanence's not installed"
+      continue
+    fi
+    edited=0
+    { cat "$d/SKILL.md"; printf '\n'; } | cmp -s - <(sed '$d' "$dst/SKILL.md") || edited=1
+    diff -rq -x SKILL.md "$d" "$dst" >/dev/null 2>&1 || edited=1
+    mkdir -p "$SKILL_KEEP"
+    if [ "$edited" -eq 1 ]; then
+      keep="$SKILL_KEEP/$name.$(date +%Y%m%d%H%M%S)"
+      mv "$dst" "$keep"
+      echo "  skill: $name — your edits to the installed copy are kept in ~/.claude/skills-perma-bak/$(basename "$keep")"
+    else
+      mv "$dst" "$(mktemp -d)/"
+    fi
+  fi
+  if cp -R "${d%/}" "$dst"; then
+    printf '\n<!-- installed-from: ~/permanence/runtime/skills/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$dst/SKILL.md"
+    echo "  skill: $name"
+  else
+    echo "  skill: $name — FAILED to copy"
+    WIRE_FAILED=1
+  fi
+done
+for existing in "$SKILL_DST"/*/; do
+  [ -f "$existing/SKILL.md" ] || continue
+  bn=$(basename "$existing")
+  [ -f "$SKILL_SRC/$bn/SKILL.md" ] && continue
+  if tail -n 1 "$existing/SKILL.md" 2>/dev/null | grep -qF "installed-from: ~/permanence/runtime/skills/$bn @ "; then
+    mkdir -p "$SKILL_GONE"
+    mv "${existing%/}" "$SKILL_GONE/$bn.$(date +%Y%m%d%H%M%S)"
+    echo "  skill: $bn — no longer in runtime/skills/; moved to ~/.claude/skills-perma-removed/"
+  fi
+done
+
 # CLAUDE.md: manage ONLY the delimited Permanence block, never the rest of a file we don't own.
 source "$PERMA/runtime/lib/block-merge.sh"
 CMD_MD="$HOME/.claude/CLAUDE.md"

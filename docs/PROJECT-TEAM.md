@@ -16,7 +16,9 @@
 
 The PM role (`runtime/roles/pm.md`) holds the thread for one owner. The project team is what the PM
 hands work to: named roles, filled by agents, running two jobs behind gates, plus a health watch
-that says where to look.
+that says where to look. The `dev-team` skill is the playbook for running it: whether to do a piece of
+work yourself or hand it to one agent or several, which model, and which checker to pass before a
+finding or a change ships.
 
 | Command | What it does |
 |---|---|
