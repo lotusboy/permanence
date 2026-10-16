@@ -27,6 +27,9 @@ class Ledger(unittest.TestCase):
         for k in ("DECISION_TS", "DECISION_BACKFILL"):
             self.env.pop(k, None)
         self.ledger = self.perma / "a/proj/decisions/ledger.jsonl"
+        self.src = self.work / "rates.csv"
+        self.src.write_text("Band,Rate\n1 to 25,0.5\n")
+        self.grounded = ["--read", str(self.src), "--read-what", "rows 1-2"]
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -42,7 +45,7 @@ class Ledger(unittest.TestCase):
         args = ["ask", "--category", cat, "--question", kw.get("q", "Run it?"), "--option", "yes",
                 "--option", "no", "--recommendation", "yes", "--confidence", str(conf),
                 "--evidence-kind", "measured", "--evidence", "WIP.md"]
-        args += kw.get("extra", [])
+        args += kw.get("grounding", self.grounded) + kw.get("extra", [])
         return self.run_(*args, env={"DECISION_TS": ts}).stdout.strip()
 
     def rows(self):
@@ -65,19 +68,122 @@ class Ledger(unittest.TestCase):
         (self.perma / "b").mkdir()
         p = subprocess.run([str(self.perma / "runtime/decision.sh"), "ask", "--stream", "b", "--category", "scope",
                             "--question", "q", "--option", "x", "--option", "y", "--recommendation", "x",
-                            "--confidence", "0.5", "--evidence-kind", "inference", "--evidence", "e"],
+                            "--confidence", "0.5", "--evidence-kind", "inference", "--evidence", "e", *self.grounded],
                            cwd=self.perma, capture_output=True, text=True, env=self.env)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertTrue((self.perma / "b/decisions/ledger.jsonl").exists())
 
     def test_validation_refuses_bad_input_and_writes_nothing(self):
         base = ["ask", "--category", "spend", "--question", "q", "--option", "a", "--option", "b",
-                "--recommendation", "a", "--evidence-kind", "measured", "--evidence", "e"]
+                "--recommendation", "a", "--evidence-kind", "measured", "--evidence", "e", *self.grounded]
         for extra in (["--confidence", "1.5"], [], ["--confidence", "0.5", "--blind", "--autonomous"]):
             self.assertNotEqual(self.run_(*base, *extra, ok=False).returncode, 0, extra)
         bad_kind = [x if x != "measured" else "vibes" for x in base] + ["--confidence", "0.5"]
         self.assertNotEqual(self.run_(*bad_kind, ok=False).returncode, 0)
         self.assertFalse(self.ledger.exists())
+
+    def test_a_question_must_rest_on_a_source_the_asker_opened(self):
+        report = self.work / "findings.md"
+        report.write_text("x")
+        for grounding in ([], ["--read", str(self.work / "missing.csv"), "--read-what", "r"],
+                          ["--read", str(report), "--read-what", "r"], ["--read", str(self.src)]):
+            p = self.run_("ask", "--category", "spend", "--question", "q", "--option", "a", "--option", "b",
+                          "--recommendation", "a", "--confidence", "0.5", "--evidence-kind", "measured",
+                          "--evidence", "e", *grounding, ok=False)
+            self.assertNotEqual(p.returncode, 0, grounding)
+        self.assertFalse(self.ledger.exists())
+        did = self.ask()
+        self.assertEqual(self.rows()[0]["read"], [{"path": str(self.src), "what": "rows 1-2"}])
+        self.assertTrue(did)
+
+    def test_a_guess_word_must_be_labelled(self):
+        for q in ("It probably holds, approve?", "The rule works it out from the pattern, go?",
+                  "Rates should stay put, ok?", "It appears to be a label, go?"):
+            p = self.run_("ask", "--category", "spend", "--question", q, "--option", "a", "--option", "b",
+                          "--recommendation", "a", "--confidence", "0.5", "--evidence-kind", "measured",
+                          "--evidence", "e", *self.grounded, ok=False)
+            self.assertNotEqual(p.returncode, 0, q)
+            self.assertIn("guess:", p.stderr)
+        self.assertFalse(self.ledger.exists())
+        self.ask(q="guess: the label column is probably the first; check it?")
+        self.ask(q="Shoulder rates and appearance fees: go?")
+        self.assertEqual(len(self.rows()), 2)
+
+    def test_a_second_fix_round_needs_a_source_recheck(self):
+        def go(q, *extra):
+            return self.run_("ask", "--category", "process", "--question", q, "--option", "a", "--option", "b",
+                             "--recommendation", "a", "--confidence", "0.5", "--evidence-kind", "measured",
+                             "--evidence", "e", *self.grounded, *extra, ok=False)
+        up = ["--upstream", "the upstream writer drops the column order"]
+        self.assertNotEqual(go("Go on the A1 fix round?", "--task", "A1", "--fix-round", "1").returncode, 0)
+        self.assertNotEqual(go("Go on the A1 fix round?", *up).returncode, 0)
+        self.assertNotEqual(go("Go on the A1 fix round?", "--fix-round", "1", *up).returncode, 0)
+        self.assertEqual(go("Go on the A1 fix round?", "--task", "A1", "--fix-round", "1", *up).returncode, 0)
+        p = go("Go on the second A1 fix round?", "--task", "A1", "--fix-round", "2", *up)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--rechecked", p.stderr)
+        ok = go("Go on the second A1 fix round?", "--task", "A1", "--fix-round", "2", *up,
+                "--rechecked", "opened rows 1-2 of the source table")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertEqual(self.rows()[-1]["rechecked"], "opened rows 1-2 of the source table")
+
+    def test_a_fix_names_what_feeds_the_failing_step(self):
+        base = ["ask", "--category", "process", "--option", "a", "--option", "b", "--recommendation", "a",
+                "--confidence", "0.5", "--evidence-kind", "measured", "--evidence", "e", *self.grounded]
+        for q in ("Fix the count?", "Patch the scoreboard?", "Ship the workaround?"):
+            p = self.run_(*base, "--question", q, ok=False)
+            self.assertNotEqual(p.returncode, 0, q)
+            self.assertIn("--upstream", p.stderr)
+        self.run_(*base, "--question", "Fix the count?", "--upstream", "the upstream writer drops the column order")
+        self.assertEqual(self.rows()[-1]["upstream"], "the upstream writer drops the column order")
+
+    def test_a_third_fix_round_needs_a_recorded_step_back(self):
+        def go(n, *extra):
+            return self.run_("ask", "--category", "process", "--question", f"Go on the A9 fix round {n}?",
+                             "--option", "a", "--option", "b", "--recommendation", "a", "--confidence", "0.5",
+                             "--evidence-kind", "measured", "--evidence", "e", *self.grounded,
+                             "--upstream", "u", "--task", "A9", "--fix-round", str(n), "--rechecked", "r",
+                             *extra, ok=False)
+        self.assertEqual(go(1).returncode, 0)
+        self.assertEqual(go(2).returncode, 0)
+        p = go(3)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--stepped-back", p.stderr)
+        p = go(2)  # re-asking an earlier round number does not dodge the count
+        self.assertNotEqual(p.returncode, 0)
+        ok = go(3, "--stepped-back", "census of every input kind on every target; design covers all")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertTrue(self.rows()[-1]["steppedBack"])
+
+    def test_a_quoted_inference_word_is_named_not_used(self):
+        for q in ("The check refuses the word 'should'; relax it?", 'It flags "probably" when quoted; go?',
+                  "It flags ‘assume’ and “guess” when named; go?"):
+            self.ask(q=q)
+        p = self.run_("ask", "--category", "spend", "--question", "It's 'fine' but should hold; go?",
+                      "--option", "a", "--option", "b", "--recommendation", "a", "--confidence", "0.5",
+                      "--evidence-kind", "measured", "--evidence", "e", *self.grounded, ok=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("'should'", p.stderr)
+
+    def test_a_recheck_reviews_a_round_and_opens_none(self):
+        def go(q, *extra):
+            return self.run_("ask", "--category", "process", "--question", q, "--option", "a", "--option", "b",
+                             "--recommendation", "a", "--confidence", "0.5", "--evidence-kind", "measured",
+                             "--evidence", "e", *self.grounded, *extra, ok=False)
+        for n in (1, 2):
+            self.assertEqual(go(f"Go on the A7 fix round {n}?", "--upstream", "u", "--task", "A7",
+                                "--fix-round", str(n), "--rechecked", "r").returncode, 0)
+        ok = go("Re-check fix round 2 of A7?", "--task", "A7", "--recheck")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertTrue(self.rows()[-1]["recheck"])
+        self.assertIsNone(self.rows()[-1]["fixRound"])
+        self.assertNotEqual(go("Re-check A7?", "--recheck").returncode, 0)
+        self.assertNotEqual(go("Re-check A7?", "--task", "A7", "--recheck", "--fix-round", "3",
+                               "--rechecked", "r", "--stepped-back", "s").returncode, 0)
+        p = go("Go on the A7 fix round 3?", "--upstream", "u", "--task", "A7", "--fix-round", "3",
+               "--rechecked", "r")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--stepped-back", p.stderr)
 
     def test_disagreement_must_be_stated_and_past_lines_are_never_rewritten(self):
         did = self.ask()
@@ -203,7 +309,7 @@ class Ledger(unittest.TestCase):
         qp.write_text(self.QS)
         did = self.run_("ask", "--questions-ref", "old cache", "--category", "scope", "--option", "keep",
                         "--option", "drop", "--recommendation", "drop", "--confidence", "0.7",
-                        "--evidence-kind", "source-read", "--evidence", "cache.py:12",
+                        "--evidence-kind", "source-read", "--evidence", "cache.py:12", *self.grounded,
                         env={"DECISION_TS": "2026-10-10T09:00:00+01:00"}).stdout.strip()
         self.assertEqual(self.rows()[0]["question"], "Keep the old cache?")
         self.run_("answer", did, "--choice", "keep", "--agreed", "no",

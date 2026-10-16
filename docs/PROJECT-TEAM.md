@@ -55,6 +55,7 @@ A role names a job. An agent fills a role. A job dispatches `role:<job>:<role>`,
 | `reviewer` | reviews the diff and runs the risky case | `refactor-reviewer` |
 | `absence-check`, `count-check`, `blast-radius` | check a claim of absence, a count, the reach of a change | the agent of the same name |
 | `design-author`, `design-reviewer` | write and review a design | the agent of the same name |
+| `expert` | an independent reading of one question about what a source means, standing in for a human expert in the project's field; it reads blind and advises, never rules | `human-expert` |
 | `code-review` | single-pass code review | none shipped; falls back to the built-in `general-purpose` agent |
 
 Resolution checks these levels in order. At each level the key `<job>:<role>` is tried before
@@ -83,7 +84,7 @@ is then filled by the owner's agent.
 Added in v1.8.0, checked against Antigravity CLI 1.2.2. `runtime/bindings/antigravity/wire` installs
 three things:
 
-- **The eight agents**, translated into Antigravity's own agent files under
+- **The shipped agents**, translated into Antigravity's own agent files under
   `~/.gemini/config/agents/<name>/agent.md`. Tool names are mapped to Antigravity's. A model name
   becomes a tier: `opus` is `pro`; `sonnet` and `haiku` are `flash`.
 - **The role hook**, on Antigravity's `invoke_subagent` tool. A dispatch with `TypeName:

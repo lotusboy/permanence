@@ -91,7 +91,7 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 | `ops-gap.sh` | Says how many commits the ops ledger is behind. | nothing |
 | `repo-hooks.sh` | Writes the post-commit hook that calls `ops-gap.sh`, in repos the owner owns. | `.git/hooks/post-commit` in those repos |
 
-`runtime/agents/` holds the eight agents the team's roles are filled by, and `runtime/roles/` holds
+`runtime/agents/` holds the nine agents the team's roles are filled by, and `runtime/roles/` holds
 the role an owner can give the main session (`pm.md`). `runtime/skills/` holds three method skills,
 installed into `~/.claude/skills/` (Claude Code only, like the agents):
 

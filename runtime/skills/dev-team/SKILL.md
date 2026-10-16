@@ -66,6 +66,13 @@ customer or another team will see.
 Dispatch them by role (`subagent_type: "role:blast-radius"`, and so on), as the PM role describes:
 `runtime/agent-roles.json` says which installed agent fills each role and how it must run.
 
+**An expert reading, when a decision turns on meaning.** When the question is what a document means, or
+how the field works in practice — the kind of question that would otherwise go to the owner as the
+domain expert — dispatch `role:expert` (the `human-expert` agent). The project names the expertise: put
+its expert role in the brief, with the question, the real source and the owner's own rulings. Never give
+it your recommendation; it reads blind. It is costly: one question per call, and never for anything a
+search or a count would answer.
+
 Each checker was written from real failures, and each names them. Read the agent file before deciding a
 check does not apply — the failure it catches is usually more specific than it sounds. **A check that
 finds nothing is a good result**, and the common one. It is not evidence the check was unnecessary.

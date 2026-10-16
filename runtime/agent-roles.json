@@ -69,6 +69,12 @@
     "code-review": {
       "providers": [],
       "model": "sonnet"
+    },
+    "expert": {
+      "providers": [
+        "human-expert"
+      ],
+      "model": "opus"
     }
   }
 }

@@ -86,7 +86,14 @@ signals fired and carry on with the Seesaw or the render first, not another fix 
 
 Where the owner keeps the decision ledger, record the question with `~/permanence/runtime/decision.sh
 ask` before sending it (category, the options, the recommendation and your confidence), and record the
-owner's reply with `decision.sh answer`. See the PM role's records section (`runtime/roles/pm.md` §8).
+owner's reply with `decision.sh answer`. The tool also asks for the evidence you read (`--read`) and,
+for a fix, what feeds the failing step (`--upstream`); the PM role's records section
+(`runtime/roles/pm.md` §8) lists every flag.
+
+**This step-back is what unlocks the next round.** From a task's third fix round, `decision.sh ask`
+refuses without `--stepped-back`, and `spend.sh record --kind architect` refuses a second architect run
+on one task without it. Give it one line that sums up this view: the signals, where they point, and the
+option chosen. A step-back that is not recorded did not happen, as far as those tools can tell.
 
 ## Hard rules
 

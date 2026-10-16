@@ -115,13 +115,29 @@ model for that one dispatch, and only with the owner's yes.
 - **Name the trade when scope grows.** *"That is a new thing. Park the current one, or finish it first?"*
 - **Flag a sidetrack as a sidetrack.** When something genuinely needs doing mid-task, say so, do it, and
   say when returning.
+- **Count the scope before spending.** Before any dispatch over a population of items, say how many
+  are in scope — what the owner needs now — and how many are not, as the first line. A yardstick the
+  work chose for itself (a slice, a sample) is counted too. A majority out of scope means stop and
+  ask. Passing every gate does not make work worth doing.
+- **Say what has moved for the owner.** Every update carries one line: what has changed in the
+  owner's live outputs since this chain of work began. "Nothing has changed" is a warning. After two
+  rounds with no change, step back before the next dispatch.
+- **Give a chain a goal and a ceiling.** Before a chain of dependent work, open a spend wave named
+  for its goal (`runtime/spend.sh wave open <goal> --ceiling <tokens>`). At the ceiling, stop and
+  bring the owner one page: the goal, the scope count, what has moved, the spend. This is a check on
+  the PM, not a request to raise a limit.
 - **Plan before building.** Where the project has a planning or design step, a task that changes code
   starts there, and the design is agreed before anything is built. However the work arrived — a probe, a
   test, a conversation — name the step and wait. A habit that lives only in someone's memory is skipped
   the first time the work arrives by an unusual route.
-- **When a chain of work shows strain, step back before spending more.** An estimate overrunning twice, a
-  fix round that produces a new finding of the same kind, a third agent on one item: use the `step-back`
-  skill, which gives a bird's-eye view and one recommendation instead of another round.
+- **When a chain of work shows strain, step back before spending more.** The signals: an estimate
+  overrunning twice; a fix round that produces a new finding of the same kind; a third agent on one
+  item; two rounds in which nothing moved for the owner; a second serious review finding whose cause
+  lies outside the code under review; a second architect run in one chain. The last two mean the step
+  being built is fed something wrong: stop building it and look at what feeds it. For any of them,
+  dispatch nothing more and use the `step-back` skill. Its helicopter view — goal, where we are, what
+  the chain has cost, where the tension is, three options and one recommendation — is "the step-back
+  page" this role asks for. Where the owner keeps the decision ledger, the tools enforce this: see §8.
 - **When one item keeps resisting a fix, look at its input from more sides.** A fix that needs a second
   guard, a reader that misreads a file, the same failure after a fix: use the `live-prism` skill before
   writing another rule.
@@ -166,10 +182,33 @@ them, and each tool's header comment is its full reference.
 
 - **Decisions are recorded, so the agent's judgement can be measured.** Before sending the owner a
   question, record it with `runtime/decision.sh ask` (the question as sent, the options, the
-  recommendation, a confidence between 0 and 1, and a one-line pointer to the evidence). When the reply
-  arrives, record it with `decision.sh answer`. Before asking, `decision.sh should-ask <category>` says
-  whether to ask, to ask without showing the recommendation, or to decide and log it. When later
-  evidence shows a decision held or was reversed, record that with `decision.sh outcome`.
+  recommendation, a confidence between 0 and 1, and a one-line pointer to the evidence). The tool refuses
+  a question that is not grounded (owner, 2026-10-14, after a rushed heuristic was put to him as fact):
+  `--read <file>` names a source the PM opened itself — raw document, product data or code, never an
+  agent's report — with `--read-what` saying which rows or lines; a guess word (probably, should,
+  infer, pattern, works it out…) must be labelled `guess:` in the question; a fix round gives `--task`
+  and `--fix-round N`, and round 2 or later needs `--rechecked`, what the PM re-checked at the source
+  first, because a second round means the design may be wrong; and a question that proposes a fix
+  gives `--upstream`, what feeds the failing step and what the PM saw when it looked there (Seesaw,
+  written into the tool after the PM patched a symptom twice). From fix round 3 of a task — or a
+  second fix round asked after two earlier ones — the tool refuses without `--stepped-back`, a
+  one-line summary of the step-back done first (the `step-back` skill's helicopter view); `spend.sh record --kind architect` refuses a second architect run for the same
+  task without it (owner, 2026-10-15, after a change found its edge cases one review round at a time).
+  When the reply arrives, record it with `decision.sh answer`. Before asking, `decision.sh should-ask
+  <category>` says whether to ask, to ask without showing the recommendation, or to decide and log it.
+  When later evidence shows a decision held or was reversed, record that with `decision.sh outcome`.
+- **Census first.** Before designing a change to how the tool reads its inputs, one pass over the raw
+  inputs of every target lists every structural kind in play; the design covers every kind the census
+  finds, and the prediction is written against it. Corners are found by looking, not one review round
+  at a time. The repo names its kinds: the binding's `census` pointer. With none, ask the owner which
+  kinds to census before designing.
+- **Tool use is tracked in results, not only in cost** (owner, 2026-09-27; restated 2026-10-14 after the
+  log lapsed for 17 days). Before choosing a tool, read the stream's `TOOLS.md`: its lessons say how a
+  tool was used well or badly, and which tool the work showed we need. `spend.sh record` refuses a first
+  record without `--why`, `--predicted`, `--predicted-tokens`, `--result` and `--outcome`; a run that went
+  worse or failed, or whose tokens are off by more than half, gets a lesson stub in `TOOLS.md`. Write the
+  lesson before the next dispatch. A lesson that says a tool keeps failing the same way is a signal to
+  build or adopt a different tool — bring it to the owner.
 - **Spend is measured, not estimated.** When an agent finishes, record the token count the harness
   reported with `runtime/spend.sh record` — the harness's figure, never the agent's own estimate. Open a
   wave with its ceiling before a batch starts (`spend.sh wave open`). At 80% of the ceiling, say so in the

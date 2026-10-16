@@ -11,7 +11,12 @@ stream ledger, not the repo ops ledger, because a wave can run from any stream, 
 Event kinds:
   wave-open   wave, ceiling
   wave-close  wave
-  agent       agent, label, tokens, wave, kind, source, task, model, note, corrects
+  agent       agent, label, tokens, wave, kind, source, task, model, note, corrects,
+              why, predicted, predictedTokens, result, outcome
+Every first record of an agent states why that tool was chosen, what was predicted (result and
+tokens), what happened and the outcome (owner, 2026-09-27 and 2026-10-14: track tool use in results,
+not only stats). A run that went worse or failed, or whose tokens are off the prediction by more than
+half, gets a stub entry in <stream>/TOOLS.md for the lesson to be written.
 A wrong agent row is never edited: `record --correct` appends a new row for the same agent id, and
 the latest row for an agent id is the one that counts.
 """
@@ -28,6 +33,8 @@ PERMA = Path(os.environ.get("PERMA_DIR") or Path.home() / "permanence")
 LEDGER = "spend/ledger.jsonl"
 KINDS = ("agent", "answering-agent", "reviewer", "architect")
 SOURCES = ("harness", "self-reported", "estimate")
+OUTCOMES = ("as-predicted", "better", "worse", "failed")
+TOOLS = "TOOLS.md"
 WARN, STOP = 0.8, 1.0
 
 
@@ -206,10 +213,24 @@ def cmd_record(a):
         fail(f"agent {a.agent} is already recorded in {stream}; pass --correct to replace its row")
     if a.correct and a.agent not in seen:
         fail(f"--correct given but agent {a.agent} has no row in {stream} to correct")
+    if a.kind == "architect" and a.task and not a.correct:
+        earlier = [r for r in agents(ev) if r.get("kind") == "architect" and r.get("task") == a.task]
+        if earlier and not (a.stepped_back or "").strip():
+            fail(f"a second architect run for {a.task} ({len(earlier)} before): give --stepped-back, the"
+                 " step-back done before dispatching it (owner, 2026-10-15)")
+    if not a.correct and not os.environ.get("SPEND_TS"):
+        missing = [f for f in ("why", "predicted", "predicted_tokens", "result", "outcome") if getattr(a, f) is None]
+        if missing:
+            fail("a first record states the tool's result, not only its cost: give "
+                 + ", ".join("--" + m.replace("_", "-") for m in missing))
     row = {"ts": stamp(), "event": "agent", "agent": a.agent, "label": a.label, "tokens": a.tokens,
            "wave": a.wave, "kind": a.kind, "source": a.source, "task": a.task, "model": a.model,
-           "note": a.note, "corrects": bool(a.correct), "backfilled": bool(os.environ.get("SPEND_TS"))}
+           "note": a.note, "corrects": bool(a.correct), "backfilled": bool(os.environ.get("SPEND_TS")),
+           "why": a.why, "predicted": a.predicted, "predictedTokens": a.predicted_tokens,
+           "result": a.result, "outcome": a.outcome, "steppedBack": getattr(a, "stepped_back", None)}
     append(stream, row)
+    if needs_lesson(a):
+        print(stub_lesson(stream, a))
     print(f"recorded {a.agent} ({a.label}): {a.tokens:,} tokens, {a.source}"
           + (f", wave {a.wave}" if a.wave else ", no wave open"))
     if a.wave:
@@ -220,6 +241,27 @@ def cmd_record(a):
             print(msg, file=sys.stderr)
     if not a.no_ops and not a.correct and not a.stream:
         print(mirror_to_ops(stream, a))
+
+
+def needs_lesson(a):
+    if a.outcome is None:
+        return False
+    off = a.predicted_tokens and abs(a.tokens - a.predicted_tokens) > a.predicted_tokens / 2
+    return a.outcome in ("worse", "failed") or bool(off)
+
+
+def stub_lesson(stream, a):
+    path = PERMA / stream / TOOLS
+    if not path.exists():
+        return f"TOOLS.md: {stream} has none; no lesson stub written"
+    entry = (f"\n### {stamp()[:10]} — {a.task or '-'} — {a.label} ({a.kind}, {a.agent})\n"
+             f"- **Why this tool:** {a.why}\n"
+             f"- **Predicted:** {a.predicted}; {a.predicted_tokens:,} tokens.\n"
+             f"- **Actual:** {a.result}; {a.tokens:,} tokens ({a.source}); outcome {a.outcome}.\n"
+             f"- **Lesson:** TODO — what to do differently with this tool, or the tool this shows we need.\n")
+    with path.open("a", encoding="utf-8") as f:
+        f.write(entry)
+    return f"TOOLS.md: lesson stub added for {a.agent} ({a.outcome}); write the lesson before the next dispatch"
 
 
 def cmd_status(a):
@@ -285,6 +327,12 @@ def main():
     r.add_argument("--task", help="tracker id the agent served")
     r.add_argument("--model")
     r.add_argument("--note")
+    r.add_argument("--why", help="why this tool was chosen over the alternatives")
+    r.add_argument("--predicted", help="the result predicted before the run")
+    r.add_argument("--predicted-tokens", type=tokens_arg, help="the tokens predicted before the run")
+    r.add_argument("--result", help="what actually happened, measured")
+    r.add_argument("--outcome", choices=OUTCOMES)
+    r.add_argument("--stepped-back", help="a second architect run for --task: the step-back done first")
     r.add_argument("--correct", action="store_true", help="replace this agent's earlier row (appends; never edits)")
     r.add_argument("--no-ops", action="store_true", help="do not also write the repo ops ledger's agent-run row")
     r.add_argument("--stream")

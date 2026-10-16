@@ -36,6 +36,15 @@ HUMAN = "DECISIONS.md"
 QUESTIONS = "QUESTIONS.md"
 EVIDENCE_KINDS = ("measured", "blind-readers-agreed", "source-read", "inference")
 VERDICTS = ("held", "reversed", "refined")
+# A question rests on a source the asker opened, not on an agent's report about it (owner, 2026-10-14).
+REPORT_NAMES = re.compile(r"(^|[-_.])(report|findings|result|prediction|disposition|contract|pass\d|handback)"
+                          r"([-_.]|$)", re.I)
+# Words that mark an inference. A question using one must label it: "guess:" (owner, 2026-10-14).
+GUESS_WORDS = ("probably", "likely", "should", "infer", "inferred", "inferring", "pattern", "heuristic",
+               "guess", "presumably", "assume", "assumed", "seems", "appears to", "works it out")
+GUESS_LABEL = re.compile(r"\bguess\s*:", re.I)
+# A word inside quotation marks is named, not used: "refuses the word 'should'" asserts nothing.
+QUOTED = re.compile(r"(?<!\w)'[^']*'(?!\w)|\"[^\"]*\"|\u2018[^\u2019]*\u2019|\u201c[^\u201d]*\u201d")
 BANDS = ((0.0, 0.5), (0.5, 0.7), (0.7, 0.8), (0.8, 0.9), (0.9, 1.0001))
 
 
@@ -243,6 +252,8 @@ def cmd_ask(a):
         fail("--evidence (a one-line pointer) is required")
     if a.recommendation and a.option and a.recommendation not in a.option and not loose:
         fail("--recommendation must be one of the --option values")
+    if not loose:
+        check_grounding(a)
     cats = config(stream)["categories"]
     if a.category not in cats:
         print(f"decision: note: category '{a.category}' is outside the default vocabulary ({', '.join(cats)})",
@@ -256,7 +267,11 @@ def cmd_ask(a):
           "category": a.category, "question": a.question, "options": a.option,
           "recommendation": a.recommendation or None, "confidence": conf,
           "evidence": {"kind": a.evidence_kind, "pointer": a.evidence or None},
-          "blind": a.blind, "autonomous": a.autonomous, "questionsRef": heading}
+          "blind": a.blind, "autonomous": a.autonomous, "questionsRef": heading,
+          "read": [{"path": r, "what": a.read_what} for r in a.read] or None,
+          "task": a.task or None, "fixRound": a.fix_round, "rechecked": a.rechecked or None,
+          "upstream": a.upstream or None, "steppedBack": a.stepped_back or None,
+          "recheck": bool(a.recheck)}
     if loose:
         ev["backfilled"] = True
     if heading and not loose:
@@ -264,6 +279,51 @@ def cmd_ask(a):
                     + ("" if a.blind else f", recommended {a.recommendation} (confidence {conf})") + ".")
     append(stream, ev)
     print(did)
+
+
+def check_grounding(a):
+    """Refuse a question that is not grounded in a source the asker opened (owner, 2026-10-14)."""
+    if not a.read:
+        fail("--read <file> is required: a source file you opened yourself (raw document, product data,"
+             " code), not an agent's report")
+    for r in a.read:
+        path = Path(r).expanduser()
+        if not path.exists():
+            fail(f"--read {r}: no such file")
+        if REPORT_NAMES.search(path.stem) or "review" in path.parts:
+            fail(f"--read {r}: that is an agent's record, not the source; open what it is about")
+    if not (a.read_what or "").strip():
+        fail("--read-what is required: the rows, cells or lines you looked at in the --read file(s)")
+    text = a.question.lower()
+    if not GUESS_LABEL.search(text):
+        said = QUOTED.sub(" ", text)
+        hits = [w for w in GUESS_WORDS if re.search(rf"\b{re.escape(w)}\b", said)]
+        if hits:
+            fail(f"the question uses {', '.join(repr(h) for h in hits)}: an inference. Check it at the"
+                 " source, or label it in the question with 'guess:'")
+    if a.recheck and (not a.task or a.fix_round is not None):
+        fail("--recheck needs --task and no --fix-round: it reviews a fix round, it does not open one")
+    if (re.search(r"\b(fix|fixes|fixing|fixed|patch|workaround)\b", text) and not a.recheck
+            and not (a.upstream or "").strip()):
+        fail("the question proposes a fix: give --upstream, what feeds the failing step and what you saw"
+             " when you looked at it (Seesaw: check what it was given before fixing it)")
+    if re.search(r"\bfix round\b", text) and a.fix_round is None and not a.recheck:
+        fail("the question is about a fix round: give --task and --fix-round N")
+    if a.task:
+        rounds = sorted({e.get("fixRound") for e in read_events(resolve_stream(a.stream))
+                         if e.get("kind") == "ask" and e.get("task") == a.task and e.get("fixRound")})
+        n = max([a.fix_round or 0] + rounds)
+        # only an ask that opens a fix round is held to the step-back; any other ask on the task is not
+        if a.fix_round is not None and (n >= 3 or len(rounds) >= 2) and not (a.stepped_back or "").strip():
+            fail(f"{a.task} is at fix round {n} (rounds asked so far: {rounds or 'none'}): give --stepped-back,"
+                 " the step-back you did first — what you re-checked at the source across the whole problem,"
+                 " and why another round beats re-designing (owner, 2026-10-15)")
+    if a.fix_round is not None:
+        if not a.task:
+            fail("--fix-round needs --task (the work order id)")
+        if a.fix_round >= 2 and not (a.rechecked or "").strip():
+            fail(f"fix round {a.fix_round} of {a.task}: give --rechecked, what you re-checked at the source"
+                 " before proposing another round (a second round means the design may be wrong)")
 
 
 def norm(s):
@@ -563,6 +623,15 @@ def main():
     s.add_argument("--blind", action="store_true", help="asked without showing the recommendation")
     s.add_argument("--autonomous", action="store_true", help="decided by the agent without asking")
     s.add_argument("--id")
+    s.add_argument("--read", action="append", default=[], help="a source file you opened yourself; repeat")
+    s.add_argument("--read-what", help="the rows, cells or lines you looked at in it")
+    s.add_argument("--task", help="the work order id the question serves")
+    s.add_argument("--fix-round", type=int, help="which fix round of --task this question opens")
+    s.add_argument("--rechecked", help="for fix round 2+: what you re-checked at the source first")
+    s.add_argument("--stepped-back", help="fix round 3+ of a task: the step-back done first")
+    s.add_argument("--recheck", action="store_true",
+                   help="this ask reviews a fix round of --task (a re-check); it opens no round")
+    s.add_argument("--upstream", help="for a fix: what feeds the failing step, and what you saw when you looked")
     s.set_defaults(fn=cmd_ask)
 
     s = sub.add_parser("answer", help="record the owner's reply")

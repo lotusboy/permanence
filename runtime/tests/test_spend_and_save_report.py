@@ -44,8 +44,47 @@ class Spend(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         return p
 
+    RESULT = ["--why", "a build agent for engine work", "--predicted", "the gate passes",
+              "--predicted-tokens", "10000", "--result", "the gate passed", "--outcome", "as-predicted"]
+
     def rec(self, agent, tokens, *extra, **kw):
-        return self.run_("record", "--agent", agent, "--label", f"job {agent}", "--tokens", str(tokens), *extra, **kw)
+        res = [] if "--correct" in extra or "--outcome" in extra else self.RESULT
+        return self.run_("record", "--agent", agent, "--label", f"job {agent}", "--tokens", str(tokens),
+                         *res, *extra, **kw)
+
+    def test_a_first_record_states_the_tools_result_not_only_its_cost(self):
+        p = self.run_("record", "--agent", "x1", "--label", "j", "--tokens", "100", ok=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--outcome", p.stderr)
+        self.assertFalse(self.ledger.exists())
+        self.rec("x1", 10000)
+        row = json.loads(self.ledger.read_text().splitlines()[-1])
+        self.assertEqual((row["outcome"], row["predictedTokens"], row["why"]),
+                         ("as-predicted", 10000, "a build agent for engine work"))
+        self.rec("x1", 12000, "--correct")
+
+    def test_a_second_architect_run_for_a_task_needs_a_step_back(self):
+        self.rec("ar1", 10000, "--kind", "architect", "--task", "A9")
+        p = self.rec("ar2", 10000, "--kind", "architect", "--task", "A9", ok=False)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--stepped-back", p.stderr)
+        self.rec("ar2", 10000, "--kind", "architect", "--task", "A9", "--stepped-back", "looked upstream first")
+        self.rec("ar3", 10000, "--kind", "architect", "--task", "A10")
+
+    def test_a_worse_or_far_off_run_gets_a_lesson_stub_in_tools_md(self):
+        tools = self.perma / "a/proj/TOOLS.md"
+        tools.write_text("# TOOLS\n")
+        self.rec("x2", 10500)
+        self.assertEqual(tools.read_text(), "# TOOLS\n")
+        self.rec("x3", 10000, "--why", "w", "--predicted", "8 of 15 right", "--predicted-tokens", "10000",
+                 "--result", "2 of 15 right", "--outcome", "worse")
+        self.rec("x4", 30000, "--why", "w", "--predicted", "p", "--predicted-tokens", "10000",
+                 "--result", "r", "--outcome", "as-predicted")
+        text = tools.read_text()
+        self.assertIn("x3", text)
+        self.assertIn("2 of 15 right", text)
+        self.assertIn("x4", text)
+        self.assertEqual(text.count("**Lesson:** TODO"), 2)
 
     def status(self, *extra):
         return json.loads(self.run_("status", "--json", *extra).stdout)["waves"]
