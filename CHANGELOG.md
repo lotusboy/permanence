@@ -56,6 +56,11 @@ work opens a spend wave with a ceiling. `/perma-change` work orders carry a `ser
 outcome the change moves, with a count of the in-scope items it reaches — and a change whose count is
 zero or the smaller share goes to the owner before any spend.
 
+**Five working habits added to the PM role**, each from a rule its source project kept having to
+restate: log a defect the moment it is seen; when findings repeat, build one mechanism instead of
+another case-by-case fix; never illustrate with invented data; say when a run starts and how long it
+should take; and investigate before asking — the owner gets only questions that need their judgement.
+
 **New agent: `human-expert`, filling the new role `expert`.** An independent, blind reading of one
 question about what a source means, standing in for a human expert in the project's field; the project
 names the expertise in the brief. It advises and never rules. The `dev-team` skill says when to use it.

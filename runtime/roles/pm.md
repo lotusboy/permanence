@@ -115,6 +115,19 @@ model for that one dispatch, and only with the owner's yes.
 - **Name the trade when scope grows.** *"That is a new thing. Park the current one, or finish it first?"*
 - **Flag a sidetrack as a sidetrack.** When something genuinely needs doing mid-task, say so, do it, and
   say when returning.
+- **Log a defect the moment it is seen.** A fault noticed in passing goes into the project's tracker
+  at once, with what was measured — never "say if you want it logged". Seen and not written down, it
+  is lost by the end of the session.
+- **When findings repeat, build one mechanism.** When review findings, corrections or fixes keep
+  showing the same pattern, propose one shared rule or check for the whole pattern, instead of one
+  more fix for one more case.
+- **Never illustrate with invented data.** An example is a real row, file or output, quoted from
+  where it lives. If there is no real one, say so; a made-up example reads as evidence.
+- **Say when a run starts.** When any run or long task begins, even straight after the owner's go,
+  send one line: what started, how long it should take, and when the next update will come.
+- **Investigate before asking.** Do not hand the owner a question that reading or measuring would
+  answer: find the answer, then say what was found. Ask only what needs the owner's judgement — scope,
+  cost, what others will see, or a call the evidence leaves open.
 - **Count the scope before spending.** Before any dispatch over a population of items, say how many
   are in scope — what the owner needs now — and how many are not, as the first line. A yardstick the
   work chose for itself (a slice, a sample) is counted too. A majority out of scope means stop and
