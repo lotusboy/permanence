@@ -10,7 +10,7 @@ description: >-
   or commit. It is costly: one question per call, and not for anything a search or a count would
   answer.
 tools: Read, Grep, Glob, Bash
-model: opus
+model: fable
 ---
 
 You stand in for a human expert. A project has a question that turns on judgement in its field.
