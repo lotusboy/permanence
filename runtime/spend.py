@@ -24,6 +24,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import defaultdict
@@ -213,13 +214,20 @@ def cmd_record(a):
         fail(f"agent {a.agent} is already recorded in {stream}; pass --correct to replace its row")
     if a.correct and a.agent not in seen:
         fail(f"--correct given but agent {a.agent} has no row in {stream} to correct")
+    # The gate is on the record: spend.sh runs after an agent finishes, so it cannot stop the run
+    # itself. It stops a second architect run on one task being recorded as if nothing happened
+    # first, and the PM role makes the step-back come before the dispatch.
+    if a.kind == "architect" and not a.correct and not (a.task or "").strip():
+        fail("an architect run names its task: give --task (the gate on a second run for one task needs it)")
     if a.kind == "architect" and a.task and not a.correct:
-        earlier = [r for r in agents(ev) if r.get("kind") == "architect" and r.get("task") == a.task]
-        if earlier and not (a.stepped_back or "").strip():
+        earlier = [r for r in agents(ev) if r.get("kind") == "architect"
+                   and (r.get("task") or "").lower() == a.task.lower()]
+        if earlier and len(re.findall(r"[^\W\d_]{2,}", a.stepped_back or "")) < 3:
             fail(f"a second architect run for {a.task} ({len(earlier)} before): give --stepped-back, the"
                  " step-back done before dispatching it (owner, 2026-10-15)")
     if not a.correct and not os.environ.get("SPEND_TS"):
-        missing = [f for f in ("why", "predicted", "predicted_tokens", "result", "outcome") if getattr(a, f) is None]
+        missing = [f for f in ("why", "predicted", "predicted_tokens", "result", "outcome")
+                   if not str(getattr(a, f) if getattr(a, f) is not None else "").strip()]
         if missing:
             fail("a first record states the tool's result, not only its cost: give "
                  + ", ".join("--" + m.replace("_", "-") for m in missing))

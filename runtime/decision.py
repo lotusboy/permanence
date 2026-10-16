@@ -39,9 +39,15 @@ VERDICTS = ("held", "reversed", "refined")
 # A question rests on a source the asker opened, not on an agent's report about it (owner, 2026-10-14).
 REPORT_NAMES = re.compile(r"(^|[-_.])(report|findings|result|prediction|disposition|contract|pass\d|handback)"
                           r"([-_.]|$)", re.I)
+# Only a text record can be an agent's report: a contract.pdf or a report.csv is source material.
+REPORT_SUFFIXES = (".md", ".txt", ".json", ".jsonl")
 # Words that mark an inference. A question using one must label it: "guess:" (owner, 2026-10-14).
-GUESS_WORDS = ("probably", "likely", "should", "infer", "inferred", "inferring", "pattern", "heuristic",
+GUESS_WORDS = ("probably", "likely", "should", "infer", "inferred", "inferring", "heuristic",
                "guess", "presumably", "assume", "assumed", "seems", "appears to", "works it out")
+# "Should we ship it?" is how a yes/no question is asked, not an inference: a sentence-opening
+# "should" is not counted. Neither is "pattern", which names things more often than it guesses.
+LEADING_SHOULD = re.compile(r"(^|[.?!;]\s+)should\b")
+FIX_WORDS = re.compile(r"\b(fix|fixes|fixing|workaround)\b")
 GUESS_LABEL = re.compile(r"\bguess\s*:", re.I)
 # A word inside quotation marks is named, not used: "refuses the word 'should'" asserts nothing.
 QUOTED = re.compile(r"(?<!\w)'[^']*'(?!\w)|\"[^\"]*\"|\u2018[^\u2019]*\u2019|\u201c[^\u201d]*\u201d")
@@ -253,7 +259,7 @@ def cmd_ask(a):
     if a.recommendation and a.option and a.recommendation not in a.option and not loose:
         fail("--recommendation must be one of the --option values")
     if not loose:
-        check_grounding(a)
+        check_grounding(a, config(stream))
     cats = config(stream)["categories"]
     if a.category not in cats:
         print(f"decision: note: category '{a.category}' is outside the default vocabulary ({', '.join(cats)})",
@@ -281,49 +287,71 @@ def cmd_ask(a):
     print(did)
 
 
-def check_grounding(a):
-    """Refuse a question that is not grounded in a source the asker opened (owner, 2026-10-14)."""
-    if not a.read:
-        fail("--read <file> is required: a source file you opened yourself (raw document, product data,"
-             " code), not an agent's report")
-    for r in a.read:
-        path = Path(r).expanduser()
-        if not path.exists():
-            fail(f"--read {r}: no such file")
-        if REPORT_NAMES.search(path.stem) or "review" in path.parts:
-            fail(f"--read {r}: that is an agent's record, not the source; open what it is about")
-    if not (a.read_what or "").strip():
-        fail("--read-what is required: the rows, cells or lines you looked at in the --read file(s)")
+def meaningful(value, words=3):
+    """A justification flag holds a statement, not a placeholder: at least `words` words with letters."""
+    return len(re.findall(r"[^\W\d_]{2,}", value or "")) >= words
+
+
+def check_grounding(a, cfg):
+    """Refuse a question that is not grounded in a source the asker opened (owner, 2026-10-14).
+    A category in the config's groundingExempt (a spend, process or scope call, which no source file
+    settles) needs no --read; every other check still applies."""
+    if a.category not in cfg.get("groundingExempt", []):
+        if not a.read:
+            fail("--read <file> is required: a source file you opened yourself (raw document, product data,"
+                 f" code), not an agent's report. Questions in {', '.join(cfg.get('groundingExempt', [])) or 'no category'}"
+                 " need none.")
+        for r in a.read:
+            path = Path(r).expanduser()
+            if not path.is_file():
+                fail(f"--read {r}: no such file" if not path.exists() else f"--read {r}: not a file")
+            if path.suffix.lower() in REPORT_SUFFIXES and (REPORT_NAMES.search(path.stem)
+                                                           or {"review", "reviews", "runs"} & set(path.parts)):
+                fail(f"--read {r}: that is an agent's record, not the source; open what it is about")
+        if not meaningful(a.read_what, 1):
+            fail("--read-what is required: the rows, cells or lines you looked at in the --read file(s)")
     text = a.question.lower()
-    if not GUESS_LABEL.search(text):
-        said = QUOTED.sub(" ", text)
-        hits = [w for w in GUESS_WORDS if re.search(rf"\b{re.escape(w)}\b", said)]
+    # each sentence is judged on its own: a 'guess:' label clears only the sentence it is in
+    for sentence in re.split(r"(?<=[.?!;])\s+", text):
+        if GUESS_LABEL.search(sentence):
+            continue
+        said = LEADING_SHOULD.sub(" ", QUOTED.sub(" ", sentence).strip())
+        hits = [w for w in GUESS_WORDS if re.search(rf"(?<![\w.]){re.escape(w)}(?![\w.])", said)]
         if hits:
             fail(f"the question uses {', '.join(repr(h) for h in hits)}: an inference. Check it at the"
-                 " source, or label it in the question with 'guess:'")
-    if a.recheck and (not a.task or a.fix_round is not None):
-        fail("--recheck needs --task and no --fix-round: it reviews a fix round, it does not open one")
-    if (re.search(r"\b(fix|fixes|fixing|fixed|patch|workaround)\b", text) and not a.recheck
-            and not (a.upstream or "").strip()):
+                 " source, or label that sentence with 'guess:'")
+    events = read_events(resolve_stream(a.stream)) if a.task else []
+    asked = {e.get("fixRound") for e in events if e.get("kind") == "ask"
+             and (e.get("task") or "").lower() == (a.task or "").lower() and e.get("fixRound")}
+    if a.recheck:
+        if not a.task or a.fix_round is not None:
+            fail("--recheck needs --task and no --fix-round: it reviews a fix round, it does not open one")
+        if not asked:
+            fail(f"--recheck: {a.task} has no fix round in the ledger to review")
+    proposes_fix = bool(FIX_WORDS.search(text))
+    if proposes_fix and not a.recheck and not meaningful(a.upstream):
         fail("the question proposes a fix: give --upstream, what feeds the failing step and what you saw"
              " when you looked at it (Seesaw: check what it was given before fixing it)")
+    if a.task and a.fix_round is None and not a.recheck and (proposes_fix or re.search(r"\bfix round\b", text)):
+        fail(f"the question proposes a fix on {a.task}: give --fix-round N (rounds asked so far: "
+             f"{sorted(asked) or 'none'})")
     if re.search(r"\bfix round\b", text) and a.fix_round is None and not a.recheck:
         fail("the question is about a fix round: give --task and --fix-round N")
-    if a.task:
-        rounds = sorted({e.get("fixRound") for e in read_events(resolve_stream(a.stream))
-                         if e.get("kind") == "ask" and e.get("task") == a.task and e.get("fixRound")})
-        n = max([a.fix_round or 0] + rounds)
-        # only an ask that opens a fix round is held to the step-back; any other ask on the task is not
-        if a.fix_round is not None and (n >= 3 or len(rounds) >= 2) and not (a.stepped_back or "").strip():
-            fail(f"{a.task} is at fix round {n} (rounds asked so far: {rounds or 'none'}): give --stepped-back,"
-                 " the step-back you did first — what you re-checked at the source across the whole problem,"
-                 " and why another round beats re-designing (owner, 2026-10-15)")
     if a.fix_round is not None:
         if not a.task:
             fail("--fix-round needs --task (the work order id)")
-        if a.fix_round >= 2 and not (a.rechecked or "").strip():
+        if a.fix_round < 1:
+            fail("--fix-round counts from 1")
+        # the round is counted from the ledger, not taken on trust: an earlier number cannot be reused
+        if asked and a.fix_round <= max(asked):
+            fail(f"{a.task} already has fix round(s) {sorted(asked)}; this one is round {max(asked) + 1}")
+        if a.fix_round >= 2 and not meaningful(a.rechecked):
             fail(f"fix round {a.fix_round} of {a.task}: give --rechecked, what you re-checked at the source"
                  " before proposing another round (a second round means the design may be wrong)")
+        if (a.fix_round >= 3 or len(asked) >= 2) and not meaningful(a.stepped_back):
+            fail(f"{a.task} is at fix round {a.fix_round} (rounds asked so far: {sorted(asked) or 'none'}):"
+                 " give --stepped-back, the step-back you did first — what you re-checked at the source across"
+                 " the whole problem, and why another round beats re-designing (owner, 2026-10-15)")
 
 
 def norm(s):

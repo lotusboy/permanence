@@ -16,7 +16,9 @@ Each tool's own header comment is its full reference. This page says what each o
 
 ```
 spend.sh wave open s2-slice --ceiling 400000
-spend.sh record --agent a1b2c3 --label "S2 answers r1" --tokens 131204 --kind answering-agent --task A508
+spend.sh record --agent a1b2c3 --label "S2 answers r1" --tokens 131204 --kind answering-agent --task A508 \\
+    --why "answer the 40 open rows" --predicted "36 of 40 answered" --predicted-tokens 120000 \\
+    --result "38 of 40 answered" --outcome better
 spend.sh status                       # open waves: spent vs ceiling, per agent, warnings
 spend.sh report --since 2026-10-10    # totals by day, wave, kind and source
 spend.sh wave close s2-slice

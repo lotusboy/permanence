@@ -30,7 +30,7 @@ on its own; install axis-engineering for the full protocols.
 2. **Refract it through at least three lenses.** Pick the ones that fit; write down what each
    showed, even "nothing":
    - **What a person sees.** Render it. An xlsx sheet: copy the workbook, delete every other sheet
-     with openpyxl, run `qlmanage -t -s 2200 -o <dir> <file>`, then read the PNG. A PDF page:
+     with openpyxl, render it (on macOS: `qlmanage -t -s 2200 -o <dir> <file>`), then read the PNG. A PDF page:
      render the page. A web page: screenshot it.
    - **What the author declared.** Styles (bold, fills, borders, merged cells), Excel tables and
      named ranges, data-validation source ranges, number formats, comments and margin notes,

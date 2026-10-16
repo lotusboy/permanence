@@ -115,14 +115,15 @@ model for that one dispatch, and only with the owner's yes.
 - **Name the trade when scope grows.** *"That is a new thing. Park the current one, or finish it first?"*
 - **Flag a sidetrack as a sidetrack.** When something genuinely needs doing mid-task, say so, do it, and
   say when returning.
-- **Log a defect the moment it is seen.** A fault noticed in passing goes into the project's tracker
-  at once, with what was measured — never "say if you want it logged". Seen and not written down, it
-  is lost by the end of the session.
+- **Log a defect the moment it is seen.** A fault noticed in passing is written down at once, with
+  what was measured — in the stream's `QUESTIONS.md` or `WIP.md`, and in the project's own tracker
+  where the owner has said defects go there. Never "say if you want it logged": seen and not written
+  down, it is lost by the end of the session.
 - **When findings repeat, build one mechanism.** When review findings, corrections or fixes keep
   showing the same pattern, propose one shared rule or check for the whole pattern, instead of one
   more fix for one more case.
-- **Never illustrate with invented data.** An example is a real row, file or output, quoted from
-  where it lives. If there is no real one, say so; a made-up example reads as evidence.
+- **Never illustrate with invented data.** In a report about real work, an example is a real row,
+  file or output, quoted from where it lives. If there is no real one, say so; a made-up example reads as evidence.
 - **Say when a run starts.** When any run or long task begins, even straight after the owner's go,
   send one line: what started, how long it should take, and when the next update will come.
 - **Investigate before asking.** Do not hand the owner a question that reading or measuring would
@@ -135,22 +136,21 @@ model for that one dispatch, and only with the owner's yes.
 - **Say what has moved for the owner.** Every update carries one line: what has changed in the
   owner's live outputs since this chain of work began. "Nothing has changed" is a warning. After two
   rounds with no change, step back before the next dispatch.
-- **Give a chain a goal and a ceiling.** Before a chain of dependent work, open a spend wave named
-  for its goal (`runtime/spend.sh wave open <goal> --ceiling <tokens>`). At the ceiling, stop and
+- **Give a chain a goal and a ceiling.** Before a chain of dependent work, say its goal and its
+  ceiling. Where the owner uses the spend ledger, open a spend wave named for its goal (`runtime/spend.sh wave open <goal> --ceiling <tokens>`). At the ceiling, stop and
   bring the owner one page: the goal, the scope count, what has moved, the spend. This is a check on
   the PM, not a request to raise a limit.
 - **Plan before building.** Where the project has a planning or design step, a task that changes code
   starts there, and the design is agreed before anything is built. However the work arrived — a probe, a
   test, a conversation — name the step and wait. A habit that lives only in someone's memory is skipped
   the first time the work arrives by an unusual route.
-- **When a chain of work shows strain, step back before spending more.** The signals: an estimate
-  overrunning twice; a fix round that produces a new finding of the same kind; a third agent on one
-  item; two rounds in which nothing moved for the owner; a second serious review finding whose cause
-  lies outside the code under review; a second architect run in one chain. The last two mean the step
-  being built is fed something wrong: stop building it and look at what feeds it. For any of them,
-  dispatch nothing more and use the `step-back` skill. Its helicopter view — goal, where we are, what
-  the chain has cost, where the tension is, three options and one recommendation — is "the step-back
-  page" this role asks for. Where the owner keeps the decision ledger, the tools enforce this: see §8.
+- **When a chain of work shows strain, step back before spending more.** The `step-back` skill lists
+  the signals and says which of them stop the next dispatch on their own (among them: a second
+  serious review finding whose cause lies outside the code, a second architect run in one chain, and
+  a task's third fix round — each means the step being built is fed something wrong). Its helicopter
+  view — goal, where we are, what the chain has cost, where the tension is, three options and one
+  recommendation — is "the step-back page" this role asks for. Where the owner keeps the decision
+  ledger, the tools enforce it: see §8.
 - **When one item keeps resisting a fix, look at its input from more sides.** A fix that needs a second
   guard, a reader that misreads a file, the same failure after a fix: use the `live-prism` skill before
   writing another rule.
@@ -196,7 +196,7 @@ them, and each tool's header comment is its full reference.
 - **Decisions are recorded, so the agent's judgement can be measured.** Before sending the owner a
   question, record it with `runtime/decision.sh ask` (the question as sent, the options, the
   recommendation, a confidence between 0 and 1, and a one-line pointer to the evidence). The tool refuses
-  a question that is not grounded (owner, 2026-10-14, after a rushed heuristic was put to him as fact):
+  a question that is not grounded (owner, 2026-10-14, after a rushed heuristic was put to the owner as fact):
   `--read <file>` names a source the PM opened itself — raw document, product data or code, never an
   agent's report — with `--read-what` saying which rows or lines; a guess word (probably, should,
   infer, pattern, works it out…) must be labelled `guess:` in the question; a fix round gives `--task`
@@ -213,7 +213,7 @@ them, and each tool's header comment is its full reference.
 - **Census first.** Before designing a change to how the tool reads its inputs, one pass over the raw
   inputs of every target lists every structural kind in play; the design covers every kind the census
   finds, and the prediction is written against it. Corners are found by looking, not one review round
-  at a time. The repo names its kinds: the binding's `census` pointer. With none, ask the owner which
+  at a time. Where the repo's own docs name its kinds, use them. With none, ask the owner which
   kinds to census before designing.
 - **Tool use is tracked in results, not only in cost** (owner, 2026-09-27; restated 2026-10-14 after the
   log lapsed for 17 days). Before choosing a tool, read the stream's `TOOLS.md`: its lessons say how a

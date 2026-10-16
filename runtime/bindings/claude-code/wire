@@ -103,31 +103,58 @@ SKILL_SRC="$PERMA/runtime/skills"
 SKILL_DST="$HOME/.claude/skills"
 SKILL_KEEP="$HOME/.claude/skills-perma-bak"
 SKILL_GONE="$HOME/.claude/skills-perma-removed"
+# A fingerprint of each skill as installed, kept OUTSIDE the skills folder. A copy whose files no
+# longer match it was edited by the user. Comparing with the current source instead would call every
+# untouched copy "edited" each time a release changes the skill.
+SKILL_PRINTS="$SKILL_KEEP/.installed"
+skill_print() { (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum) | shasum | cut -c1-40; }
+# Before a fingerprint exists (a copy installed by an earlier version of this block): edited when any
+# file differs from the source, the top SKILL.md compared without its marker line.
+skill_differs() {
+  local src="$1" dst="$2" f
+  { cat "$src/SKILL.md"; printf '\n'; } | cmp -s - <(sed '$d' "$dst/SKILL.md") || return 0
+  [ "$(cd "$src" && find . -type f | LC_ALL=C sort)" = "$(cd "$dst" && find . -type f | LC_ALL=C sort)" ] || return 0
+  while IFS= read -r f; do
+    [ "$f" = "./SKILL.md" ] && continue
+    cmp -s "$src/$f" "$dst/$f" || return 0
+  done < <(cd "$src" && find . -type f)
+  return 1
+}
 mkdir -p "$SKILL_DST"
 for d in "$SKILL_SRC"/*/; do
   [ -f "$d/SKILL.md" ] || continue
   name=$(basename "$d")
   dst="$SKILL_DST/$name"
   mark="installed-from: ~/permanence/runtime/skills/$name @ "
-  if [ -d "$dst" ]; then
-    if ! tail -n 1 "$dst/SKILL.md" 2>/dev/null | grep -qF "$mark"; then
+  if [ -e "$dst" ] || [ -L "$dst" ]; then
+    if [ ! -d "$dst" ] || [ -L "$dst" ] || ! tail -n 1 "$dst/SKILL.md" 2>/dev/null | grep -qF "$mark"; then
       echo "  skill: $name — ATTENTION: you already have your own skill with this name; left as it is, Permanence's not installed"
       continue
     fi
-    edited=0
-    { cat "$d/SKILL.md"; printf '\n'; } | cmp -s - <(sed '$d' "$dst/SKILL.md") || edited=1
-    diff -rq -x SKILL.md "$d" "$dst" >/dev/null 2>&1 || edited=1
-    mkdir -p "$SKILL_KEEP"
-    if [ "$edited" -eq 1 ]; then
-      keep="$SKILL_KEEP/$name.$(date +%Y%m%d%H%M%S)"
-      mv "$dst" "$keep"
-      echo "  skill: $name — your edits to the installed copy are kept in ~/.claude/skills-perma-bak/$(basename "$keep")"
+    if [ -f "$SKILL_PRINTS/$name" ]; then
+      edited=0; [ "$(skill_print "$dst")" = "$(cat "$SKILL_PRINTS/$name")" ] || edited=1
     else
-      mv "$dst" "$(mktemp -d)/"
+      edited=0; skill_differs "${d%/}" "$dst" && edited=1
+    fi
+    if [ "$edited" -eq 1 ]; then
+      # A folder of its own for each kept copy: two runs in one second cannot collide.
+      if mkdir -p "$SKILL_KEEP" && keep=$(mktemp -d "$SKILL_KEEP/$name.$(date +%Y%m%d%H%M%S).XXXXXX") \
+         && mv "$dst" "$keep/"; then
+        echo "  skill: $name — your edits to the installed copy are kept in ~/.claude/skills-perma-bak/$(basename "$keep")/$name"
+      else
+        echo "  skill: $name — FAILED to set aside your edited copy; left as it is, not replaced"
+        WIRE_FAILED=1
+        continue
+      fi
+    elif ! rm -rf "$dst"; then   # unedited: it is exactly what this install would write again
+      echo "  skill: $name — FAILED to replace the installed copy"
+      WIRE_FAILED=1
+      continue
     fi
   fi
   if cp -R "${d%/}" "$dst"; then
     printf '\n<!-- installed-from: ~/permanence/runtime/skills/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$dst/SKILL.md"
+    mkdir -p "$SKILL_PRINTS" && skill_print "$dst" > "$SKILL_PRINTS/$name"
     echo "  skill: $name"
   else
     echo "  skill: $name — FAILED to copy"
@@ -139,9 +166,14 @@ for existing in "$SKILL_DST"/*/; do
   bn=$(basename "$existing")
   [ -f "$SKILL_SRC/$bn/SKILL.md" ] && continue
   if tail -n 1 "$existing/SKILL.md" 2>/dev/null | grep -qF "installed-from: ~/permanence/runtime/skills/$bn @ "; then
-    mkdir -p "$SKILL_GONE"
-    mv "${existing%/}" "$SKILL_GONE/$bn.$(date +%Y%m%d%H%M%S)"
-    echo "  skill: $bn — no longer in runtime/skills/; moved to ~/.claude/skills-perma-removed/"
+    if mkdir -p "$SKILL_GONE" && gone=$(mktemp -d "$SKILL_GONE/$bn.$(date +%Y%m%d%H%M%S).XXXXXX") \
+       && mv "${existing%/}" "$gone/"; then
+      rm -f "$SKILL_PRINTS/$bn"
+      echo "  skill: $bn — no longer in runtime/skills/; moved to ~/.claude/skills-perma-removed/$(basename "$gone")/$bn"
+    else
+      echo "  skill: $bn — no longer in runtime/skills/, and FAILED to move it out; left in place"
+      WIRE_FAILED=1
+    fi
   fi
 done
 

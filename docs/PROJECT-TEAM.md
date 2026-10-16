@@ -86,7 +86,7 @@ three things:
 
 - **The shipped agents**, translated into Antigravity's own agent files under
   `~/.gemini/config/agents/<name>/agent.md`. Tool names are mapped to Antigravity's. A model name
-  becomes a tier: `opus` is `pro`; `sonnet` and `haiku` are `flash`.
+  becomes a tier: `fable` and `opus` are `pro`; `sonnet` and `haiku` are `flash`.
 - **The role hook**, on Antigravity's `invoke_subagent` tool. A dispatch with `TypeName:
   "role:<job>:<role>"` is resolved by the same rules and tables as on Claude Code and replaced by the
   agent that fills the role. A role nothing fills is refused. A role's `prompt_append` is added.

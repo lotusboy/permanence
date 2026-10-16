@@ -28,7 +28,7 @@ a same-named skill of your own is left alone, and an installed copy you edited i
 `~/.claude/skills-perma-bak/` — outside the skills folder, because any folder there holding a
 `SKILL.md` would load as a second copy of the skill. The PM role points at all three, and
 `docs/PROJECT-TEAM.md` points at `dev-team`. This also makes `/perma-refactor`'s existing reference to
-the step-back skill resolve for every install. The skills install for Claude Code only for now; the
+the step-back skill resolve for every Claude Code install. The skills install for Claude Code only for now; the
 Antigravity binding does not yet carry them. `live-prism` borrows Prism and Seesaw from
 axis-engineering (optional) and runs without it.
 
@@ -42,12 +42,19 @@ ledger, two tools enforce it:
 - `decision.sh ask` refuses a question that opens a task's third fix round (or a further round after
   two) without `--stepped-back`, a one-line summary of the step-back. Round 2 needs `--rechecked`,
   what was re-checked at the source. A question that proposes a fix needs `--upstream`, what feeds
-  the failing step and what was seen there. Every question needs `--read`, a source the asker opened
-  itself — never an agent's report — and a guess word in the question must be labelled `guess:`.
-  `--recheck` records a review of a fix round without opening a new one.
-- `spend.sh record --kind architect` refuses a second architect run on one task without
-  `--stepped-back`. `spend.sh record` also tracks a tool's result, not only its cost: why it ran, what
-  was predicted, what came out.
+  the failing step and what was seen there; on a task it also names its `--fix-round`, which is
+  counted from the ledger, so an earlier number cannot be reused. Each of those flags must hold a
+  statement, not a placeholder. A question needs `--read`, a source file the asker opened itself —
+  never an agent's report — except in the categories listed in `groundingExempt` (default: spend,
+  process, scope), which no source file settles. A guess word must be labelled `guess:` in its own
+  sentence. `--recheck` records a review of an existing fix round without opening a new one.
+- `spend.sh record --kind architect` now needs `--task`, and refuses a second architect run on one
+  task without `--stepped-back`. This gate is on the record: the tool runs after an agent finishes,
+  so the PM role puts the step-back before the dispatch.
+- **Breaking for existing callers of `spend.sh record`:** a first record now needs `--why`,
+  `--predicted`, `--predicted-tokens`, `--result` and `--outcome` — what the run was for, what was
+  expected and what came out — and none may be empty. The header example and `runtime/README.md`
+  show a call that passes.
 
 **The PM counts scope and says what moved.** Before any dispatch over a population of items, the PM
 says how many are in scope and how many are not; a majority out of scope means stop and ask. Every
@@ -65,8 +72,14 @@ should take; and investigate before asking — the owner gets only questions tha
 question about what a source means, standing in for a human expert in the project's field; the project
 names the expertise in the brief. It advises and never rules. The `dev-team` skill says when to use it.
 
-These came from a project that has used the team daily since v1.6.0, and were written generic before
-release.
+These came from a project that has used the team daily since v1.6.0. Its domain wording was taken
+out before release.
+
+**Reviewed before release** (`axis/runs/2026-10-16-v1.11.0-skills-and-gates-review/`). The first cut's
+gates refused the tools' own header examples, accepted "." as evidence, and could be dodged by
+repeating a fix-round number; the PM role and the step-back skill disagreed on when to step back; and
+the skills installer could report a copy as kept when the move had failed. All fixed; `03-fixes.md`
+lists every finding.
 
 **Upgrading an install that already has a hand-copied `human-expert.md`** in `~/.claude/agents/`: the
 installer leaves a same-named agent of yours alone and says so. Delete your copy and re-run

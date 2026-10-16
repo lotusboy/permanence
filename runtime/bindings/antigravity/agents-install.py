@@ -9,7 +9,7 @@ Antigravity CLI 1.2.2 (design/project-team-on-other-harnesses.md).
 
   - tools: Claude Code tool names are mapped to Antigravity's. `send_message` is always added: it
     is how a subagent reports back.
-  - model: Antigravity takes a tier, not a model name. opus -> pro; sonnet and haiku -> flash.
+  - model: Antigravity takes a tier, not a model name. fable and opus -> pro; sonnet and haiku -> flash.
   - The file ends with an installed-from marker. An agent folder of the owner's own with the same
     name (no marker naming it) is left exactly as it is and reported. An installed agent whose
     source is gone has its agent.md removed; the folder goes too only when nothing else is in it.

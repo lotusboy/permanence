@@ -87,7 +87,7 @@ class Ledger(unittest.TestCase):
         report.write_text("x")
         for grounding in ([], ["--read", str(self.work / "missing.csv"), "--read-what", "r"],
                           ["--read", str(report), "--read-what", "r"], ["--read", str(self.src)]):
-            p = self.run_("ask", "--category", "spend", "--question", "q", "--option", "a", "--option", "b",
+            p = self.run_("ask", "--category", "correction", "--question", "q", "--option", "a", "--option", "b",
                           "--recommendation", "a", "--confidence", "0.5", "--evidence-kind", "measured",
                           "--evidence", "e", *grounding, ok=False)
             self.assertNotEqual(p.returncode, 0, grounding)
@@ -130,7 +130,7 @@ class Ledger(unittest.TestCase):
     def test_a_fix_names_what_feeds_the_failing_step(self):
         base = ["ask", "--category", "process", "--option", "a", "--option", "b", "--recommendation", "a",
                 "--confidence", "0.5", "--evidence-kind", "measured", "--evidence", "e", *self.grounded]
-        for q in ("Fix the count?", "Patch the scoreboard?", "Ship the workaround?"):
+        for q in ("Fix the count?", "Is fixing the scoreboard worth it?", "Ship the workaround?"):
             p = self.run_(*base, "--question", q, ok=False)
             self.assertNotEqual(p.returncode, 0, q)
             self.assertIn("--upstream", p.stderr)
@@ -142,7 +142,8 @@ class Ledger(unittest.TestCase):
             return self.run_("ask", "--category", "process", "--question", f"Go on the A9 fix round {n}?",
                              "--option", "a", "--option", "b", "--recommendation", "a", "--confidence", "0.5",
                              "--evidence-kind", "measured", "--evidence", "e", *self.grounded,
-                             "--upstream", "u", "--task", "A9", "--fix-round", str(n), "--rechecked", "r",
+                             "--upstream", "the extract step hands over merged cells", "--task", "A9",
+                             "--fix-round", str(n), "--rechecked", "re-ran the reader on every sheet",
                              *extra, ok=False)
         self.assertEqual(go(1).returncode, 0)
         self.assertEqual(go(2).returncode, 0)
@@ -154,6 +155,40 @@ class Ledger(unittest.TestCase):
         ok = go(3, "--stepped-back", "census of every input kind on every target; design covers all")
         self.assertEqual(ok.returncode, 0, ok.stderr)
         self.assertTrue(self.rows()[-1]["steppedBack"])
+
+    def test_review_2026_10_16_the_gates_need_real_evidence_and_refuse_less_by_mistake(self):
+        base = ["ask", "--option", "a", "--option", "b", "--recommendation", "a", "--confidence", "0.5",
+                "--evidence-kind", "measured", "--evidence", "e"]
+        def ask(cat, q, *extra):
+            return self.run_(*base, "--category", cat, "--question", q, *extra, ok=False)
+        # a spend, process or scope question needs no source file; the tool's own header example passes
+        self.assertEqual(ask("spend", "Run the audit now?").returncode, 0)
+        # junk evidence is refused
+        for extra in (["--read", str(self.work), "--read-what", "rows"],          # a folder
+                      ["--read", str(self.src), "--read-what", "."]):
+            self.assertNotEqual(ask("correction", "Keep the band?", *extra).returncode, 0, extra)
+        for flag in ("--upstream", "--rechecked", "--stepped-back"):
+            p = ask("process", "Fix the count?", *self.grounded, "--upstream", ".", "--task", "B1",
+                    "--fix-round", "3", "--rechecked", ".", "--stepped-back", ".")
+            self.assertNotEqual(p.returncode, 0, flag)
+        self.assertNotEqual(ask("process", "Fix the count?", *self.grounded, "--upstream",
+                                "the extract step hands over merged cells", "--task", "B2",
+                                "--fix-round", "-4").returncode, 0)
+        # a fix on a task must say which round it opens
+        p = ask("process", "Apply the fix again?", *self.grounded, "--upstream",
+                "the extract step hands over merged cells", "--task", "B3")
+        self.assertIn("--fix-round", p.stderr)
+        # ordinary questions are not refused
+        for q in ("Should we ship the pricing change?", "Which naming pattern do we keep?",
+                  "Is the fixed fee applied per policy?", "Bump the patch version?"):
+            self.assertEqual(ask("correction", q, *self.grounded).returncode, 0, q)
+        pdf = self.work / "contract.pdf"
+        pdf.write_text("%PDF")
+        self.assertEqual(ask("correction", "Keep clause 4?", "--read", str(pdf), "--read-what", "page 3").returncode, 0)
+        # a guess label clears its own sentence only
+        p = ask("correction", "guess: none. It is probably fine; ship?", *self.grounded)
+        self.assertIn("'probably'", p.stderr)
+        self.assertEqual(ask("correction", "guess: it is probably fine. Ship?", *self.grounded).returncode, 0)
 
     def test_a_quoted_inference_word_is_named_not_used(self):
         for q in ("The check refuses the word 'should'; relax it?", 'It flags "probably" when quoted; go?',
@@ -171,17 +206,18 @@ class Ledger(unittest.TestCase):
                              "--recommendation", "a", "--confidence", "0.5", "--evidence-kind", "measured",
                              "--evidence", "e", *self.grounded, *extra, ok=False)
         for n in (1, 2):
-            self.assertEqual(go(f"Go on the A7 fix round {n}?", "--upstream", "u", "--task", "A7",
-                                "--fix-round", str(n), "--rechecked", "r").returncode, 0)
+            self.assertEqual(go(f"Go on the A7 fix round {n}?", "--upstream", "the extract step hands over merged cells",
+                                "--task", "A7", "--fix-round", str(n), "--rechecked", "re-ran the reader on every sheet").returncode, 0)
         ok = go("Re-check fix round 2 of A7?", "--task", "A7", "--recheck")
         self.assertEqual(ok.returncode, 0, ok.stderr)
         self.assertTrue(self.rows()[-1]["recheck"])
         self.assertIsNone(self.rows()[-1]["fixRound"])
         self.assertNotEqual(go("Re-check A7?", "--recheck").returncode, 0)
         self.assertNotEqual(go("Re-check A7?", "--task", "A7", "--recheck", "--fix-round", "3",
-                               "--rechecked", "r", "--stepped-back", "s").returncode, 0)
-        p = go("Go on the A7 fix round 3?", "--upstream", "u", "--task", "A7", "--fix-round", "3",
-               "--rechecked", "r")
+                               "--rechecked", "re-ran the reader on every sheet", "--stepped-back", "a whole-problem census came first").returncode, 0)
+        self.assertNotEqual(go("Re-check A99?", "--task", "A99", "--recheck").returncode, 0)  # no round to review
+        p = go("Go on the A7 fix round 3?", "--upstream", "the extract step hands over merged cells", "--task", "A7",
+               "--fix-round", "3", "--rechecked", "re-ran the reader on every sheet")
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("--stepped-back", p.stderr)
 

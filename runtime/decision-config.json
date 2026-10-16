@@ -1,6 +1,7 @@
 {
   "_about": "Defaults for runtime/decision.sh. A stream overrides any key with <stream>/decisions-config.json (same shape; nested keys merge).",
   "categories": ["correction", "engine-design", "placement", "spend", "process", "scope"],
+  "groundingExempt": ["spend", "process", "scope"],
   "halfLifeDays": 14,
   "blindSampleRate": 0.2,
   "autonomy": {

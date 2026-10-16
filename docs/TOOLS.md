@@ -85,7 +85,7 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 | `team-preflight.py` | Checks a repo's binding before a job or the health watch. | nothing |
 | `health-signal.py` | Writes a repo's health register from rules in the binding. | the register, in the stream |
 | `decision.sh` | Records each question put to the owner, the recommendation, the answer and the outcome. | `<stream>/decisions/ledger.jsonl`, `DECISIONS.md` |
-| `spend.sh` | Records measured tokens per agent, grouped into waves with a ceiling. | `<stream>/spend/ledger.jsonl` |
+| `spend.sh` | Records measured tokens per agent, and what each run was for and produced, grouped into waves with a ceiling. | `<stream>/spend/ledger.jsonl`; a lesson stub in `<stream>/TOOLS.md` when a run did worse than predicted |
 | `ratify.sh` | Records which entries of a closed vocabulary two blind readers agreed on. | `<stream>/ratifications/ledger.jsonl` |
 | `ops-event.sh` | Appends one event to the repo's ops ledger. | `<stream>/repo/ops/events.jsonl` |
 | `ops-gap.sh` | Says how many commits the ops ledger is behind. | nothing |
@@ -93,7 +93,7 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 
 `runtime/agents/` holds the nine agents the team's roles are filled by, and `runtime/roles/` holds
 the role an owner can give the main session (`pm.md`). `runtime/skills/` holds three method skills,
-installed into `~/.claude/skills/` (Claude Code only, like the agents):
+installed into `~/.claude/skills/` (Claude Code only for now; the Antigravity binding installs the agents but not yet the skills):
 
 | Skill | Use it when |
 |---|---|

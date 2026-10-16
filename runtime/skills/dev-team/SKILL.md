@@ -85,7 +85,8 @@ finds nothing is a good result**, and the common one. It is not evidence the che
 - **`opus`** — design, debugging, an unfamiliar reader or input, work needing judgement across a large
   surface, or code whose correctness is hard to test.
 - **`haiku`** — bulk mechanical reads where the answer is a list.
-- **The most expensive model** — only when the owner explicitly asks.
+- **The most expensive model** — only when the owner explicitly asks, or a role table pins it: the
+  shipped `expert` role does, by the owner's choice, because its whole job is judgement.
 
 **Effort cannot be set per agent**; the Agent tool takes `model` only. Do not promise it.
 
@@ -139,11 +140,14 @@ Four properties make the shipped checkers work. Copy them.
 **Then check the frontmatter parses before you ship it.** A `description` containing a colon and a space
 reads as a nested mapping, and the file silently fails to load — which happened to all three checkers in
 September 2026, written in one sitting from the same broken template. Either quote the description or
-use a `>-` block, and prove it:
+use a `>-` block, and prove it (standard library only):
 
 ```
-python3 -c "import re,yaml,pathlib; yaml.safe_load(re.match(r'^---.n(.*?).n---',
-  pathlib.Path('<file>').read_text(), re.S).group(1)); print('parses')"
+python3 -c 'import re,sys,pathlib
+fm = re.match(r"^---\n(.*?)\n---", pathlib.Path(sys.argv[1]).read_text(), re.S)
+d = re.search(r"^description:[ ]*(.*)$", fm.group(1) if fm else "", re.M)
+ok = bool(d) and (d.group(1)[:1] in "\x22\x27" or d.group(1).startswith(">") or ": " not in d.group(1))
+print("parses" if ok else "BROKEN: quote the description or use a >- block")' <file>
 ```
 
 Ground it in failures that actually happened, quoted. An agent built from imagined failure modes catches
