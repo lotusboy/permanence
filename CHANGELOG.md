@@ -41,8 +41,8 @@ exact command, after the usual `settings.json.perma-bak` backup. Every other hoo
 agents, skills and commands that carry Permanence's `installed-from` marker are moved aside
 (`.perma-removed` beside an agent or a command, `~/.claude/skills-perma-removed/` for a skill); a file
 of your own is never touched. The Antigravity binding keeps all of Permanence's own wiring; it removes
-the `perma-agent-roles` hook from `hooks.json` (after its backup), the team commands' skills and the
-agent folders it installed, keeping any file you added to one.
+the `perma-agent-roles` hook from `hooks.json` (after its backup) and the team commands' skills, and
+moves the agent folders it installed, whole, to `~/.gemini/config/agents-perma-removed/`.
 
 **Fixed: the people-rule pre-commit hook took minutes on large Markdown commits.** It started one
 `grep` per pattern per added line: a commit adding 4,160 lines started about 50,000 processes and took

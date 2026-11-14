@@ -70,7 +70,12 @@ class Wire(unittest.TestCase):
         self.assertIn("perma-agent-roles", json.loads(Path(str(self.hooks) + ".perma-bak").read_text()))
         self.assertIn("earlier agent-roles hook removed", out)
         self.assertFalse((self.agents / "gone").exists())
-        self.assertEqual(sorted(p.name for p in (self.agents / "gone2").iterdir()), ["notes.txt"])
+        self.assertFalse((self.agents / "gone2").exists())
+        # Moved aside, never deleted: each whole folder, the owner's added file included.
+        kept = {p.name: p for p in (self.config / "agents-perma-removed").glob("*/*")}
+        self.assertEqual(sorted(kept), ["gone", "gone2"])
+        self.assertIn("gone.md", (kept["gone"] / "agent.md").read_text())
+        self.assertEqual(sorted(p.name for p in kept["gone2"].iterdir()), ["agent.md", "notes.txt"])
         self.assertTrue((self.agents / "copy" / "agent.md").exists())
         self.assertTrue((self.agents / "mine" / "agent.md").exists())
         self.assertFalse((self.skills / "perma-change").exists())

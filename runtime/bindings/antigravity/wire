@@ -97,14 +97,17 @@ if _perma_block_merge "$GEMINI_MD" "$BLOCK_SRC"; then
 fi
 
 # Agents: the project team's agents were installed here as Antigravity custom agents until v1.12.0.
-# Remove the ones an earlier version installed: only a folder whose agent.md ends with Permanence's
-# installed-from marker naming that same agent. An owner's own agent is never touched, and files the
-# owner added beside agent.md are kept.
+# Move aside the ones an earlier version installed: only a folder whose agent.md ends with
+# Permanence's installed-from marker naming that same agent. Each goes whole, with any file the owner
+# added to it, to ~/.gemini/config/agents-perma-removed/ (outside the agents folder, so it no longer
+# loads): nothing is deleted. An owner's own agent is never touched.
 if command -v python3 >/dev/null 2>&1; then
 python3 - "$HOME/.gemini/config/agents" <<'PY' || WIRE_FAILED=1
-import os, shutil, sys
+import os, shutil, sys, tempfile, time
 dst = sys.argv[1]
+gone = os.path.join(os.path.dirname(dst), "agents-perma-removed")
 MARK = "installed-from: ~/permanence/runtime/agents/"
+failed = False
 if os.path.isdir(dst):
     for entry in sorted(os.listdir(dst)):
         folder, target = os.path.join(dst, entry), os.path.join(dst, entry, "agent.md")
@@ -114,12 +117,17 @@ if os.path.isdir(dst):
             continue
         if f"{MARK}{entry}.md " not in last:
             continue
-        if os.listdir(folder) == ["agent.md"]:
-            shutil.rmtree(folder)
-            print(f"  agent: {entry} — removed (the project team moved to bakehouse)")
-        else:
-            os.remove(target)
-            print(f"  agent: {entry} — agent.md removed (the project team moved to bakehouse); your other files kept")
+        try:
+            os.makedirs(gone, exist_ok=True)
+            # A folder of its own for each removed copy: two runs in one second cannot collide.
+            keep = tempfile.mkdtemp(prefix=f"{entry}.{time.strftime('%Y%m%d%H%M%S')}.", dir=gone)
+            shutil.move(folder, os.path.join(keep, entry))
+            print(f"  agent: {entry} — the project team moved to bakehouse; moved to "
+                  f"~/.gemini/config/agents-perma-removed/{os.path.basename(keep)}/{entry}")
+        except OSError as e:
+            print(f"  agent: {entry} — FAILED to move it aside ({e}); left in place")
+            failed = True
+sys.exit(1 if failed else 0)
 PY
 fi
 
