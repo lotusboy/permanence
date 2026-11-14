@@ -64,16 +64,20 @@ pre-commit hook (time, the same report as the old loop, the exemptions). CI now 
    to install it: <https://github.com/lotusboy/bakehouse>.
 2. **The team is switched on per project, not per machine.** bakehouse is installed at project scope in
    each repository that wants a team, and does nothing anywhere else. A stream whose repo never had a
-   team needs nothing.
-3. **An install upgrading from a version with the team loses its team hooks, agents and skills** on
+   team needs nothing, with one exception, the next note.
+3. **Two tools that worked without the team moved too.** `predict-gate.sh` (the predicted-moves gate)
+   and `save-report.sh` were listed in v1.11.0 as core optional extras, usable in any repository. Both
+   are bakehouse's now, and the upgrade deletes them here. If you use either, install bakehouse in that
+   repository; its README says how.
+4. **An install upgrading from a version with the team loses its team hooks, agents and skills** on
    the `install.sh` run that follows the upgrade (see above). `/perma-change`, `/perma-refactor` and
    `/perma-health` are gone. In a project that switches bakehouse on, they are `/bakehouse:change`,
    `/bakehouse:refactor` and `/bakehouse:health`.
-4. **A stream used with the team keeps its files.** `DECISIONS.md`, `decisions/`, `spend/`,
+5. **A stream used with the team keeps its files.** `DECISIONS.md`, `decisions/`, `spend/`,
    `ratifications/` and `repo/` stay in the stream as records. Nothing in Permanence writes them any
    more; bakehouse keeps new records in the project's repository. Proposed edit for such a stream:
    none, unless you choose to move or archive those folders.
-5. **A repository hook from the team.** `repo-hooks.sh` wrote a post-commit hook into `.git/hooks/` of
+6. **A repository hook from the team.** `repo-hooks.sh` wrote a post-commit hook into `.git/hooks/` of
    each repository you own. It calls `runtime/ops-gap.sh` only when that file exists, so after this
    upgrade it does nothing. It is harmless; delete it when you like.
 
