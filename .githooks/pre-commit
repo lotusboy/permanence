@@ -50,50 +50,54 @@ patterns=(
   '\b(is|was|being|such|a real) (a |an )?(idiot|moron|imbecile|liar|fraud|snake|coward|narcissist|sociopath|psychopath|clown|incompetent|spineless|clueless|gutless|two-faced|backstabbing|deceitful|dishonest)\b'
 )
 
-file=""
-flagged=0
+# One pass, not one process per line (v1.12.0): a commit adding 4,160 Markdown lines started about
+# 50,000 grep processes and took over 5 minutes. awk splits the staged diff into two line-aligned
+# files (each added line's path, and its text), each pattern runs once over all the text, and the
+# report takes, for each flagged line, the first pattern that matched it, in diff order: the same
+# files, lines and patterns the per-line loop reported.
+tmp="$(mktemp -d 2>/dev/null || mktemp -d -t perma-pre-commit 2>/dev/null)" || {
+  echo "Permanence people-rule guard: could not make a temporary folder, so nothing was checked. Fix that, or commit with --no-verify." >&2
+  exit 1
+}
+trap 'rm -rf "$tmp"' EXIT
 
-while IFS= read -r line; do
-  case "$line" in
-    '+++ b/'*)
-      file="${line#+++ b/}"
-      ;;
-    '+++ "b/'*)
-      # Git quotes (and C-escapes) the path here when it needs it — typically a non-ASCII
-      # filename. Not fully unescaped (a flagged message may show raw escape sequences), but
-      # the file is no longer silently dropped into the /dev/null branch below: every added
-      # line in it still gets scanned, which is the property that actually matters.
-      file="${line#+++ \"b/}"
-      file="${file%\"}"
-      ;;
-    '+++ '*)
-      file=""   # /dev/null or other
-      ;;
-    '+'*)
-      [ -z "$file" ] && continue
-      # Skip files that legitimately hold the rule text + examples.
-      # Only the repo's OWN top-level README.md (which explains this rule and may carry
-      # illustrative phrases) and this script's own body are exempt. The old "*/README.md"
-      # wildcard also exempted every STREAM's README.md — a canonical per-stream file per
-      # SPEC.md that can hold real content about real people, which then went completely
-      # unchecked. A stream's README is no longer exempt.
-      case "$file" in
-        README.md|.githooks/*) continue ;;
-      esac
-      content="${line#+}"
-      for p in "${patterns[@]}"; do
-        if printf '%s' "$content" | grep -qiE "$p"; then
-          if [ "$flagged" -eq 0 ]; then
-            printf '\n⚠️  Permanence people-rule guard — staged phrasing to review:\n\n' >&2
-          fi
-          printf '  %s\n    %s\n    ↳ matched: %s\n\n' "$file" "$content" "$p" >&2
-          flagged=1
-          break
-        fi
-      done
-      ;;
-  esac
-done < <(git diff --cached --unified=0 --no-color -- '*.md')
+# Paths: "+++ b/<path>". Git quotes (and C-escapes) the path when it needs it, typically a non-ASCII
+# filename: not unescaped (a flagged message may show raw escape sequences), but every added line in it
+# is still scanned, which is the property that matters. Any other "+++ " line (/dev/null) has no file.
+# Exempt: only the repo's OWN top-level README.md (it explains this rule and may carry illustrative
+# phrases) and this script's own folder. A stream's README.md can hold real content about real people,
+# so it is not exempt (the old "*/README.md" wildcard exempted every one).
+git diff --cached --unified=0 --no-color -- '*.md' | awk -v F="$tmp/files" -v C="$tmp/text" '
+  index($0, "+++ b/") == 1     { file = substr($0, 7); next }
+  index($0, "+++ \"b/") == 1   { file = substr($0, 8); sub(/"$/, "", file); next }
+  index($0, "+++ ") == 1       { file = ""; next }
+  substr($0, 1, 1) == "+" {
+    if (file == "" || file == "README.md" || index(file, ".githooks/") == 1) next
+    print file > F
+    print substr($0, 2) > C
+  }'
+: >> "$tmp/files"; : >> "$tmp/text"; : > "$tmp/hits"
+printf '%s\n' "${patterns[@]}" > "$tmp/patterns"
+
+i=0
+for p in "${patterns[@]}"; do
+  i=$((i + 1))
+  # -a: a line that is not valid text must still be reported as a line, never as "binary file matches".
+  grep -n -a -i -E -e "$p" "$tmp/text" | awk -F: -v i="$i" '{ print $1, i }' >> "$tmp/hits"
+done
+
+flagged=0
+if [ -s "$tmp/hits" ]; then
+  flagged=1
+  sort -n -k 1,1 -k 2,2 "$tmp/hits" | awk -v F="$tmp/files" -v C="$tmp/text" -v P="$tmp/patterns" '
+    BEGIN {
+      n = 0; while ((getline l < F) > 0) f[++n] = l
+      n = 0; while ((getline l < C) > 0) c[++n] = l
+      n = 0; while ((getline l < P) > 0) p[++n] = l
+      printf "\n⚠️  Permanence people-rule guard — staged phrasing to review:\n\n"
+    }
+    !($1 in seen) { seen[$1] = 1; printf "  %s\n    %s\n    ↳ matched: %s\n\n", f[$1], c[$1], p[$2] }' >&2
+fi
 
 if [ "$flagged" -eq 1 ]; then
   cat >&2 <<'EOF'
