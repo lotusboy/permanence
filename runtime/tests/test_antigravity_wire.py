@@ -80,6 +80,19 @@ class Wire(unittest.TestCase):
         self.assertTrue((self.agents / "mine" / "agent.md").exists())
         self.assertFalse((self.skills / "perma-change").exists())
 
+    def test_a_symlinked_agent_folder_is_skipped_and_the_rest_still_cleaned(self):
+        real = Path(self.tmp.name) / "dotfiles" / "architect"
+        real.mkdir(parents=True)
+        (real / "agent.md").write_text(f"x\n<!-- {MARK}architect.md — edit -->\n")
+        self.agents.mkdir(parents=True)
+        (self.agents / "architect").symlink_to(real)
+        self.agent("zz-gone", f"<!-- {MARK}zz-gone.md — edit -->")
+        out = self.wire()
+        self.assertIn("architect — a symbolic link", out)
+        self.assertTrue((real / "agent.md").exists())
+        self.assertTrue((self.agents / "architect").is_symlink())
+        self.assertFalse((self.agents / "zz-gone").exists())
+
     def test_a_second_wire_changes_nothing(self):
         self.wire()
         before = self.hooks.read_text()

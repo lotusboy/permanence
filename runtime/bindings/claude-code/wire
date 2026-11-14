@@ -60,7 +60,6 @@ done
 # An installed copy the user edited in place is kept beside the new one before it is replaced.
 AGENT_SRC="$PERMA/runtime/agents"
 AGENT_DST="$HOME/.claude/agents"
-mkdir -p "$AGENT_DST"
 for f in "$AGENT_SRC"/*.md; do
   [ -f "$f" ] || continue
   name=$(basename "$f")
@@ -76,7 +75,7 @@ for f in "$AGENT_SRC"/*.md; do
       echo "  agent: $name — your edits to the installed copy are kept in $(basename "$keep")"
     fi
   fi
-  if cp "$f" "$AGENT_DST/$name"; then
+  if mkdir -p "$AGENT_DST" && cp "$f" "$AGENT_DST/$name"; then
     printf '\n<!-- installed-from: ~/permanence/runtime/agents/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$AGENT_DST/$name"
     echo "  agent: $name"
   else
@@ -123,7 +122,6 @@ skill_differs() {
   done < <(cd "$src" && find . -type f)
   return 1
 }
-mkdir -p "$SKILL_DST"
 for d in "$SKILL_SRC"/*/; do
   [ -f "$d/SKILL.md" ] || continue
   name=$(basename "$d")
@@ -155,7 +153,7 @@ for d in "$SKILL_SRC"/*/; do
       continue
     fi
   fi
-  if cp -R "${d%/}" "$dst"; then
+  if mkdir -p "$SKILL_DST" && cp -R "${d%/}" "$dst"; then
     printf '\n<!-- installed-from: ~/permanence/runtime/skills/%s @ %s — edit the source in Permanence, then re-run ~/permanence/runtime/install.sh -->\n' "$name" "$SHA" >> "$dst/SKILL.md"
     mkdir -p "$SKILL_PRINTS" && skill_print "$dst" > "$SKILL_PRINTS/$name"
     echo "  skill: $name"
@@ -264,7 +262,8 @@ except (AttributeError, TypeError):
 if changed:
     if os.path.exists(path): shutil.copy(path, path + ".perma-bak")
     json.dump(data, open(path, "w"), indent=2)
-    print("  settings.json: SessionStart + session-load (auto context) hooks + ~/permanence permission merged in, earlier team hooks removed (backup: settings.json.perma-bak)")
+    print("  settings.json: SessionStart + session-load (auto context) hooks + ~/permanence permission merged in"
+          + (", earlier team hooks removed" if removed_hooks else "") + " (backup: settings.json.perma-bak)")
 else:
     print("  settings.json: hook + permission already present")
 PY

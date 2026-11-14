@@ -55,8 +55,9 @@ It now scans the whole staged diff in one pass and reports the same files, lines
 before. A 4,200-line commit takes under 2 seconds.
 
 **Tested:** the team's 189 tests left with it (177 in its own test files, 12 for its Antigravity
-pieces). New: 3 tests of the Antigravity wire, 3 of the Claude Code upgrade cleanup, and 4 of the
-pre-commit hook (time, the same report as the old loop, the exemptions). CI now checks that no team hook, agent, skill or command is installed on any tool.
+pieces). New: 22 tests. 4 of the Antigravity wire, 4 of the Claude Code upgrade cleanup, 5 of the
+pre-commit hook (time, the same report as the old loop, the exemptions, the sort keys), 8 of the PM
+role's kept rules, and 1 of these migration notes. CI now checks that no team hook, agent, skill or command is installed on any tool.
 
 **Migration notes.**
 

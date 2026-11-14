@@ -117,6 +117,10 @@ if os.path.isdir(dst):
             continue
         if f"{MARK}{entry}.md " not in last:
             continue
+        if os.path.islink(folder):
+            # Its real folder lives elsewhere (a dotfiles repository, say): not this wire's to move.
+            print(f"  agent: {entry} — a symbolic link to an earlier team agent; left as it is (remove the link by hand if you no longer want it)")
+            continue
         try:
             os.makedirs(gone, exist_ok=True)
             # A folder of its own for each removed copy: two runs in one second cannot collide.

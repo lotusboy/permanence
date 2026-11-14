@@ -72,7 +72,10 @@ class Upgrade(unittest.TestCase):
         self.assertIn(("SubagentStop", f"python3 {self.roles}"), backup)
 
     def test_a_fresh_install_wires_no_team_hook(self):
-        self.wire()
+        out = self.wire()
+        self.assertNotIn("earlier team hooks removed", out)
+        self.assertFalse((self.claude / "agents").exists())   # Permanence ships no agents or skills
+        self.assertFalse((self.claude / "skills").exists())
         got = self.commands(json.loads(self.settings.read_text()))
         self.assertFalse([c for c in got if "agent-roles" in c[1]], got)
         self.assertIn("hook + permission already present", self.wire())
