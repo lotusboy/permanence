@@ -27,24 +27,10 @@ product, not just reasoning about docs. 🔧 confirmed real — either live-test
 installed product's own bundled documentation — but no code wires it in yet, and (Gemini CLI only) may
 never, given the access block. ❓ genuinely still unknown.
 
-**The project team runs on Claude Code, and on Antigravity in part.** The table above covers
-Permanence's core: streams, the forcing read, the standing instruction, commands. The experimental
-project team (agents, agent roles, `/perma-change`, `/perma-refactor`, `/perma-health`) was built on Claude
-Code's subagents and hooks. From v1.8.0 the Antigravity binding carries it too, with two enforcements
-missing; [PROJECT-TEAM.md](./PROJECT-TEAM.md), "On Antigravity", says which. The three commands carry
-`harness: claude-code, antigravity` in their frontmatter. A binding skips any command whose `harness:`
-line does not name it, so Devin and Cursor are not offered a command they cannot run.
-
-What each other tool has of the three things the team needs, tested 2026-10-11. Only the Antigravity
-row was tested by running the tool; the Cursor and Devin rows come from each tool's own program files
-and error messages. Detail and method:
-[design/project-team-on-other-harnesses.md](../design/project-team-on-other-harnesses.md).
-
-| Tool | Subagents | Hook before launch that can rewrite it | Hook when a subagent stops |
-|---|---|---|---|
-| Antigravity (team shipped in v1.8.0) | ✅ `invoke_subagent`; named agents in `~/.gemini/config/agents/` | ✅ `PreToolUse` with `overwrite` | ⚠️ `Stop` fires, but does not say it is a subagent |
-| Cursor | ✅ (not run) | ⚠️ `subagentStart` can allow or deny, not rewrite (not run) | ✅ `subagentStop` (not run) |
-| Devin | ✅ `run_subagent` (not run) | ❓ no subagent event; `PreToolUse` untested | ❓ no subagent event |
+**The project team is not part of Permanence (since v1.12.0).** The table above covers all of
+Permanence. The team (agents, agent roles and the gated jobs) moved to
+[bakehouse](https://github.com/lotusboy/bakehouse), a plugin for Claude Code. The Antigravity binding keeps
+Permanence's own wiring and no longer installs the team's agents or role hook.
 
 ## Claude Code
 

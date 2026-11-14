@@ -16,6 +16,63 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.12.0] — the project team moves out, to the bakehouse plugin
+
+**The project team is no longer part of Permanence.** Everything that made up the team moved to
+[bakehouse](https://github.com/lotusboy/bakehouse), a plugin for Claude Code: the agent roles and their
+hooks, the nine agents, `/perma-change`, `/perma-refactor` and `/perma-health`, the three method skills
+(`dev-team`, `step-back`, `live-prism`), the predicted-moves gate, the decision, spend and ratify
+ledgers, `save-report`, the health signal, the ops ledger and its post-commit hook, team preflight,
+`docs/PROJECT-TEAM.md` and `docs/PREDICT-GATE.md`. bakehouse keeps its records in the project's own
+repository, on a branch of their own, not in a Permanence stream. Permanence is now the notes tool
+only: streams, session loading, the daily and periodic commands, the PM role and events.
+
+**The PM role keeps Permanence's half.** `runtime/roles/pm.md` holds the owner's board and notes
+(`WIP.md`, `PROJECT.md`, `LOG.md`, `QUESTIONS.md`), the session open and close, the owner's plan,
+per-stream setup, and the view across streams. Delegation, briefs, gates and the team's records are
+bakehouse's `bakehouse:pm` skill. In a stream whose repo has the team switched on, the PM follows that
+skill for team work, and brings the board up to date at the start and end of a session from
+`bakehouse status --json --since <time>`, run from the Bash tool (never from a hook).
+
+**Install stops wiring the team, and an upgrade removes what an earlier version installed.** The
+Claude Code binding no longer adds the three agent-roles hooks (SessionStart `--check-new`,
+PreToolUse `Agent`, SubagentStop), and removes them from `~/.claude/settings.json`, matched by their
+exact command, after the usual `settings.json.perma-bak` backup. Every other hook stays. The team's
+agents, skills and commands that carry Permanence's `installed-from` marker are moved aside
+(`.perma-removed` beside an agent or a command, `~/.claude/skills-perma-removed/` for a skill); a file
+of your own is never touched. The Antigravity binding keeps all of Permanence's own wiring; it removes
+the `perma-agent-roles` hook from `hooks.json` (after its backup), the team commands' skills and the
+agent folders it installed, keeping any file you added to one.
+
+**Fixed: the people-rule pre-commit hook took minutes on large Markdown commits.** It started one
+`grep` per pattern per added line: a commit adding 4,160 lines started about 50,000 processes and took
+over 5 minutes, long enough for another session to commit first and for git to refuse the slow one.
+It now scans the whole staged diff in one pass and reports the same files, lines and patterns as
+before. A 4,200-line commit takes under 2 seconds.
+
+**Tested:** the team's 189 tests left with it (177 in its own test files, 12 for its Antigravity
+pieces). New: 3 tests of the Antigravity wire, 3 of the Claude Code upgrade cleanup, and 4 of the
+pre-commit hook (time, the same report as the old loop, the exemptions). CI now checks that no team hook, agent, skill or command is installed on any tool.
+
+**Migration notes.**
+
+1. **What moved, and where.** The project team, listed above, moved to bakehouse. Its README says how
+   to install it: <https://github.com/lotusboy/bakehouse>.
+2. **The team is switched on per project, not per machine.** bakehouse is installed at project scope in
+   each repository that wants a team, and does nothing anywhere else. A stream whose repo never had a
+   team needs nothing.
+3. **An install upgrading from a version with the team loses its team hooks, agents and skills** on
+   the `install.sh` run that follows the upgrade (see above). `/perma-change`, `/perma-refactor` and
+   `/perma-health` are gone. In a project that switches bakehouse on, they are `/bakehouse:change`,
+   `/bakehouse:refactor` and `/bakehouse:health`.
+4. **A stream used with the team keeps its files.** `DECISIONS.md`, `decisions/`, `spend/`,
+   `ratifications/` and `repo/` stay in the stream as records. Nothing in Permanence writes them any
+   more; bakehouse keeps new records in the project's repository. Proposed edit for such a stream:
+   none, unless you choose to move or archive those folders.
+5. **A repository hook from the team.** `repo-hooks.sh` wrote a post-commit hook into `.git/hooks/` of
+   each repository you own. It calls `runtime/ops-gap.sh` only when that file exists, so after this
+   upgrade it does nothing. It is harmless; delete it when you like.
+
 ## [1.11.0] — three method skills: dev-team, step-back and live-prism
 
 **New: three method skills, the template's first.** `runtime/skills/` holds `dev-team` (the playbook for
