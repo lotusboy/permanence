@@ -61,26 +61,17 @@ except (AttributeError, TypeError):
     print("  hooks.json: present but has an unexpected shape under an existing perma-* key — NOT touched. Add the hooks by hand.")
     sys.exit(1)
 
-# The project team's role hook: a second PreToolUse entry, on the subagent tool only.
-try:
-    roles_cmd = f"python3 {binding_dir}/agent-roles-hook.py"   # by interpreter: does not depend on the file's executable bit
-    ar = data.get("perma-agent-roles") or {}
-    ar_groups = ar.get("PreToolUse") or []
-    if not any(isinstance(g, dict) and any(isinstance(h, dict) and h.get("command") == roles_cmd
-                                           for h in g.get("hooks", [])) for g in ar_groups):
-        ar["PreToolUse"] = [{"matcher": "invoke_subagent",
-                             "hooks": [{"type": "command", "command": roles_cmd, "timeout": 10}]}]
-        data["perma-agent-roles"] = ar
-        changed = True
-except (AttributeError, TypeError):
-    print("  hooks.json: present but has an unexpected shape under perma-agent-roles — NOT touched. Add the hook by hand.")
-    sys.exit(1)
+# The project team's role hook moved out of Permanence in v1.12.0 (to the bakehouse plugin, which is
+# Claude Code only). Remove the one an earlier version wired: its own namespaced key, nothing else.
+removed = data.pop("perma-agent-roles", None) is not None
+changed = changed or removed
 
 if changed:
     if os.path.exists(path):
         shutil.copy(path, path + ".perma-bak")
     json.dump(data, open(path, "w"), indent=2)
-    print("  hooks.json: PreInvocation + PreToolUse + agent-roles hooks merged in (backup: hooks.json.perma-bak)")
+    print("  hooks.json: PreInvocation + PreToolUse hooks merged in"
+          + (", earlier agent-roles hook removed" if removed else "") + " (backup: hooks.json.perma-bak)")
 else:
     print("  hooks.json: hooks already present")
 PY
@@ -105,12 +96,31 @@ if _perma_block_merge "$GEMINI_MD" "$BLOCK_SRC"; then
   echo "  GEMINI.md: Permanence block refreshed"
 fi
 
-# Agents: the project team's shipped agents, as Antigravity custom agents (experimental). The
-# translation and its rules are in agents-install.py beside this file.
+# Agents: the project team's agents were installed here as Antigravity custom agents until v1.12.0.
+# Remove the ones an earlier version installed: only a folder whose agent.md ends with Permanence's
+# installed-from marker naming that same agent. An owner's own agent is never touched, and files the
+# owner added beside agent.md are kept.
 if command -v python3 >/dev/null 2>&1; then
-  python3 "$BINDING_DIR/agents-install.py" "$PERMA/runtime/agents" "$HOME/.gemini/config/agents" || WIRE_FAILED=1
-else
-  echo "  agents: python3 not found — skipped"
+python3 - "$HOME/.gemini/config/agents" <<'PY' || WIRE_FAILED=1
+import os, shutil, sys
+dst = sys.argv[1]
+MARK = "installed-from: ~/permanence/runtime/agents/"
+if os.path.isdir(dst):
+    for entry in sorted(os.listdir(dst)):
+        folder, target = os.path.join(dst, entry), os.path.join(dst, entry, "agent.md")
+        try:
+            last = open(target, encoding="utf-8", errors="replace").read().rstrip().split("\n")[-1]
+        except OSError:
+            continue
+        if f"{MARK}{entry}.md " not in last:
+            continue
+        if os.listdir(folder) == ["agent.md"]:
+            shutil.rmtree(folder)
+            print(f"  agent: {entry} — removed (the project team moved to bakehouse)")
+        else:
+            os.remove(target)
+            print(f"  agent: {entry} — agent.md removed (the project team moved to bakehouse); your other files kept")
+PY
 fi
 
 # Skills: translate runtime/commands/*.md into ~/.gemini/config/skills/<name>/SKILL.md —
@@ -121,10 +131,10 @@ fi
 CMD_SRC="$PERMA/runtime/commands"
 SKILLS_DST="$HOME/.gemini/config/skills"
 if command -v python3 >/dev/null 2>&1; then
-if ! python3 - "$CMD_SRC" "$SKILLS_DST" "$BINDING_DIR/team-note.md" <<'PY'
+if ! python3 - "$CMD_SRC" "$SKILLS_DST" <<'PY'
 import json, os, re, shutil, sys
 
-cmd_src, skills_dst, team_note = sys.argv[1], sys.argv[2], sys.argv[3]
+cmd_src, skills_dst = sys.argv[1], sys.argv[2]
 
 def extract_description(content):
     m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
@@ -179,10 +189,6 @@ for fname in sorted(os.listdir(cmd_src)):
         os.makedirs(skill_dir, exist_ok=True)
         fm_lines = ["---", f"name: {name}", f"description: {json.dumps(description)}", "---", ""]
         body = re.sub(r'^---\s*\n.*?\n---\s*\n', '', content, count=1, flags=re.DOTALL)
-        # A command that names this harness in `harness:` is a project-team command written for
-        # another tool's subagent calls: it gets the note that says how to read it here.
-        if only_for(content):
-            body = "\n" + open(team_note).read() + body.lstrip("\n")
         skill_md = os.path.join(skill_dir, "SKILL.md")
         if os.path.exists(skill_md):
             shutil.copy(skill_md, skill_md + ".perma-bak")

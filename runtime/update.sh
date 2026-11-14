@@ -32,8 +32,8 @@ MODE="dry-run"
 [ -n "$SRC" ] || { echo "No update source set. Put your template git URL in $PERMA/runtime/.update-source (or export PERMA_UPDATE_SOURCE)."; exit 1; }
 git -C "$PERMA" rev-parse --git-dir >/dev/null 2>&1 || { echo "$PERMA is not a git repo."; exit 1; }
 
-# docs/ joined in v1.7.1: shipped commands and scripts point at docs/PROJECT-TEAM.md and
-# docs/TOOL-SUPPORT.md, and without it an upgraded install never received them.
+# docs/ joined in v1.7.1: shipped commands and scripts point at docs/ (docs/TOOL-SUPPORT.md, for
+# one), and without it an upgraded install never received them.
 PATHS=(runtime .githooks templates docs SPEC.md README.md QUICKSTART.md CHANGELOG.md design)   # machinery + the template's own planning docs
 # Refuse over uncommitted changes to the MACHINERY only. An open edit in one of the owner's streams
 # (a working board, a log) is the normal state of a Permanence in use and is none of this script's

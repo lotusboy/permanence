@@ -456,16 +456,20 @@ jobs:
           test -f "$HOME/.claude/commands/perma-upgrade.md"
           echo "commands installed OK"
 
-      - name: Verify the shipped agents were installed, each with its installed-from marker
+      - name: Verify the project team is not installed (it moved to the bakehouse plugin in v1.12.0)
         shell: bash
         run: |
           set -e
-          for a in "${PERMA_DIR}"/runtime/agents/*.md; do
-            n="$(basename "$a")"
-            test -f "$HOME/.claude/agents/$n" || { echo "FAILED: agent $n was not installed"; exit 1; }
-            grep -q "installed-from:" "$HOME/.claude/agents/$n" || { echo "FAILED: agent $n has no installed-from marker"; exit 1; }
+          for c in perma-change perma-refactor perma-health; do
+            test ! -e "$HOME/.claude/commands/$c.md" || { echo "FAILED: team command $c was installed"; exit 1; }
           done
-          echo "agents installed OK: $(ls "$HOME/.claude/agents" | wc -l | tr -d ' ')"
+          if grep -rl "installed-from: ~/permanence/runtime/agents/" "$HOME/.claude/agents" 2>/dev/null; then
+            echo "FAILED: an agent was installed from runtime/agents/"; exit 1
+          fi
+          if grep -rl "installed-from: ~/permanence/runtime/skills/" "$HOME/.claude/skills" 2>/dev/null; then
+            echo "FAILED: a skill was installed from runtime/skills/"; exit 1
+          fi
+          echo "no team command, agent or skill installed: OK"
 
       - name: Verify the migrated Claude Code binding actually wired everything
         shell: bash
@@ -484,7 +488,9 @@ jobs:
           assert perma in d["permissions"]["additionalDirectories"], "additionalDirectories missing PERMA"
           assert any(h.get("command", "").endswith("session-start.sh") for e in d["hooks"]["SessionStart"] for h in e.get("hooks", [])), "SessionStart hook missing"
           assert any(h.get("command", "").endswith("session-load.sh") for e in d["hooks"]["UserPromptSubmit"] for h in e.get("hooks", [])), "UserPromptSubmit hook missing"
-          print("settings.json: hooks + permission OK")
+          team = [h.get("command") for l in d["hooks"].values() for e in l for h in e.get("hooks", []) if "agent-roles" in h.get("command", "")]
+          assert not team, f"team hooks wired: {team}"
+          print("settings.json: hooks + permission OK, no team hook")
           PY
 
       - name: Verify Antigravity's detect correctly reports absent on a CI runner
@@ -573,22 +579,17 @@ jobs:
           PY
           test -f "$HOME/.cursor/skills/perma-startup/SKILL.md" && echo "cursor skills: OK"
 
-          # A command's `harness:` line names the tools that can run it. The team commands name
-          # claude-code and antigravity, so Devin and Cursor must not be offered them.
-          for d in "$HOME/.config/devin/skills" "$HOME/.cursor/skills"; do
+          # The project team moved to the bakehouse plugin in v1.12.0: no tool gets its commands, and
+          # Antigravity gets no team note, agents or role hook.
+          for d in "$HOME/.config/devin/skills" "$HOME/.cursor/skills" "$HOME/.gemini/config/skills"; do
             for c in perma-change perma-refactor perma-health; do
-              if [ -e "$d/$c" ]; then echo "FAILED: $d/$c was installed, but its harness line does not name this tool"; exit 1; fi
+              if [ -e "$d/$c" ]; then echo "FAILED: team command $d/$c was installed"; exit 1; fi
             done
           done
-          echo "harness-limited commands skipped on devin and cursor: OK"
-          # Antigravity gets them, each with the note on how to read it there, plus the agents and the role hook.
-          for c in perma-change perma-refactor perma-health; do
-            grep -q "Running this on Antigravity" "$HOME/.gemini/config/skills/$c/SKILL.md" || { echo "FAILED: $c has no Antigravity note"; exit 1; }
-          done
-          grep -q "Running this on Antigravity" "$HOME/.gemini/config/skills/perma-startup/SKILL.md" && { echo "FAILED: a core command got the team note"; exit 1; }
-          test -f "$HOME/.gemini/config/agents/count-check/agent.md" || { echo "FAILED: antigravity agents not installed"; exit 1; }
-          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert 'perma-agent-roles' in d, 'role hook missing'" "$HOME/.gemini/config/hooks.json"
-          echo "antigravity team: commands with note, agents, role hook: OK"
+          if grep -rl "Running this on Antigravity" "$HOME/.gemini/config/skills"; then echo "FAILED: a skill got the team note"; exit 1; fi
+          if [ -e "$HOME/.gemini/config/agents" ]; then echo "FAILED: antigravity agents were installed"; exit 1; fi
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert 'perma-agent-roles' not in d, 'role hook wired'" "$HOME/.gemini/config/hooks.json"
+          echo "no team commands, note, agents or role hook on any tool: OK"
 
           # Idempotency: re-run all three and confirm no error and no duplicate entries.
           bash "${PERMA_DIR}/runtime/bindings/antigravity/wire"
