@@ -31,5 +31,17 @@ class SpendingRules(unittest.TestCase):
         self.assertIn("asks before spending on agents", SPEC)
 
 
+class BoardFromBakehouse(unittest.TestCase):
+    def test_a_missing_bakehouse_command_means_no_team(self):
+        self.assertIn("exit 127", PM)
+
+    def test_only_closes_not_already_on_the_board_are_added(self):
+        self.assertIn("whose work order is not already named on the board", PM)
+
+    def test_the_since_time_is_the_boards_last_commit_and_nothing_else(self):
+        self.assertIn("git -C ~/permanence log -1 --format=%cI --", PM)
+        self.assertNotIn("A board never committed", PM)
+
+
 if __name__ == "__main__":
     unittest.main()

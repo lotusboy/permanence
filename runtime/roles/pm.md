@@ -47,7 +47,8 @@ delegation rules on top (§2).
 A stream's repo has the team switched on when bakehouse's own session-start hook told the session
 "this project has a team" and to load the `bakehouse:pm` skill. It says so in a project that enables the
 plugin and has a team set up, unless the owner chose `none` for bakehouse's role on this machine. When
-unsure, `bakehouse status --json` in the repo answers: exit 0 means a team, exit 3 means none.
+unsure, `bakehouse status --json` in the repo answers: exit 0 means a team; exit 3, or exit 127
+(`bakehouse` is not installed), means none.
 
 - **Team work follows `bakehouse:pm`.** Planning a change, delegating it, the gates, the team's records
   and its spend are that skill's. Follow it for them. This file still holds for the board and notes.
@@ -60,15 +61,17 @@ unsure, `bakehouse status --json` in the repo answers: exit 0 means a team, exit
   bakehouse status --json --since <time>
   ```
 
-  `<time>` is when the stream's `WIP.md` last changed: `git -C ~/permanence log -1 --format=%cI --
-  <stream>/WIP.md`. A board never committed uses the time of its own newest entry. Each entry of
-  `closedSince` (`workOrder`, `closedAt`, `commit`, `overridden`) is a work order that closed. Move its
-  row on `WIP.md` to **Done today**, or add one, naming the work order and the commit. Write
-  "overridden" when the close was overridden.
+  `<time>` is the time of the board's last commit: `git -C ~/permanence log -1 --format=%cI --
+  <stream>/WIP.md`. When that prints nothing (the board was never committed), leave `--since` out.
+  Each entry of `closedSince` (`workOrder`, `closedAt`, `commit`, `overridden`) is a work order that
+  closed. Take only the entries whose work order is not already named on the board: a board updated
+  but not yet committed gets the same closes again. For each one, move its row on `WIP.md` to
+  **Done today**, or add one, naming the work order and the commit. Write "overridden" when the close
+  was overridden.
 - **Only from the Bash tool, never from a hook.** The plugin puts `bakehouse` on the Bash tool's PATH.
   Whether a hook's PATH has it is not confirmed, so no hook calls it.
-- **When it does not answer, say so and carry on.** Exit 3 means no team in this repo; exit 4 means the
-  team needs `bakehouse setup` here. Say it in one line. The board is not changed.
+- **When it does not answer, say so and carry on.** Exit 3 means no team in this repo; exit 127 means
+  `bakehouse` is not installed, which is also no team; exit 4 means the team needs `bakehouse setup` here. Say it in one line. The board is not changed.
 - **Nothing private crosses over.** Nothing from Permanence goes into the team's records, and the team's
   records are read only through `bakehouse status` (§7, the one-way rule).
 
