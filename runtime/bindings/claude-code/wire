@@ -193,7 +193,7 @@ fi
 SETTINGS="$HOME/.claude/settings.json"
 if command -v python3 >/dev/null 2>&1; then
   if ! python3 - "$SETTINGS" "$PERMA" <<'PY'
-import json, sys, os, shutil
+import json, sys, os, shutil, shlex
 path, perma = sys.argv[1], sys.argv[2]
 os.makedirs(os.path.dirname(path), exist_ok=True)
 data = {}
@@ -220,19 +220,32 @@ try:
     ups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
     if not any(isinstance(e, dict) and any(h.get("command") == cmd_load for h in e.get("hooks", [])) for e in ups):
         ups.insert(0, {"hooks": [{"type": "command", "command": cmd_load, "timeout": 10}]}); changed = True
-    # The project team's hooks moved to the bakehouse plugin in v1.12.0. Remove the three an earlier
-    # version wired (PreToolUse Agent, SubagentStop, SessionStart --check-new), matched by their exact
-    # command, so no other hook is touched. The backup below is written before any change is saved.
-    roles = f"{perma}/runtime/agent-roles.py"
-    for event, command in (("PreToolUse", roles), ("SubagentStop", roles), ("SessionStart", f"{roles} --check-new")):
-        lst = data["hooks"].get(event)
+    # The project team's hooks moved to the bakehouse plugin in v1.12.0. Remove every hook an earlier
+    # version wired that calls Permanence's own runtime/agent-roles.py (PreToolUse Agent, SubagentStop,
+    # SessionStart --check-new), in any event and with any interpreter in front, such as an owner's
+    # "python3 <path>". That file is gone, and a hook calling a missing file exits 2, which blocks. A
+    # hook calling any other agent-roles.py stays. The backup below is written before any change is saved.
+    roles = os.path.normpath(os.path.join(perma, "runtime", "agent-roles.py"))
+    def calls_ours(command):
+        try:
+            words = shlex.split(command)
+        except ValueError:
+            words = command.split()
+        return any(os.path.normpath(os.path.expandvars(os.path.expanduser(w))) == roles for w in words)
+    removed_hooks = []
+    for event in list(data["hooks"]):
+        lst = data["hooks"][event]
         if not isinstance(lst, list):
             continue
         kept, removed = [], False
         for e in lst:
-            if isinstance(e, dict) and isinstance(e.get("hooks"), list) and any(isinstance(h, dict) and h.get("command") == command for h in e["hooks"]):
-                rest = [h for h in e["hooks"] if not (isinstance(h, dict) and h.get("command") == command)]
+            hooks = e.get("hooks") if isinstance(e, dict) else None
+            ours = [h for h in hooks if isinstance(h, dict) and isinstance(h.get("command"), str)
+                    and calls_ours(h["command"])] if isinstance(hooks, list) else []
+            if ours:
                 removed = True
+                removed_hooks += [(event, h["command"]) for h in ours]
+                rest = [h for h in hooks if not any(h is o for o in ours)]
                 if rest:
                     kept.append(dict(e, hooks=rest))
                 continue
@@ -243,6 +256,8 @@ try:
                 data["hooks"][event] = kept
             else:
                 del data["hooks"][event]
+    for event, command in removed_hooks:
+        print(f"  settings.json: removed the earlier team hook {event}: {command}")
 except (AttributeError, TypeError):
     print("  settings.json: present but has an unexpected shape under an existing key (e.g. \"hooks.SessionStart\" isn't a list) — NOT touched. Add the hook + permission by hand.")
     sys.exit(1)

@@ -38,8 +38,10 @@ skill for team work, and brings the board up to date at the start and end of a s
 
 **Install stops wiring the team, and an upgrade removes what an earlier version installed.** The
 Claude Code binding no longer adds the three agent-roles hooks (SessionStart `--check-new`,
-PreToolUse `Agent`, SubagentStop), and removes them from `~/.claude/settings.json`, matched by their
-exact command, after the usual `settings.json.perma-bak` backup. Every other hook stays. The team's
+PreToolUse `Agent`, SubagentStop). It removes from `~/.claude/settings.json` every hook that calls
+Permanence's own `runtime/agent-roles.py`, with any interpreter in front, after the usual
+`settings.json.perma-bak` backup, and names each one it removed. Every other hook stays, including one
+that calls an `agent-roles.py` somewhere else. The team's
 agents, skills and commands that carry Permanence's `installed-from` marker are moved aside
 (`.perma-removed` beside an agent or a command, `~/.claude/skills-perma-removed/` for a skill); a file
 of your own is never touched. The Antigravity binding keeps all of Permanence's own wiring; it removes

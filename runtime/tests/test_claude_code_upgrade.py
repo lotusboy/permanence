@@ -56,6 +56,21 @@ class Upgrade(unittest.TestCase):
         self.assertIn(("SubagentStop", self.roles), backup)
         self.assertIn("earlier team hooks removed", out)
 
+    def test_an_edited_team_hook_that_still_calls_permanences_script_goes_too(self):
+        hook = lambda c: {"type": "command", "command": c, "timeout": 10}
+        self.settings.write_text(json.dumps({"hooks": {
+            "SubagentStop": [{"hooks": [hook(f"python3 {self.roles}")]}],
+            "SessionStart": [{"hooks": [hook(f"/usr/bin/env python3 {self.roles} --check-new")]}],
+            "PreToolUse": [{"matcher": "Agent", "hooks": [hook("python3 /elsewhere/runtime/agent-roles.py")]}]}}))
+        out = self.wire()
+        got = self.commands(json.loads(self.settings.read_text()))
+        self.assertFalse([c for c in got if self.roles in c[1]], got)
+        self.assertIn(("PreToolUse", "python3 /elsewhere/runtime/agent-roles.py"), got)
+        self.assertIn(f"removed the earlier team hook SubagentStop: python3 {self.roles}", out)
+        self.assertIn(f"removed the earlier team hook SessionStart: /usr/bin/env python3 {self.roles} --check-new", out)
+        backup = self.commands(json.loads((self.claude / "settings.json.perma-bak").read_text()))
+        self.assertIn(("SubagentStop", f"python3 {self.roles}"), backup)
+
     def test_a_fresh_install_wires_no_team_hook(self):
         self.wire()
         got = self.commands(json.loads(self.settings.read_text()))
