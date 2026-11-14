@@ -29,7 +29,9 @@ only: streams, session loading, the daily and periodic commands, the PM role and
 
 **The PM role keeps Permanence's half.** `runtime/roles/pm.md` holds the owner's board and notes
 (`WIP.md`, `PROJECT.md`, `LOG.md`, `QUESTIONS.md`), the session open and close, the owner's plan,
-per-stream setup, and the view across streams. Delegation, briefs, gates and the team's records are
+per-stream setup, the view across streams, and the spending rules every session keeps (say the cost
+and get a yes before agents, a separate yes for a fan-out, never retry a failed fan-out, count the
+scope first). Delegation, briefs, gates and the team's records are
 bakehouse's `bakehouse:pm` skill. In a stream whose repo has the team switched on, the PM follows that
 skill for team work, and brings the board up to date at the start and end of a session from
 `bakehouse status --json --since <time>`, run from the Bash tool (never from a hook).

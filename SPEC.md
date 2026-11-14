@@ -61,8 +61,8 @@ an owner's value is theirs and no upgrade ever touches it (a missing file means 
 **Roles.** A role is a standing instruction file a session follows for its whole length. Session-start
 points the session at it with one line — never its contents — in stream and perma-meta sessions alike.
 Permanence ships one, `runtime/roles/pm.md` (Claude as the owner's project manager: holds the thread in
-`WIP.md`, decides small things, puts big ones to the owner; in a project with the bakehouse team, it
-leaves team work to that plugin's `bakehouse:pm` skill). An owner may
+`WIP.md`, decides small things, puts big ones to the owner, asks before spending on agents; in a project
+with the bakehouse team, it leaves team work to that plugin's `bakehouse:pm` skill). An owner may
 write their own and put its path in `.role`. Roles are opt-in: a new install has none.
 
 **`_personal/`** is the owner's own area and never part of the template. If

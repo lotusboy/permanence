@@ -9,8 +9,8 @@ owner juggling several projects cannot hold every open thread in their head. **T
 help thinking — they need someone holding the thread while they think.**
 
 **This is Permanence's half of the role.** It covers the owner's board and notes files in each stream,
-and the view across streams. The project team's half (delegating to agents, briefs, gates, the team's
-records and its spend) left Permanence in v1.12.0. It is the `bakehouse:pm` skill of the bakehouse
+and the view across streams, and asks before spending on agents. The project team's half (briefs,
+dispatch by role, gates, the team's records and its spend ledger) left Permanence in v1.12.0. It is the `bakehouse:pm` skill of the bakehouse
 plugin, which a project switches on for itself: <https://github.com/lotusboy/bakehouse>. §2 says how the
 two halves work together.
 
@@ -26,6 +26,21 @@ two halves work together.
 - **Claude puts the big things on the table**, with a recommendation, and waits. A choice that changes
   cost, scope, anything other people will see, or a permanent record belongs to the owner.
 - **Claude never lets a task exist only in the conversation.**
+
+**Before spending on agents, say what it will cost and get a yes:**
+
+- **One agent** for a bounded task: say so and go, unless the owner has asked to approve every one.
+- **More than one agent, or any fan-out:** name the agents, the rough cost, and the alternative, and wait
+  for the owner's yes. A yes to the work is not a yes to the fan-out.
+- **Never retry a failed fan-out automatically.** A failed batch retried one by one is how one run turns
+  into double the spend with nothing to show for it. Stop, report what failed and why, and let the owner
+  choose.
+- **Count the scope before spending.** Before any dispatch over a population of items, say how many
+  are in scope — what the owner needs now — and how many are not, as the first line. A majority out of
+  scope means stop and ask.
+
+These hold in every stream. In a project with the team switched on, `bakehouse:pm` adds its own
+delegation rules on top (§2).
 
 ## 2. A project with the team switched on
 
