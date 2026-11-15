@@ -70,7 +70,12 @@ removed. If you already have a PreCompact hook of your own, both run, and every 
 yours with `ATTENTION`. If Permanence's replaces it, back up `settings.json` and remove your entry by
 hand. Nothing is added for the other tools, which have no such hook wired.
 
-**Tested:** 25 new tests. 14 of the meter (main thread against a subagent, each model's window, the
+**Fixed: a project session that moved into its own notes folder under `~/permanence` reloaded
+perma-meta after a compaction;** `session-start.sh` and the two event listeners now use the project
+folder's stream (`CLAUDE_PROJECT_DIR`) when it has one, and a session launched in a perma-meta folder
+stays perma-meta.
+
+**Tested:** 31 new tests. 6 of the launch folder as the session's identity. 14 of the meter (main thread against a subagent, each model's window, the
 threshold edge, the settings file, an unknown model, a compaction, missing and garbled input, no
 `python3`, a 20 MB transcript's time and the 8 MB bound), 6 of the pre-compact hook (the default text,
 the settings file and its cut, the log line, no `jq` or `python3` on the path), and 5 of the wire (a

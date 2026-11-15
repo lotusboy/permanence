@@ -29,6 +29,13 @@ print("true" if d.get("stop_hook_active") else "false", d.get("cwd") or os.envir
 [ -n "${CWD:-}" ] || CWD="$(pwd -P)"
 
 stream="$("$PERMA/runtime/resolve-stream.sh" "$CWD" 2>/dev/null)"
+# A session launched in a project that has cd'd into its own notes folder under ~/permanence resolves
+# to perma-meta (every folder there matches that row). Use the launch folder's stream when it has a
+# real one, as session-start.sh does; a session launched in a perma-meta folder stays perma-meta.
+if [ "$stream" = "perma-meta" ] && [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  project_stream="$("$PERMA/runtime/resolve-stream.sh" "$CLAUDE_PROJECT_DIR" 2>/dev/null)"
+  case "$project_stream" in ""|perma-meta) ;; *) stream="$project_stream" ;; esac
+fi
 [ -n "$stream" ] || exit 0                    # unregistered workspace
 [ "$stream" = "perma-meta" ] && exit 0        # brief-level session — surface on next prompt, don't block its stop
 
