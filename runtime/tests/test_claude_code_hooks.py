@@ -66,16 +66,17 @@ class Hooks(unittest.TestCase):
         self.assertEqual(json.loads((self.claude / "settings.json.perma-bak").read_text()), v112)
 
     def test_a_users_own_precompact_hook_is_left_alone_and_named(self):
-        own = {"hooks": [dict(hook("/mine/precompact-snapshot.sh"), statusMessage="Logging")]}
+        own = {"hooks": [dict(hook("/mine/my-precompact.sh"), statusMessage="Logging")]}
         self.settings.write_text(json.dumps({"hooks": {"PreCompact": [own]}}))
         out = self.wire()
         data = json.loads(self.settings.read_text())
         self.assertEqual(data["hooks"]["PreCompact"][0], own)
-        self.assertEqual(self.hooks("PreCompact"), ["/mine/precompact-snapshot.sh", self.pc])
+        self.assertEqual(self.hooks("PreCompact"), ["/mine/my-precompact.sh", self.pc])
         self.assertIn("ATTENTION: another PreCompact hook is also wired, and both run: "
-                      "/mine/precompact-snapshot.sh", out)
+                      "/mine/my-precompact.sh", out)
+        self.assertIn("each compaction is logged twice until one is removed", out)
         self.assertIn("another PreCompact hook", self.wire())   # said again on every run
-        self.assertEqual(self.hooks("PreCompact"), ["/mine/precompact-snapshot.sh", self.pc])
+        self.assertEqual(self.hooks("PreCompact"), ["/mine/my-precompact.sh", self.pc])
 
     def test_the_claude_md_block_carries_the_two_rules(self):
         self.wire()
@@ -85,6 +86,8 @@ class Hooks(unittest.TestCase):
         self.assertIn("At 5, recommend stopping.", md)
         self.assertIn("**Compact routine.**", md)
         self.assertIn("Only the owner can type `/compact`.", md)
+        self.assertIn("the task you were on with any plan or work order it follows", md)
+        self.assertNotIn("work order in progress", md)
 
     def test_the_other_blocks_get_the_drift_rule_only(self):
         for name in ("agents-md-block.md", "gemini-md-block.md", "devin-agents-md-block.md"):

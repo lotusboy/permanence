@@ -270,7 +270,9 @@ try:
         print(f"  settings.json: removed the earlier team hook {event}: {command}")
     for command in other_pc:
         print(f"  settings.json: ATTENTION: another PreCompact hook is also wired, and both run: {command}"
-              " (if Permanence's pre-compact.sh replaces it, remove that entry by hand, after a backup)")
+              " (both print summary instructions, and if it keeps a log too, each compaction is logged twice"
+              " until one is removed; if Permanence's pre-compact.sh replaces it, remove that entry by hand,"
+              " after a backup)")
 except (AttributeError, TypeError):
     print("  settings.json: present but has an unexpected shape under an existing key (e.g. \"hooks.SessionStart\" isn't a list) — NOT touched. Add the hook + permission by hand.")
     sys.exit(1)

@@ -37,8 +37,16 @@ class Meter(unittest.TestCase):
         self.perma = self.dir / "perma"
         (self.perma / "runtime").mkdir(parents=True)
         self.transcript = self.dir / "session.jsonl"
-        self.env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_DISABLE_1M_CONTEXT"}
-        self.env.update(HOME=str(self.dir / "home"), PERMA_DIR=str(self.perma))
+        drop = ("CLAUDE_CODE_DISABLE_1M_CONTEXT", "CLAUDE_CODE_AUTO_COMPACT_WINDOW", "CLAUDE_PROJECT_DIR",
+                "CLAUDE_CONFIG_DIR", "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                "ANTHROPIC_DEFAULT_SONNET_MODEL")
+        self.env = {k: v for k, v in os.environ.items() if k not in drop}
+        self.home = self.dir / "home"
+        self.project = self.dir / "project"
+        (self.project / ".git").mkdir(parents=True)
+        self.cwd = self.project / "sub"
+        self.cwd.mkdir()
+        self.env.update(HOME=str(self.home), PERMA_DIR=str(self.perma), CLAUDE_PROJECT_DIR=str(self.project))
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -51,7 +59,7 @@ class Meter(unittest.TestCase):
     def run_meter(self, stdin=None, env=None):
         if stdin is None:
             stdin = json.dumps({"session_id": "s", "transcript_path": str(self.transcript),
-                                "cwd": "/x", "hook_event_name": "UserPromptSubmit", "prompt": "hi"})
+                                "cwd": str(self.cwd), "hook_event_name": "UserPromptSubmit", "prompt": "hi"})
         p = subprocess.run(["bash", str(METER)], input=stdin, capture_output=True, text=True,
                            env=env or self.env)
         self.assertEqual(p.returncode, 0, p.stderr)
@@ -65,7 +73,7 @@ class Meter(unittest.TestCase):
         self.write(user(), assistant("claude-opus-5-5", 640000), user())
         self.assertEqual(self.run_meter(),
                          "[perma] context 64% used (640k of 1M): at the next natural break, write back "
-                         "to the stream, then ask the owner to /compact.\n")
+                         "to the stream, if this workspace has one, then ask the owner to /compact.\n")
 
     def test_the_main_thread_counts_not_a_sidechain_after_it(self):
         self.write(assistant("claude-opus-5-5", 700000), assistant("claude-haiku-4-5", 20000, sidechain=True),
@@ -89,7 +97,7 @@ class Meter(unittest.TestCase):
             ("claude-haiku-5-5", 150000, ""),                                  # 15% of 1M
             ("claude-haiku-4-5-20251001", 150000, "75% used (150k of 200k)"),
             ("claude-sonnet-4-5@20250929", 150000, "75% used (150k of 200k)"),
-            ("claude-opus-4-6", 150000, "75% used (150k of 200k)"),            # 200k unless [1m]
+            ("claude-opus-4-6", 150000, "75% used (150k of 200k, or 1M if you chose [1m])"),  # not known
             ("claude-opus-4-6", 300000, ""),                                   # past 200k: it is [1m]
             ("claude-sonnet-4-6", 700000, "70% used (700k of 1M)"),
             ("claude-opus-4-6[1m]", 150000, ""),
@@ -102,6 +110,97 @@ class Meter(unittest.TestCase):
                     self.assertIn(want, got)
                 else:
                     self.assertEqual(got, "")
+
+    def settings(self, where, data):
+        path = {"user": self.home / ".claude" / "settings.json",
+                "project": self.project / ".claude" / "settings.json",
+                "local": self.project / ".claude" / "settings.local.json"}[where]
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(data if isinstance(data, str) else json.dumps(data))
+
+    def test_an_infinite_or_nan_window_falls_back_to_the_model_window(self):
+        self.write(assistant("claude-opus-5-5", 700000))
+        for raw in ('{"autoCompactWindow": Infinity}', '{"autoCompactWindow": NaN}', '{"autoCompactWindow": 1e400}'):
+            self.settings("user", raw)
+            self.assertIn("70% used (700k of 1M)", self.run_meter(), raw)
+        (self.home / ".claude" / "settings.json").unlink()
+        for raw in ("inf", "1e400", "nan"):
+            self.assertIn("70% used (700k of 1M)",
+                          self.run_meter(env=dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW=raw)), raw)
+
+    def test_a_fifo_at_a_settings_path_does_not_hang_the_meter(self):
+        self.write(assistant("claude-opus-5-5", 700000))
+        fifo = self.project / ".claude" / "settings.json"
+        fifo.parent.mkdir(parents=True, exist_ok=True)
+        os.mkfifo(fifo)
+        stdin = json.dumps({"session_id": "s", "transcript_path": str(self.transcript), "cwd": str(self.cwd)})
+        p = subprocess.run(["bash", str(METER)], input=stdin, capture_output=True, text=True,
+                           env=self.env, timeout=5)
+        self.assertEqual((p.returncode, p.stderr), (0, ""))
+        self.assertIn("70% used (700k of 1M)", p.stdout)
+
+    def test_a_count_above_the_window_prints_nothing(self):
+        self.write(assistant("claude-haiku-4-5", 350000))
+        self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-opus-5-5", 1200000))
+        self.assertEqual(self.run_meter(), "")
+
+    def test_the_auto_compact_window_is_used_when_smaller(self):
+        self.write(assistant("claude-opus-5-5", 250000))
+        self.assertEqual(self.run_meter(), "")
+        want = "83% used (250k of 300k, the auto-compact window)"
+        for value in ("300000", "300k", "0.3M"):
+            with self.subTest(env=value):
+                self.assertIn(want, self.run_meter(env=dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW=value)))
+        # "200" is 200 tokens, read as the 100k minimum; 250k is above that window, so nothing.
+        self.assertEqual(self.run_meter(env=dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW="200")), "")
+        self.write(assistant("claude-opus-5-5", 90000))
+        self.assertIn("90% used (90k of 100k, the auto-compact window)",
+                      self.run_meter(env=dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW="200")))
+        self.write(assistant("claude-opus-5-5", 250000))
+        for unusable in ("lots", "", "-1"):          # ignored: the model window applies
+            with self.subTest(env=unusable):
+                self.assertEqual(self.run_meter(env=dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW=unusable)), "")
+        self.settings("user", {"autoCompactWindow": 300000})
+        self.assertIn(want, self.run_meter())
+        self.assertIn("62% used (250k of 400k", self.run_meter(env=dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW="400k")))
+        self.settings("user", {"autoCompactWindow": 300000, "modelSettings": {"claude-opus-5-5": {"autoCompactWindow": 350000}}})
+        self.assertIn("71% used (250k of 350k", self.run_meter())
+        self.settings("project", {"autoCompactWindow": 400000})
+        self.assertIn("62% used (250k of 400k", self.run_meter())
+        self.settings("local", {"modelSettings": {"claude-opus-5-5": {"autoCompactWindow": "auto"}}})
+        self.assertEqual(self.run_meter(), "")
+        self.settings("local", "{not json")           # unreadable: the next file down applies
+        self.assertIn("62% used (250k of 400k", self.run_meter())
+        self.settings("local", {"autoCompactWindow": "big"})
+        self.assertEqual(self.run_meter(), "")
+
+    def test_a_session_started_below_the_git_root_reads_the_local_file_there(self):
+        # Docs: the local file sits at the repository root; the shared file is read from the start folder.
+        env = dict(self.env, CLAUDE_PROJECT_DIR=str(self.cwd))
+        self.write(assistant("claude-opus-5-5", 250000))
+        self.settings("project", {"autoCompactWindow": 300000})
+        self.assertEqual(self.run_meter(env=env), "")
+        self.settings("local", {"autoCompactWindow": 300000})
+        self.assertIn("83% used (250k of 300k", self.run_meter(env=env))
+
+    def test_the_auto_compact_window_never_raises_the_model_window(self):
+        self.write(assistant("claude-haiku-4-5", 150000))
+        self.assertIn("75% used (150k of 200k)", self.run_meter(env=dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW="500000")))
+
+    def test_a_chosen_1m_variant_is_read_from_the_configured_model(self):
+        self.write(assistant("claude-opus-4-6", 150000))
+        self.assertEqual(self.run_meter(env=dict(self.env, ANTHROPIC_MODEL="claude-opus-4-6[1m]")), "")
+        self.assertIn("75% used (150k of 200k):",
+                      self.run_meter(env=dict(self.env, ANTHROPIC_MODEL="claude-opus-4-6")))
+        self.assertEqual(self.run_meter(env=dict(self.env, ANTHROPIC_DEFAULT_OPUS_MODEL="claude-opus-4-6[1m]")), "")
+        self.assertIn("or 1M if you chose [1m]", self.run_meter(env=dict(self.env, ANTHROPIC_MODEL="claude-opus-5-5")))
+        self.settings("user", {"model": "claude-opus-4-6[1m]"})
+        self.assertEqual(self.run_meter(), "")
+        self.settings("local", {"model": "claude-opus-4-6"})
+        self.assertIn("75% used (150k of 200k):", self.run_meter())
+        self.write(assistant("claude-sonnet-4-6", 150000))
+        self.assertIn("or 1M if you chose [1m]", self.run_meter())
 
     def test_one_m_context_switched_off_means_200k(self):
         self.write(assistant("claude-opus-5-5", 150000))

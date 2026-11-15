@@ -7,7 +7,9 @@
 #   2. Print standing instructions for the compaction summary. Claude Code uses this hook's stdout as
 #      instructions for the summary (docs: https://code.claude.com/docs/en/hooks, "PreCompact output").
 #      runtime/.compact-instructions (plain text), when it has any text, is printed instead of the
-#      default below. The docs ask for under 10,000 characters per hook, so longer text is cut to fit.
+#      default below. The docs ask for under 10,000 characters per hook. This script does not cut the
+#      text itself: Claude Code cuts longer output at the cap and appends a marker (hooks.md, "PreCompact
+#      output"), and a cut here, in a C locale, could split a UTF-8 character.
 # Permanence's SessionStart hook re-loads the stream after a compaction, so the summary need not carry
 # what the stream files already hold.
 #
@@ -27,7 +29,7 @@ printf '%s  trigger=%s  session=%s  cwd=%s\n' "$TS" "${TRIGGER:-unknown}" "${SES
 
 OWN="$(cat "$PERMA/runtime/.compact-instructions" 2>/dev/null)"
 if [ -n "$(printf '%s' "$OWN" | tr -d '[:space:]')" ]; then
-  printf '%s\n' "${OWN:0:9998}"   # 9,998 + the newline: under 10,000
+  printf '%s\n' "$OWN"
 else
   cat <<'EOF'
 Keep: the task in progress and its step status; every open decision and who owns it; branch names,

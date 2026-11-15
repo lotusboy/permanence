@@ -71,6 +71,25 @@ class LaunchFolder(unittest.TestCase):
     def test_an_unregistered_project_folder_leaves_perma_meta(self):
         self.assertIn("Perma-meta context", self.start(self.notes, project=self.elsewhere))
 
+    def test_a_symlinked_project_folder_is_resolved_to_its_physical_path(self):
+        # A home folder reached through a symlink: the registry holds the physical path.
+        link = self.project.parent.parent / "linked-home"
+        os.symlink(self.project.parent.parent, link)
+        linked_project = link / "workspaces" / "bakehouse"
+        out = self.start(self.notes, project=linked_project)
+        self.assertIn("Registered stream for this workspace: work/bakehouse", out)
+        self.assertIn(f"resolved from the project folder ({linked_project}) instead.", out)
+        self.assertIn("Registered stream for this workspace: work/bakehouse",
+                      self.start(self.elsewhere, project=linked_project))
+        outbox = self.perma / "_meta" / "events.jsonl"
+        outbox.write_text(json.dumps({"id": "1", "ts": "t", "source": "home/other",
+                                      "target": "work/bakehouse", "message": "hello"}) + "\n")
+        for script in ("events-listen.sh", "stop-listen.sh"):
+            with self.subTest(script=script):
+                for f in (self.perma / "_meta" / ".events-seen").glob("*"):
+                    f.unlink()
+                self.assertIn("hello", self.listen(script, project=linked_project))
+
     def listen(self, script, project=None):
         env = dict(self.env, CLAUDE_CWD=str(self.notes), **({"CLAUDE_PROJECT_DIR": str(project)} if project else {}))
         p = subprocess.run(["bash", str(RUNTIME / script)], input=json.dumps({"cwd": str(self.notes)}),

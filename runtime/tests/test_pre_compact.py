@@ -1,6 +1,6 @@
 """runtime/pre-compact.sh, the PreCompact hook: one log line per compaction in ~/.claude/compaction-log.txt,
 and the summary instructions on stdout (the shipped default, or runtime/.compact-instructions when it has
-text, cut to under 10,000 characters). Plain bash: it must work with no jq and no python3 on PATH.
+text; Claude Code itself cuts it at 10,000 characters). Plain bash: it must work with no jq and no python3 on PATH.
 Standard library only. Scratch HOME; PERMA_DIR is a scratch folder."""
 import json
 import os
@@ -71,11 +71,12 @@ class PreCompact(unittest.TestCase):
         (self.perma / "runtime" / ".compact-instructions").write_text("  \n\n")   # no text: the default
         self.assertTrue(self.run_hook().startswith("Keep: the task in progress"))
 
-    def test_a_long_override_is_cut_under_the_docs_limit(self):
-        (self.perma / "runtime" / ".compact-instructions").write_text("word " * 5000)
-        out = self.run_hook()
-        self.assertLess(len(out), 10000)
-        self.assertTrue(out.startswith("word word"))
+    def test_a_long_override_is_passed_whole_for_claude_code_to_cut(self):
+        # Claude Code cuts PreCompact stdout at 10,000 characters itself (hooks.md); a cut here could
+        # split a UTF-8 character, so the text goes out whole.
+        text = "wörd " * 5000
+        (self.perma / "runtime" / ".compact-instructions").write_text(text)
+        self.assertEqual(self.run_hook(), text.rstrip("\n") + "\n")
 
     def test_bad_input_and_no_claude_folder_still_exit_0(self):
         shutil.rmtree(self.home / ".claude")
