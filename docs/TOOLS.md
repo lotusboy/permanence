@@ -37,6 +37,8 @@ comment is its full reference.
 |---|---|
 | `session-start.sh` | Session-start hook: resolves the stream for the working folder and says what to load. |
 | `session-load.sh` | First-prompt hook: forces the read of the stream's files. |
+| `context-meter.sh` | Every-prompt hook: from 60% full (`runtime/.context-warn` changes it), says to write back and compact. |
+| `pre-compact.sh` | Compaction hook: logs each compaction, and gives the summary standing instructions (`runtime/.compact-instructions` replaces them). |
 | `resolve-stream.sh`, `resolve-path.sh` | Look up a folder's stream, or a stream's folder, in `_meta/REGISTRY.md`. |
 | `generate-contents.sh` | Rebuilds the `CONTENTS.md` inventories. |
 | `perma-help.sh` | What `/perma-help` prints. |

@@ -34,7 +34,8 @@ Permanence's own wiring and no longer installs the team's agents or role hook.
 
 ## Claude Code
 
-Hooks wire `runtime/session-start.sh` and `runtime/session-load.sh` into every session automatically —
+Hooks wire `runtime/session-start.sh`, `runtime/session-load.sh`, `runtime/context-meter.sh` and
+`runtime/pre-compact.sh` into every session automatically —
 see `SPEC.md` §3. This is what `runtime/bindings/claude-code/` sets up (still driven by
 `runtime/install.sh`, like every binding). Nothing else to do.
 

@@ -1,9 +1,9 @@
 #!/bin/bash
 # claude-code/wire — connects Permanence to Claude Code: commands (command invocation), the
-# CLAUDE.md standing instruction, and the SessionStart/UserPromptSubmit hooks in settings.json
-# (passive orientation + the forcing read). Migrated out of install.sh verbatim — see
-# design/harness-binding-mechanism.md §2 for why Claude Code's wiring now lives here like any
-# other binding instead of staying a permanent special case.
+# CLAUDE.md standing instruction, and the SessionStart/UserPromptSubmit/PreCompact hooks in
+# settings.json (passive orientation, the forcing read, the context meter, the pre-compact record).
+# Migrated out of install.sh verbatim — see design/harness-binding-mechanism.md §2 for why Claude
+# Code's wiring now lives here like any other binding instead of staying a permanent special case.
 #
 # Exit code: settings.json merge failure and a command-copy failure are both real wire failures.
 # (Command-copy used to be non-fatal here while the newer bindings' analogous Skills-translation
@@ -186,7 +186,8 @@ if _perma_block_merge "$CMD_MD" "$BLOCK_SRC"; then
   echo "  CLAUDE.md: Permanence block refreshed"
 fi
 
-# settings.json: safely MERGE the SessionStart + UserPromptSubmit hooks + ~/permanence permission
+# settings.json: safely MERGE the SessionStart, UserPromptSubmit (session-load, context-meter) and
+# PreCompact (pre-compact) hooks + ~/permanence permission
 # (add only if absent; preserve everything else; back up before writing).
 SETTINGS="$HOME/.claude/settings.json"
 if command -v python3 >/dev/null 2>&1; then
@@ -218,6 +219,17 @@ try:
     ups = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
     if not any(isinstance(e, dict) and any(h.get("command") == cmd_load for h in e.get("hooks", [])) for e in ups):
         ups.insert(0, {"hooks": [{"type": "command", "command": cmd_load, "timeout": 10}]}); changed = True
+    # v1.13.0: the context meter (UserPromptSubmit, every prompt) and the pre-compact hook (PreCompact).
+    # Added when absent, after any hook already there; a user's own entries are never edited or removed.
+    cmd_meter = f"{perma}/runtime/context-meter.sh"
+    if not any(isinstance(e, dict) and any(h.get("command") == cmd_meter for h in e.get("hooks", [])) for e in ups):
+        ups.append({"hooks": [{"type": "command", "command": cmd_meter, "timeout": 10}]}); changed = True
+    cmd_pc = f"{perma}/runtime/pre-compact.sh"
+    pc = data["hooks"].setdefault("PreCompact", [])
+    if not any(isinstance(e, dict) and any(h.get("command") == cmd_pc for h in e.get("hooks", [])) for e in pc):
+        pc.append({"hooks": [{"type": "command", "command": cmd_pc, "timeout": 10}]}); changed = True
+    other_pc = [h.get("command") for e in pc if isinstance(e, dict) for h in e.get("hooks", [])
+                if isinstance(h, dict) and h.get("command") != cmd_pc]
     # The project team's hooks moved to the bakehouse plugin in v1.12.0. Remove every hook an earlier
     # version wired that calls Permanence's own runtime/agent-roles.py (PreToolUse Agent, SubagentStop,
     # SessionStart --check-new), in any event and with any interpreter in front, such as an owner's
@@ -256,13 +268,19 @@ try:
                 del data["hooks"][event]
     for event, command in removed_hooks:
         print(f"  settings.json: removed the earlier team hook {event}: {command}")
+    for command in other_pc:
+        print(f"  settings.json: ATTENTION: another PreCompact hook is also wired, and both run: {command}"
+              " (both print summary instructions, and if it keeps a log too, each compaction is logged twice"
+              " until one is removed; if Permanence's pre-compact.sh replaces it, remove that entry by hand,"
+              " after a backup)")
 except (AttributeError, TypeError):
     print("  settings.json: present but has an unexpected shape under an existing key (e.g. \"hooks.SessionStart\" isn't a list) — NOT touched. Add the hook + permission by hand.")
     sys.exit(1)
 if changed:
     if os.path.exists(path): shutil.copy(path, path + ".perma-bak")
     json.dump(data, open(path, "w"), indent=2)
-    print("  settings.json: SessionStart + session-load (auto context) hooks + ~/permanence permission merged in"
+    print("  settings.json: SessionStart + session-load (auto context) + context-meter + pre-compact hooks"
+          " + ~/permanence permission merged in"
           + (", earlier team hooks removed" if removed_hooks else "") + " (backup: settings.json.perma-bak)")
 else:
     print("  settings.json: hook + permission already present")
@@ -277,7 +295,9 @@ else
       "permissions": { "additionalDirectories": ["$PERMA"] },
       "hooks": {
         "SessionStart": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/session-start.sh", "timeout": 10 } ] } ],
-        "UserPromptSubmit": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/session-load.sh", "timeout": 10 } ] } ]
+        "UserPromptSubmit": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/session-load.sh", "timeout": 10 } ] },
+                              { "hooks": [ { "type": "command", "command": "$PERMA/runtime/context-meter.sh", "timeout": 10 } ] } ],
+        "PreCompact": [ { "hooks": [ { "type": "command", "command": "$PERMA/runtime/pre-compact.sh", "timeout": 10 } ] } ]
       }
 SETTINGS
 fi

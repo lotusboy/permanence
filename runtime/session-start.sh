@@ -46,9 +46,25 @@ BEST_STREAM="$("$PERMA/runtime/resolve-stream.sh" "$CWD" 2>/dev/null)"
 # After a compaction the hook's cwd is wherever the shell last was — a scratchpad, say — not the project.
 # On 2026-10-08 that unloaded a stream and the PM role for the rest of a session. So when cwd resolves
 # to nothing, try the session's project folder, which Claude Code sets for every hook.
-if [ -z "$BEST_STREAM" ] && [ -n "$CLAUDE_PROJECT_DIR" ] && [ "$CLAUDE_PROJECT_DIR" != "$CWD" ]; then
-  BEST_STREAM="$("$PERMA/runtime/resolve-stream.sh" "$CLAUDE_PROJECT_DIR" 2>/dev/null)"
+# The registry holds physical paths, so a symlinked project folder is resolved with pwd -P first.
+PROJECT_DIR=""
+[ -n "$CLAUDE_PROJECT_DIR" ] && PROJECT_DIR="$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)"
+[ -n "$PROJECT_DIR" ] || PROJECT_DIR="$CLAUDE_PROJECT_DIR"
+if [ -z "$BEST_STREAM" ] && [ -n "$PROJECT_DIR" ] && [ "$PROJECT_DIR" != "$CWD" ]; then
+  BEST_STREAM="$("$PERMA/runtime/resolve-stream.sh" "$PROJECT_DIR" 2>/dev/null)"
   [ -n "$BEST_STREAM" ] && echo "[perma] The working folder ($CWD) is not registered; resolved from the project folder ($CLAUDE_PROJECT_DIR) instead."
+fi
+
+# The same after a compaction when cwd is inside ~/permanence: a session launched in a project can cd
+# into its own notes folder, and every folder there matches the perma-meta row, so the session lost
+# its stream (2026-11-15). The launch folder is the session's identity: use its stream when it has a
+# real one. A session launched in a perma-meta folder resolves to perma-meta here too, and stays so.
+if [ "$BEST_STREAM" = "perma-meta" ] && [ -n "$PROJECT_DIR" ] && [ "$PROJECT_DIR" != "$CWD" ]; then
+  PROJECT_STREAM="$("$PERMA/runtime/resolve-stream.sh" "$PROJECT_DIR" 2>/dev/null)"
+  if [ -n "$PROJECT_STREAM" ] && [ "$PROJECT_STREAM" != "perma-meta" ]; then
+    BEST_STREAM="$PROJECT_STREAM"
+    echo "[perma] The working folder ($CWD) is a perma-meta folder; resolved from the project folder ($CLAUDE_PROJECT_DIR) instead."
+  fi
 fi
 
 if [ -z "$BEST_STREAM" ]; then

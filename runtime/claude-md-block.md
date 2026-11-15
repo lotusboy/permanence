@@ -1,4 +1,10 @@
 <!-- perma:begin (managed by ~/permanence/runtime/install.sh — edit ~/permanence/runtime/claude-md-block.md, not here) -->
 ## Permanence protocol (fallback for environments without SessionStart hooks)
 At session start, run or read the output of `~/permanence/runtime/session-start.sh` and follow its instructions: it resolves the current directory through `~/permanence/_meta/REGISTRY.md` and says which Permanence stream (if any) to load. In Claude Code this happens automatically via the SessionStart hook; this note covers Claude Desktop/Cowork. No meaningful working directory to resolve (a chat-style session with nothing set)? Ask which project by name, then use `/perma-startup <name-or-path>` instead — it works the same, resolved by name rather than by folder.
+
+### In every session
+
+**Drift count (a tiredness proxy).** You cannot feel your own error rate rise, so count it. Each session, from zero, count three kinds of event: a scratch-script error (a one-off measurement reported, or nearly reported, wrong); a self-contradiction (a later check of the same thing gives a different number); a re-derivation error (a fact established earlier in the session rebuilt from memory, wrongly). At 3, say so in one line and switch method: use tested code paths, and cross-check each new number before reporting it. At 5, recommend stopping. Report it as a rate, not a crisis. It tends to rise with novel one-off scripts, long runs of "keep going", and very long contexts.
+
+**Compact routine.** At a natural break when the context is getting full (Permanence's context meter says so from 60% by default): write back to the stream first, then tell the owner it is a good moment to compact. Only the owner can type `/compact`. After a compaction, re-read the stream's board (`WIP.md`, when it has one), and the task you were on with any plan or work order it follows, before carrying on.
 <!-- perma:end -->

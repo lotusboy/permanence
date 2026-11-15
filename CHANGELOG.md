@@ -16,6 +16,85 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.13.0] — a context meter, the drift count, the compact routine and a pre-compact hook
+
+**New: the context meter.** A session could not see how full its context was, so "time to compact"
+was a guess. `runtime/context-meter.sh` is a second UserPromptSubmit hook, run on every prompt. It reads
+the session's transcript from its end (at most 8 MB), finds the last main-thread assistant message (a
+subagent's does not count), and adds up the input tokens that turn was sent: plain, cache read and
+cache creation. It sizes that against the smaller of the model's context window (from a table checked
+against Anthropic's model docs) and your auto-compact window, where Claude Code compacts. From 60% full
+it puts one line into context, for example `[perma] context 64% used (640k of 1M): at the next natural
+break, write back to the stream, if this workspace has one, then ask the owner to /compact.` Below the
+threshold it prints nothing. It also prints nothing for a model not in its table, for a count above the
+window, right after a compaction, and on any error; it never blocks a prompt. On a 20 MB transcript it
+took about 70 ms on a laptop, and about 90 ms when it read the full 8 MB and found nothing.
+
+- **The threshold is a setting.** `runtime/.context-warn` holds one whole number, the percent (1-100).
+  No file means 60.
+- **To switch the meter off:** `echo off > ~/permanence/runtime/.context-warn`. Delete the file to
+  switch it back on at 60. (Removing the hook from `settings.json` does not last: `install.sh` adds it
+  again.)
+- **Context windows:** every Fable and Mythos model, Opus 5.x, Opus 4.8 and 4.7, Sonnet 5.x, and Haiku
+  5.5 are 1M. Opus 4.6 and Sonnet 4.6 are 200k in Claude Code unless picked with `[1m]`, which the
+  transcript does not record. The meter looks for the model's ID in `ANTHROPIC_MODEL`,
+  `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, then `model` in your settings files;
+  the first that names it says whether `[1m]` was chosen. If none does, a count above 200k means 1M, and
+  at or below it the line reads "of 200k, or 1M if you chose [1m]". Opus 4.5, 4.1 and 4, Sonnet 4.5 and
+  4, and Haiku 4.5 are 200k. With `CLAUDE_CODE_DISABLE_1M_CONTEXT=1`, every model in the table is 200k,
+  as in Claude Code itself. Any other model prints nothing.
+- **The auto-compact window:** `CLAUDE_CODE_AUTO_COMPACT_WINDOW` when it is a usable size, else
+  `autoCompactWindow` from the settings files in Claude Code's order (`.claude/settings.local.json` at
+  the project's git root, `.claude/settings.json` in the project folder, then `~/.claude/settings.json`),
+  each file's per-model `modelSettings` value first. `"auto"`, or a value it cannot read, means the
+  model window. A hook cannot see `--autocompact` or managed settings.
+- It is its own script, not part of `session-load.sh`: that hook runs once per session and only in a
+  registered workspace, and the meter runs on every prompt in every workspace.
+
+**New: the pre-compact hook.** `runtime/pre-compact.sh` is a PreCompact hook. Before each compaction
+(by `/compact` or automatic) it appends one line to `~/.claude/compaction-log.txt` (UTC time, trigger,
+session id, folder), so a session that feels like a fresh start can be checked against a record. It
+also prints standing instructions for the compaction summary, which Claude Code uses: keep the task in
+progress, open decisions and their owners, exact ids and counts, and the owner's instructions; list
+what is not yet written to the stream files; drop tool output. `runtime/.compact-instructions` (plain
+text), when it has any text, is printed instead; keep it under the 10,000 characters the docs allow,
+because Claude Code cuts longer output there. It
+needs no `jq` and no `python3`, and always exits 0, so it can never block a compaction.
+
+**New: two rules in the instruction blocks.**
+
+- **The drift count**, in every block (Claude Code's `CLAUDE.md`, the `AGENTS.md` block, Antigravity's
+  `GEMINI.md`, Devin's `AGENTS.md`). A model cannot feel its own error rate rise, so it counts three
+  kinds of event per session: a scratch-script error, a self-contradiction, and a fact rebuilt wrongly
+  from memory. At 3 it says so and switches to tested code paths and cross-checked numbers. At 5 it
+  recommends stopping. It is reported as a rate, not a crisis.
+- **The compact routine**, in the Claude Code block only (`/compact` is Claude Code's). At a natural
+  break: write back to the stream first, then say it is a good moment to compact. Only the owner can
+  type `/compact`. After it, re-read the board (`WIP.md`, when the stream has one), and the task you
+  were on with any plan or work order it follows.
+
+**Install and upgrade.** The Claude Code binding adds the two hooks to `~/.claude/settings.json` on a
+fresh install and on the `install.sh` run that follows an upgrade, each only when absent, after the
+usual `settings.json.perma-bak` backup. A re-run changes nothing. A hook of your own is never edited or
+removed. If you already have a PreCompact hook of your own, both run, and every install run names
+yours with `ATTENTION`; if yours keeps a log too, each compaction is logged twice until one is
+removed. If Permanence's replaces it, back up `settings.json` and remove your entry by
+hand. Nothing is added for the other tools, which have no such hook wired.
+
+**Fixed: a project session that moved into its own notes folder under `~/permanence` reloaded
+perma-meta after a compaction;** `session-start.sh` and the two event listeners now use the project
+folder's stream (`CLAUDE_PROJECT_DIR`, resolved to its physical path) when it has one, and a session launched in a perma-meta folder
+stays perma-meta.
+
+**Tested:** 39 new tests. 21 of the meter (main thread against a subagent, each model's window, the
+`[1m]` choice read from the configured model, the auto-compact window from the variable and each
+settings file, a count above the window, the threshold edge, the settings file, an unknown model, a
+compaction, missing and garbled input, no `python3`, a 20 MB transcript's time and the 8 MB bound), 6
+of the pre-compact hook (the default text, the settings file passed whole, the log line, no `jq` or
+`python3` on the path), 5 of the wire (a fresh install, an upgrade from v1.12.0, a re-run, your own
+PreCompact hook left alone and named, the rules in the blocks), and 7 of the launch folder as the
+session's identity (a symlinked project folder among them).
+
 ## [1.12.0] — the project team moves out, to the bakehouse plugin
 
 **The project team is no longer part of Permanence.** Everything that made up the team moved to
