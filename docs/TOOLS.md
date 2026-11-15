@@ -1,9 +1,8 @@
 # Every command and script, on one page
 
-Two groups. **Core** is Permanence itself: streams, session loading, the daily and periodic
-commands. It works on every supported tool. **Team** is the experimental project team added in
-v1.6.0. It works in Claude Code, and from v1.8.0 in Antigravity in part, and only in a repository whose stream holds a
-`repo/binding.json` ([PROJECT-TEAM.md](./PROJECT-TEAM.md)).
+Everything here is Permanence's core: streams, session loading, the daily and periodic commands. It
+works on every supported tool. The project team (the team commands, the gate and the ledgers) was a
+second group here until v1.12.0. It moved to [bakehouse](https://github.com/lotusboy/bakehouse), a plugin for Claude Code.
 
 `/perma-help` prints the commands installed on your machine and which background pieces are
 switched on. This page is the fixed reference.
@@ -26,17 +25,11 @@ switched on. This page is the fixed reference.
 | `/perma-emit` | core, opt-in | Sends a note from this project to your other open sessions. |
 | `/perma-upgrade` | core | Upgrades the machinery to the latest release; shows the plan first. |
 | `/perma-help` | core | Lists the installed commands and what is switched on. |
-| `/perma-health` | team | Rewrites the repo's health register, lists the parts that are ready, and lists the `shortcut:` markers it finds. Never starts work. |
-| `/perma-refactor` | team | Restructures one part behind byte-identical gates. |
-| `/perma-change` | team | Makes one change from a work order behind predicted-moves gates. |
 
 ## Scripts in `runtime/`
 
 You rarely run these by hand: hooks, commands and the installer call them. Each script's header
 comment is its full reference.
-
-Five tools are a `.sh` file you call and a `.py` file beside it that does the work: `decision`,
-`spend`, `ratify`, `save-report` and `predict-gate`. The tables name the `.sh`.
 
 ### Core: session and streams
 
@@ -73,30 +66,6 @@ Five tools are a `.sh` file you call and a `.py` file beside it that does the wo
 | Script | What it is for |
 |---|---|
 | `emit-event.sh`, `events-listen.sh`, `stop-listen.sh` | Events between your open sessions (`/perma-emit`). Off until you add the two hooks. |
-| `predict-gate.sh` | The predicted-moves gate: refuses any measured move nobody predicted ([PREDICT-GATE.md](./PREDICT-GATE.md)). Usable in any repo, with or without the team. |
-| `save-report.sh` | Saves an agent's report to a file byte for byte. |
 
-### Team (experimental; Claude Code, and Antigravity in part)
-
-| Script | What it is for | Writes |
-|---|---|---|
-| `agent-roles.py`, `team_roles.py`, `agent-roles.json` | The role table and the three hooks that enforce it. | `runtime/logs/agent-roles.log` |
-| `bindings/antigravity/agent-roles-hook.py`, `agents-install.py`, `team-note.md` | The same role rules as an Antigravity hook; the installer that translates the agents; the note added to each team command there. | `runtime/logs/agent-roles.log`; `~/.gemini/config/agents/` |
-| `team-preflight.py` | Checks a repo's binding before a job or the health watch. | nothing |
-| `health-signal.py` | Writes a repo's health register from rules in the binding. | the register, in the stream |
-| `decision.sh` | Records each question put to the owner, the recommendation, the answer and the outcome. | `<stream>/decisions/ledger.jsonl`, `DECISIONS.md` |
-| `spend.sh` | Records measured tokens per agent, and what each run was for and produced, grouped into waves with a ceiling. | `<stream>/spend/ledger.jsonl`; a lesson stub in `<stream>/TOOLS.md` when a run did worse than predicted |
-| `ratify.sh` | Records which entries of a closed vocabulary two blind readers agreed on. | `<stream>/ratifications/ledger.jsonl` |
-| `ops-event.sh` | Appends one event to the repo's ops ledger. | `<stream>/repo/ops/events.jsonl` |
-| `ops-gap.sh` | Says how many commits the ops ledger is behind. | nothing |
-| `repo-hooks.sh` | Writes the post-commit hook that calls `ops-gap.sh`, in repos the owner owns. | `.git/hooks/post-commit` in those repos |
-
-`runtime/agents/` holds the nine agents the team's roles are filled by, and `runtime/roles/` holds
-the role an owner can give the main session (`pm.md`). `runtime/skills/` holds three method skills,
-installed into `~/.claude/skills/` (Claude Code only for now; the Antigravity binding installs the agents but not yet the skills):
-
-| Skill | Use it when |
-|---|---|
-| `dev-team` | deciding whether to do work yourself or hand it to one agent or several, which model, and which checker to run before a finding or a change ships |
-| `step-back` | a chain of work shows strain — an estimate overrunning twice, a fix round producing a new finding of the same kind, a third agent on one item |
-| `live-prism` | one item keeps resisting a fix — look at its real input from at least three sides before writing another rule |
+`runtime/roles/` holds the role an owner can give the main session (`pm.md`). Permanence ships no
+agents and no skills since v1.12.0: they moved to bakehouse with the team.

@@ -173,6 +173,10 @@ printf '  the /perma-startup ↔ /perma-shutdown bookends, the weekday nudge abo
 printf '  and "remind me at …" for stopping times, meetings and breaks.\n'
 printf '  The point: the loops come back when you want them, not at 11pm.\n'
 
+printf '\n\033[1mThe project team\033[0m  \033[90m(no longer part of Permanence, since v1.12.0)\033[0m\n'
+printf '  planned, gated changes, refactors and reviews moved to the bakehouse plugin for Claude Code,\n'
+printf '  switched on per project: https://github.com/lotusboy/bakehouse\n'
+
 streams=$(find "$PERMA" -mindepth 2 -maxdepth 3 -name PROJECT.md -not -path '*/.git/*' 2>/dev/null | wc -l | tr -d ' ')
 printf '\n\033[90m%s streams · %s commands · full reference: %s/SPEC.md\033[0m\n\n' \
   "$streams" "$(ls -1 "$CMDS"/perma-*.md 2>/dev/null | wc -l | tr -d ' ')" "$PERMA"
