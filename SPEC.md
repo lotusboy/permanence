@@ -49,7 +49,7 @@ A separate, divergent pass — `/perma-orchestrate` — is **event/human-trigger
 
 ### Per-install settings, roles, and `_personal/`
 
-Three one-line files under `runtime/` configure an install. **The template ships none of the last two**, so
+Five small files under `runtime/` configure an install. **The template ships none of the last four**, so
 an owner's value is theirs and no upgrade ever touches it (a missing file means the default):
 
 | File | Holds | Default when missing |
@@ -57,6 +57,8 @@ an owner's value is theirs and no upgrade ever touches it (a missing file means 
 | `runtime/.update-source` | the template's git URL, for `/perma-upgrade` (`PERMA_UPDATE_SOURCE` overrides) | pre-filled on a clone of the public template |
 | `runtime/.role` | `none`, `pm`, or a path to the owner's own role file (`PERMA_ROLE` overrides) | `none` — no role |
 | `runtime/.consolidate-time` | the nightly run time, `HH:MM` 24-hour, read by `install.sh` | `05:30` |
+| `runtime/.context-warn` | the context meter's threshold, a whole number of percent (1-100), or `off` | `60` |
+| `runtime/.compact-instructions` | plain text the pre-compact hook gives the compaction summary, under 10,000 characters | the shipped default text |
 
 **Roles.** A role is a standing instruction file a session follows for its whole length. Session-start
 points the session at it with one line — never its contents — in stream and perma-meta sessions alike.
@@ -108,7 +110,7 @@ harnesses with opposite failure modes (one reads manually and writes automatical
 automatically and silently never writes) would collapse to the same label — hiding exactly the
 difference that matters most. Each binding below instead states plainly what the owner carries.
 
-**Claude Code binding (the reference implementation — all five answered).** Implemented as `runtime/bindings/claude-code/{detect,wire}`, like any other binding. (1) SessionStart hook in `~/.claude/settings.json` → `runtime/session-start.sh`; (2) UserPromptSubmit hook → `runtime/session-load.sh`, forcing the actual read of PROJECT/QUESTIONS/LOG-tail onto the first message; (3) `CLAUDE.md` carries a managed delimited block (also the fallback for Desktop/Cowork); (4) commands installed from `runtime/commands/` (copy-on-install + version marker); (5) the `claude` CLI, called by `runtime/nightly-consolidate.sh` under a cross-platform scheduler (`runtime/schedule-task.sh`: launchd on macOS, cron on Linux/WSL, `schtasks.exe` on native Windows via Git Bash). `permissions.additionalDirectories` includes `~/permanence`. Material-shift writing rides (2) + (3), per the contract above. **Owner carries: nothing.** **Rebuild elsewhere = clone → run `runtime/install.sh`, which wires both hooks and the permission itself — only a machine with no `python3` needs the printed snippet pasted by hand.**
+**Claude Code binding (the reference implementation — all five answered).** Implemented as `runtime/bindings/claude-code/{detect,wire}`, like any other binding. (1) SessionStart hook in `~/.claude/settings.json` → `runtime/session-start.sh`; (2) UserPromptSubmit hook → `runtime/session-load.sh`, forcing the actual read of PROJECT/QUESTIONS/LOG-tail onto the first message, and → `runtime/context-meter.sh` on every prompt, which says from 60% full (by the last turn's input tokens against the model's window) to write back to the stream and ask the owner to `/compact`; a PreCompact hook → `runtime/pre-compact.sh` logs each compaction and gives the summary standing instructions; (3) `CLAUDE.md` carries a managed delimited block (also the fallback for Desktop/Cowork); (4) commands installed from `runtime/commands/` (copy-on-install + version marker); (5) the `claude` CLI, called by `runtime/nightly-consolidate.sh` under a cross-platform scheduler (`runtime/schedule-task.sh`: launchd on macOS, cron on Linux/WSL, `schtasks.exe` on native Windows via Git Bash). `permissions.additionalDirectories` includes `~/permanence`. Material-shift writing rides (2) + (3), per the contract above. **Owner carries: nothing.** **Rebuild elsewhere = clone → run `runtime/install.sh`, which wires the hooks and the permission itself — only a machine with no `python3` needs the printed snippet pasted by hand.**
 
 **Antigravity binding (all five answered).** Implemented as `runtime/bindings/antigravity/`. (1)+(2) a `PreInvocation` hook carries both — no separate passive-orientation event exists, and none is needed (forcing subsumes passive, confirmed live for this binding); (3) a managed delimited block in the global `~/.gemini/GEMINI.md`; (4) commands translated into `~/.gemini/config/skills/<name>/SKILL.md`, confirmed invokable both by description-matching and literal `/name` syntax; (5) `agy`'s headless mode. **Owner carries: nothing.**
 

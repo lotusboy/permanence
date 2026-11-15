@@ -82,9 +82,11 @@ This sets up everything global and hands-off. Specifically, it:
 - copies the `/perma-*` commands into `~/.claude/commands/`
 - points this repo's `core.hooksPath` at `.githooks` (the people-rule guard + contents refresh)
 - schedules the nightly consolidate — 05:30 by default; put another time in `runtime/.consolidate-time` (one line, `HH:MM`) and re-run `install.sh`. On a laptop that sleeps overnight, pick a time it is normally open: the run waits for someone to be using the machine and skips the day otherwise
-- merges two hooks and the `~/permanence` permission into `~/.claude/settings.json` — **SessionStart**
-  (`session-start.sh`) and **UserPromptSubmit** (`session-load.sh`, the one that actually forces the
-  read on your first message)
+- merges four hooks and the `~/permanence` permission into `~/.claude/settings.json` — **SessionStart**
+  (`session-start.sh`), **UserPromptSubmit** (`session-load.sh`, the one that actually forces the
+  read on your first message, and `context-meter.sh`, which says from 60% full that it is time to
+  write back and compact), and **PreCompact** (`pre-compact.sh`, which logs each compaction and gives
+  its summary standing instructions)
 - adds a delimited `<!-- perma:begin … end -->` block to your global `~/.claude/CLAUDE.md`, and the
   same block to `~/.config/agents/AGENTS.md` (plus Codex/droid/Amp's global `AGENTS.md` if those are
   installed) — never a project's own committed `AGENTS.md`
