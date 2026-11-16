@@ -60,13 +60,20 @@ repo then recorded the mode change as a local customisation, so the next release
 file left it as "customized locally" and the version stayed behind. The executable bit now comes from
 the release itself, file by file.
 
-**Tested:** 16 new tests, and one CI step. 11 of the role check: no moved names; moved names with
+**Fixed: on Windows, a second install run could remove the Permanence block from `CLAUDE.md`.**
+`runtime/lib/block-merge.sh` gave awk the block file's path with `-v`, and awk reads backslashes there
+as escapes. With a Windows path such as `D:\a\_temp\...` in `PERMA_DIR`, awk could not open the block
+file, so refreshing the block wrote nothing in its place and dropped both markers. A backup was written
+first, and the rest of the file was kept. The path now reaches awk through the environment. Found by
+this release's new Windows CI step.
+
+**Tested:** 17 new tests, and one CI step. 11 of the role check: no moved names; moved names with
 their line numbers; innocent words and `bakehouse:` mentions; the `.sh` and `.py` forms and the agents
 v1.12.0 deleted; the 10-line cap; a file over 1 MB; `none`, `pm` and no `.role` file; a missing role
 file; a path with a space; a `~/` path and the `PERMA_ROLE` override. 3 of session start: a path with a
 space loads; a missing `role-file.sh` is reported, and says nothing when the role is `none`. 1 that runs
 the real `install.sh` in a scratch copy: it prints the warning, still ends `done.`, and leaves the role
-file byte-identical. 1 of the upgrade: after `--apply`, every delivered file has the release's mode,
+file byte-identical. 1 of the block refresh with a backslash in the path. 1 of the upgrade: after `--apply`, every delivered file has the release's mode,
 and a later change to a library is delivered. The new CI step runs the check through `install.sh` on
 Ubuntu, macOS and Windows.
 
