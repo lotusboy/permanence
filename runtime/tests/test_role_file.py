@@ -62,7 +62,7 @@ class RoleCheck(unittest.TestCase):
         self.set_role(f"{path}\n")
         out = self.check()
         self.assertIn("ATTENTION — decision.sh, line(s) 2, 6\n", out)
-        self.assertIn("ATTENTION — role:, line(s) 3\n", out)
+        self.assertIn("ATTENTION — a role:<name> dispatch, line(s) 3\n", out)
         self.assertIn("ATTENTION — step-back, line(s) 6\n", out)   # line 5 is bakehouse:step-back
         self.assertIn(f"your role file ({path}) still refers to tools that moved to bakehouse", out)
         self.assertIn("`bakehouse:pm` skill, or switch runtime/.role to pm", out)
@@ -73,6 +73,38 @@ class RoleCheck(unittest.TestCase):
         path = self.role_file("Your role: PM.\nrole: none\nCall bakehouse:dev-team.\n")
         self.set_role(f"{path}\n")
         self.assertEqual(self.check(), "")
+
+    def test_innocent_words_do_not_count(self):
+        # Each line once reported a moved name (review, 16 Nov): a name counts only as a whole word,
+        # and `role:` only as the old dispatch, with a lowercase name right after the colon.
+        lines = ["Never suspend.sh the job.", "Run the account-check before billing.",
+                 "The YAML key `role:` sets the persona.", "Your role:PM", "role:\r", "myspend.sh-old"]
+        path = self.role_file("\n".join(lines) + "\n")
+        self.set_role(f"{path}\n")
+        self.assertEqual(self.check(), "")
+
+    def test_the_names_v1_12_0_deleted_are_found_in_their_sh_and_py_forms(self):
+        lines = ['Use subagent_type: "refactor-engineer".', "python3 ~/permanence/runtime/decision.py ask",
+                 "runtime/team-preflight.py first", "Ask the human-expert agent.", "(see `agent-roles.py`)",
+                 "Then /perma-health."]
+        path = self.role_file("\n".join(lines) + "\n")
+        self.set_role(f"{path}\n")
+        out = self.check()
+        for i, name in enumerate(["refactor-engineer", "decision.py", "team-preflight", "human-expert",
+                                  "agent-roles", "perma-health"], start=1):
+            self.assertIn(f"ATTENTION — {name}, line(s) {i}\n", out)
+
+    def test_at_most_ten_line_numbers_per_name(self):
+        path = self.role_file("spend.sh\n" * 25)
+        self.set_role(f"{path}\n")
+        self.assertIn("ATTENTION — spend.sh, line(s) 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 and 15 more\n", self.check())
+
+    def test_a_file_over_1_mb_is_not_read(self):
+        path = self.role_file("decision.sh\n" + "x" * (1024 * 1024))
+        self.set_role(f"{path}\n")
+        out = self.check()
+        self.assertIn("is over 1 MB, so it was not checked", out)
+        self.assertNotIn("ATTENTION", out)
 
     def test_none_pm_and_no_file_are_silent(self):
         # The shipped role is never checked, even if it named a moved tool.
@@ -98,7 +130,7 @@ class RoleCheck(unittest.TestCase):
         path.parent.mkdir()
         path.write_text("Run /perma-change.\n")
         self.set_role("~/roles/role.md\n")
-        self.assertIn("ATTENTION — /perma-change, line(s) 1", self.check())
+        self.assertIn("ATTENTION — perma-change, line(s) 1", self.check())
         self.assertEqual(self.check(PERMA_ROLE="none"), "")
 
 
@@ -124,6 +156,34 @@ class SessionStartRole(unittest.TestCase):
                                env={"HOME": str(base / "home"), "PATH": os.environ["PATH"], "PERMA_DIR": str(perma)})
             self.assertEqual(p.returncode, 0, p.stderr)
             self.assertIn(f"[perma] ROLE: read {role} now", p.stdout)
+
+
+class SessionStartMissingLib(unittest.TestCase):
+    """If runtime/lib/role-file.sh is gone (a hand deletion), session start says so; the role is not lost silently."""
+
+    def run_start(self, role):
+        with tempfile.TemporaryDirectory() as tmp:
+            perma = Path(os.path.realpath(tmp)) / "permanence"
+            (perma / "_meta").mkdir(parents=True)
+            (perma / "runtime").mkdir()
+            os.symlink(RUNTIME / "resolve-stream.sh", perma / "runtime" / "resolve-stream.sh")
+            (perma / "_meta" / "REGISTRY.md").write_text(
+                f"| workspace | stream | note |\n|---|---|---|\n| {perma} | perma-meta | notes |\n")
+            (perma / "runtime" / ".role").write_text(role)
+            p = subprocess.run(["bash", str(RUNTIME / "session-start.sh")], input='{"cwd": "%s"}' % perma,
+                               capture_output=True, text=True, cwd=perma,
+                               env={"HOME": tmp, "PATH": os.environ["PATH"], "PERMA_DIR": str(perma)})
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(p.stderr, "")
+            return p.stdout
+
+    def test_a_chosen_role_is_reported_as_not_loaded(self):
+        out = self.run_start("pm\n")
+        self.assertIn("runtime/lib/role-file.sh is missing, so the role in runtime/.role was not loaded", out)
+        self.assertNotIn("ROLE: read", out)
+
+    def test_no_role_says_nothing(self):
+        self.assertNotIn("role-file.sh is missing", self.run_start("none\n"))
 
 
 class InstallRun(unittest.TestCase):

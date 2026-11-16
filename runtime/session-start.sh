@@ -87,7 +87,13 @@ fi
 # template never ships a .role file, so an owner's choice is theirs and survives every upgrade untouched.
 # Output stays within this script's contract: one short pointer line, never the role file's contents.
 # shellcheck source=lib/role-file.sh
-. "$PERMA/runtime/lib/role-file.sh" 2>/dev/null || _perma_role_file() { :; }
+if ! . "$PERMA/runtime/lib/role-file.sh" 2>/dev/null; then
+  # Only a hand deletion gets here (an upgrade delivers runtime/ whole). Say so, not lose the role silently.
+  _perma_role_file() { :; }
+  if grep -qv -e '^[[:space:]]*$' -e '^[[:space:]]*none[[:space:]]*$' "$PERMA/runtime/.role" 2>/dev/null || [ -n "${PERMA_ROLE:-}" ]; then
+    echo "[perma] runtime/lib/role-file.sh is missing, so the role in runtime/.role was not loaded. Tell the owner once: re-run ~/permanence/runtime/update.sh, or restore the file with git."
+  fi
+fi
 role_lines() {  # role_lines <dir-whose-WIP.md-to-mention>
   local file
   file="$(_perma_role_file)"

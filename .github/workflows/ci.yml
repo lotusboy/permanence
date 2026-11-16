@@ -447,6 +447,21 @@ jobs:
         shell: bash
         run: bash "${PERMA_DIR}/runtime/install.sh"
 
+      - name: A role file of your own that names a moved tool is reported, on every OS's awk (v1.13.1)
+        shell: bash
+        run: |
+          set -e
+          # A ~/ path: a Windows drive path (D:\...) in .role has never been read as absolute.
+          mkdir -p "$HOME/My Roles"
+          printf 'Record it with decision.sh ask.\nNever suspend.sh the job.\n' > "$HOME/My Roles/role.md"
+          printf '%s\n' '~/My Roles/role.md' > "${PERMA_DIR}/runtime/.role"
+          OUT=$(bash "${PERMA_DIR}/runtime/install.sh" 2>&1)
+          rm -f "${PERMA_DIR}/runtime/.role"
+          echo "$OUT" | grep -qF "role file: ATTENTION — decision.sh, line(s) 1" || { echo "$OUT" | tail -20; echo "FAILED: the moved name was not reported"; exit 1; }
+          if echo "$OUT" | grep -qF "spend.sh"; then echo "FAILED: suspend.sh was reported as spend.sh"; exit 1; fi
+          echo "$OUT" | tail -n1 | grep -q '^done' || { echo "$OUT" | tail -5; echo "FAILED: install did not reach its last line"; exit 1; }
+          echo "PASS: the role file check works here and install.sh still finishes."
+
       - name: Verify commands were installed
         shell: bash
         run: |
