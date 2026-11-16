@@ -65,7 +65,9 @@ points the session at it with one line — never its contents — in stream and 
 Permanence ships one, `runtime/roles/pm.md` (Claude as the owner's project manager: holds the thread in
 `WIP.md`, decides small things, puts big ones to the owner, asks before spending on agents; in a project
 with the bakehouse team, it leaves team work to that plugin's `bakehouse:pm` skill). An owner may
-write their own and put its path in `.role`. Roles are opt-in: a new install has none.
+write their own and put its path in `.role`. Roles are opt-in: a new install has none. The
+`install.sh` run warns when a role file of the owner's own still names a tool that moved to bakehouse
+in v1.12.0, and never edits it.
 
 **`_personal/`** is the owner's own area and never part of the template. If
 `_personal/claude/install-personal.sh` exists and is executable, `install.sh` runs it at the end, so an

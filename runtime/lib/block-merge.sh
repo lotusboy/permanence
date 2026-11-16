@@ -38,7 +38,11 @@ _perma_block_merge() {  # _perma_block_merge <target-file> <block-source-file>
       return 1
     fi
     cp "$dst" "$dst.perma-bak"
-    awk -v s="$src" '
+    # The block's path reaches awk through the environment, not `-v`: awk reads backslashes in a
+    # `-v` value as escapes, so a Windows path (D:\a\_temp\...) named a file that does not exist,
+    # and the splice wrote an empty block with no markers (v1.13.1, found by CI on Windows).
+    PERMA_BLOCK_SRC="$src" awk '
+      BEGIN {s = ENVIRON["PERMA_BLOCK_SRC"]}
       /<!-- perma:begin/ {while ((getline line < s) > 0) print line; close(s); skip=1; next}
       /<!-- perma:end -->/ {skip=0; next}
       !skip {print}' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"

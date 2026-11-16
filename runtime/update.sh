@@ -274,12 +274,18 @@ fi
 # refuses to run over uncommitted changes) — exactly the "resolve a conflict, then re-run"
 # workflow this release is built around. Found by adversarial review, 2026-09-28
 # (axis/runs/2026-09-28-v1.5.0-update-sh-review), live-reproduced.
+#
+# The executable bit comes from the release itself, not from the file's name (v1.13.1). The old
+# pattern `runtime/*.sh` also matched `runtime/lib/*.sh` (in a case pattern, * crosses /), so a
+# sourced library the template ships as 100644 was committed as 100755. Every later release that
+# changed it was then held back as "customized locally". Found by adversarial review, 2026-11-16.
 chmod_applied_scripts() {  # chmod_applied_scripts <path>...
   local f
   for f in "$@"; do
-    case "$f" in
-      runtime/*.sh|.githooks/*) [ -f "$PERMA/$f" ] && chmod +x "$PERMA/$f" ;;
-    esac
+    [ -n "$f" ] && [ -f "$PERMA/$f" ] || continue
+    if [ "$(git -C "$PERMA" ls-tree "$TARGET" -- "$f" 2>/dev/null | cut -c1-6)" = "100755" ]; then
+      chmod +x "$PERMA/$f"
+    fi
   done
 }
 

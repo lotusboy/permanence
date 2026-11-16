@@ -16,6 +16,73 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.13.1] — a warning when your own role file still names the moved team tools
+
+**New: the install run checks a role file of your own.** v1.12.0 moved the project team to bakehouse and
+updated the shipped role, `runtime/roles/pm.md`. But `runtime/.role` can name a role file of the
+owner's own, and no upgrade touches that file. A role file written before v1.12.0 can still tell every
+session to use tools that are no longer there. Now the `install.sh` run that follows every upgrade
+reads that file and looks for what v1.12.0 deleted from Permanence:
+
+- the tools, in their `.sh` and `.py` forms: `decision`, `spend`, `ratify`, `save-report`,
+  `predict-gate`; and `health-signal`, `ops-event.sh`, `ops-gap.sh`, `repo-hooks.sh`, `agent-roles`,
+  `agent-roles-hook`, `agents-install`, `team-preflight`, `team_roles`;
+- the commands `perma-change`, `perma-refactor` and `perma-health`;
+- the agents `absence-check`, `count-check`, `blast-radius`, `design-author`, `design-reviewer`,
+  `human-expert`, `refactor-engineer` and `refactor-reviewer` (not `architect`, a common word);
+- the skills `dev-team`, `step-back` and `live-prism`; the docs `PROJECT-TEAM.md` and
+  `PREDICT-GATE.md`; and a `role:<name>` dispatch.
+
+It prints one `ATTENTION` line for each name it finds, with up to 10 line numbers, then one line saying
+what to do: edit the file, point those parts at the `bakehouse:pm` skill, or switch `runtime/.role` to
+`pm`.
+
+- A name counts only as a whole word: `suspend.sh` is not `spend.sh`. A mention written as
+  `bakehouse:<name>` is the new home, so it does not count. `role:` counts only with a lowercase name
+  right after the colon, so "Your role: PM" does not.
+- Nothing is checked for `none`, for `pm`, with no `.role` file, or when the file named does not exist
+  (a session in a registered or perma-meta workspace already says so). A file over 1 MB is not read;
+  one line says so.
+- It never edits the file and never fails the install run.
+
+**Fixed: a role file at a path with a space in it never loaded.** Session start deleted every space and
+tab in the `runtime/.role` value (and in `PERMA_ROLE`), so `/path/My Roles/role.md` became
+`/path/MyRoles/role.md`, which does not exist. Now only the spaces and tabs at the start and end are
+trimmed; those inside the value are kept. Session start and the new check resolve `runtime/.role`
+through one shared function, `runtime/lib/role-file.sh`, so the file a session loads and the file the
+install run checks are always the same file. If that file is missing, session start says the role was
+not loaded, instead of dropping it silently.
+
+**Fixed: an upgrade made a sourced library executable, and then held back its later changes.**
+`update.sh --apply` set the executable bit on every delivered file whose path matched `runtime/*.sh`.
+That pattern also matches `runtime/lib/*.sh`, which the template ships as not executable. The owner's
+repo then recorded the mode change as a local customisation, so the next release that changed the
+file left it as "customized locally" and the version stayed behind. The executable bit now comes from
+the release itself, file by file.
+
+**Fixed: on Windows, a second install run could remove the Permanence block from `CLAUDE.md`.**
+`runtime/lib/block-merge.sh` gave awk the block file's path with `-v`, and awk reads backslashes there
+as escapes. With a Windows path such as `D:\a\_temp\...` in `PERMA_DIR`, awk could not open the block
+file, so refreshing the block wrote nothing in its place and dropped both markers. A backup was written
+first, and the rest of the file was kept. The path now reaches awk through the environment. Found by
+this release's new Windows CI step.
+
+**Tested:** 17 new tests, and one CI step. 11 of the role check: no moved names; moved names with
+their line numbers; innocent words and `bakehouse:` mentions; the `.sh` and `.py` forms and the agents
+v1.12.0 deleted; the 10-line cap; a file over 1 MB; `none`, `pm` and no `.role` file; a missing role
+file; a path with a space; a `~/` path and the `PERMA_ROLE` override. 3 of session start: a path with a
+space loads; a missing `role-file.sh` is reported, and says nothing when the role is `none`. 1 that runs
+the real `install.sh` in a scratch copy: it prints the warning, still ends `done.`, and leaves the role
+file byte-identical. 1 of the block refresh with a backslash in the path. 1 of the upgrade: after `--apply`, every delivered file has the release's mode,
+and a later change to a library is delivered. The new CI step runs the check through `install.sh` on
+Ubuntu, macOS and Windows.
+
+**Migration notes.**
+
+1. A line added to v1.12.0's migration notes, repeated here: an owner whose `runtime/.role` names a role file of their own should check it for the tools that
+   moved to bakehouse, listed above. Permanence never edits that file. From v1.13.1, the `install.sh` run
+   that follows every upgrade names each moved tool the file still mentions, with its line numbers.
+
 ## [1.13.0] — a context meter, the drift count, the compact routine and a pre-compact hook
 
 **New: the context meter.** A session could not see how full its context was, so "time to compact"
@@ -160,6 +227,9 @@ role's kept rules, and 1 of these migration notes. CI now checks that no team ho
 6. **A repository hook from the team.** `repo-hooks.sh` wrote a post-commit hook into `.git/hooks/` of
    each repository you own. It calls `runtime/ops-gap.sh` only when that file exists, so after this
    upgrade it does nothing. It is harmless; delete it when you like.
+7. **A role file of your own.** An owner whose `runtime/.role` names a role file of their own should check it for the tools that
+   moved to bakehouse, listed above. Permanence never edits that file. From v1.13.1, the `install.sh` run
+   that follows every upgrade names each moved tool the file still mentions, with its line numbers.
 
 ## [1.11.0] — three method skills: dev-team, step-back and live-prism
 
