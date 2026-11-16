@@ -150,6 +150,11 @@ echo "  nightly consolidate: daily at $CONSOLIDATE_TIME (change it: echo HH:MM >
 if [ -z "$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.role" 2>/dev/null)" ]; then
   echo "  role: none. Optional — have Claude act as your project manager in every session: echo pm > $PERMA/runtime/.role (see runtime/roles/pm.md)"
 fi
+# v1.13.1: a role file of the owner's own, written before v1.12.0, can still send every session to the
+# project team's tools, which moved to bakehouse. No upgrade edits the owner's file, so say so here,
+# on the install run that follows every upgrade. A warning only: it never edits the file or fails the run.
+# shellcheck source=lib/role-file.sh
+{ . "$PERMA/runtime/lib/role-file.sh" && _perma_role_check; } 2>/dev/null || true
 
 # The owner's personal Claude config (skills, hooks, agents, a personal CLAUDE.md block), if this install
 # keeps one. It lives in _personal/, which never travels with the template; this line only runs it.
