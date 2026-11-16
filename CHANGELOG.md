@@ -16,6 +16,51 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.13.2] — an upgrade from v1.13.0 or earlier finishes again
+
+**Fixed: upgrading to v1.13.1 from v1.13.0 or earlier stopped with 2 files "left for review".** An
+upgrade that brings a new `update.sh` runs its first pass with the old one. Up to v1.13.0, that old
+script marked every delivered `.sh` file under `runtime/` executable, including `runtime/lib/block-merge.sh`
+and `runtime/lib/role-file.sh`, which the template ships as not executable. The restarted script then
+saw a local change on two files the release had also changed, held them back as "customized locally",
+and left the recorded version at v1.13.0. All their content had arrived; only the executable bit
+differed. v1.13.1 fixed the mark itself, but cannot protect its own delivery, because the old script
+runs first.
+
+`update.sh` now decides "you changed it" by a file's content, not its mode: a file whose only local
+difference is the executable bit is not a customisation. A file that already holds the release's
+content is not a conflict either; it is applied, which gives it the release's mode.
+
+- One consequence: a mode you set by hand on a file Permanence ships is set back to the release's on
+  the next upgrade that delivers that file, with no message. `install.sh` already did this for
+  `runtime/*.sh`, `.githooks/` and the binding scripts on every run.
+
+**Tested:** 1 new test that builds an install from the real v1.13.0 tree and upgrades it to this
+release in one `--apply`: no file is left for review, the version is recorded, and the machinery
+matches the release, modes included. It fails without the fix. 1 new test of the rescue below, from
+the real v1.13.0 and v1.13.1 trees. CI's test job now fetches the release tags these tests use.
+
+**Migration notes.**
+
+1. **If an upgrade to v1.13.1 stopped with exactly these two files left for review:**
+   `runtime/lib/block-merge.sh` and `runtime/lib/role-file.sh`. Your `_meta/VERSION` still says the
+   version you upgraded from (v1.13.0 or earlier), and your own `update.sh` (v1.13.1's) runs first, so
+   this release cannot finish the job for you. Your machinery is already v1.13.1's; only those two
+   files' modes differ. Run these commands from your Permanence folder (`~/permanence`, or your
+   `PERMA_DIR`). They commit only those three files, whatever else you have staged. Then upgrade as
+   usual.
+
+   ```sh
+   cd ~/permanence
+   chmod 644 runtime/lib/block-merge.sh runtime/lib/role-file.sh
+   printf v1.13.1 > _meta/VERSION
+   git add runtime/lib/block-merge.sh runtime/lib/role-file.sh _meta/VERSION
+   git commit -q -m "runtime/lib modes back to the template's; version v1.13.1" -- runtime/lib/block-merge.sh runtime/lib/role-file.sh _meta/VERSION
+   ```
+
+   If any other file was also left for review, resolve all of them with `/perma-upgrade` instead. If
+   you resolved the two files with `/perma-upgrade` and it recorded v1.13.1, you need nothing.
+
 ## [1.13.1] — a warning when your own role file still names the moved team tools
 
 **New: the install run checks a role file of your own.** v1.12.0 moved the project team to bakehouse and

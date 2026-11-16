@@ -375,6 +375,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the upgrade tests build installs from real release tags
       - name: Run runtime/tests with the standard library's own runner
         shell: bash
         run: |

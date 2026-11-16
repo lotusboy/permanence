@@ -148,6 +148,17 @@ echo "$CHANGED" | sed 's/^/  /'
 # renames away IS routed into CONFLICTS (see the check inside the loop) rather than applied blind
 # — the same "you changed it, so it needs review" rule every other bucket in this file already
 # follows. Only a deletion of a path you never touched applies automatically.
+# "You changed it" means you changed its CONTENT (v1.13.2). Comparing blobs, not `git diff`, means a
+# file whose only local difference is the executable bit does not count as a customisation. Before
+# v1.13.2, an upgrade run by v1.13.0's update.sh or earlier marked runtime/lib/*.sh executable on its
+# first pass; the restarted script then held those files back as "customized locally", and the
+# version never advanced. Nobody customises a file by changing its mode alone.
+# Callers verify <ref-a> exists first: if both lookups failed, the two empty results would compare
+# equal and read as "not changed".
+content_differs() {  # content_differs <ref-a> <ref-b> <path>: true when the path's content differs
+  [ "$(git -C "$PERMA" rev-parse -q --verify "$1:$3" 2>/dev/null)" != "$(git -C "$PERMA" rev-parse -q --verify "$2:$3" 2>/dev/null)" ]
+}
+
 CHANGED_FILES=()
 DELETED_FILES=()
 KEPT_FILES=()
@@ -170,7 +181,7 @@ while IFS=$'\t' read -r status path; do
       # (axis/runs/2026-09-28-v1.5.0-update-sh-review), live-reproduced twice: a template deletion
       # and a template rename-away of a file the owner had customised were both previously applied
       # silently.
-      if git -C "$PERMA" diff --quiet "$CURRENT" HEAD -- "$path" 2>/dev/null; then
+      if ! content_differs "$CURRENT" HEAD "$path"; then
         DELETED_FILES+=("$path")
       else
         CONFLICTS+=("$path")
@@ -211,8 +222,11 @@ if [ "$CURRENT" != "unknown" ] && git -C "$PERMA" rev-parse -q --verify "$CURREN
     if [ "$top" != "$path" ] && [ ! -e "$PERMA/$top" ]; then
       continue
     fi
-    if ! git -C "$PERMA" diff --quiet "$CURRENT" HEAD -- "$path" 2>/dev/null; then
-      if git -C "$PERMA" diff --quiet "$CURRENT" "$TARGET" -- "$path" 2>/dev/null; then
+    # Already the release's content (an earlier pass delivered it): nothing to decide. Applying it
+    # changes no content and gives the file the release's mode.
+    content_differs HEAD "$TARGET" "$path" || continue
+    if content_differs "$CURRENT" HEAD "$path"; then
+      if ! content_differs "$CURRENT" "$TARGET" "$path"; then
         YOURS_FILES+=("$path")
       else
         CONFLICTS+=("$path")
