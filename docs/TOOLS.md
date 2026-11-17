@@ -40,6 +40,7 @@ comment is its full reference.
 | `context-meter.sh` | Every-prompt hook: from 60% full (`runtime/.context-warn` changes it), says to write back and compact. |
 | `pre-compact.sh` | Compaction hook: logs each compaction, and gives the summary standing instructions (`runtime/.compact-instructions` replaces them). |
 | `resolve-stream.sh`, `resolve-path.sh` | Look up a folder's stream, or a stream's folder, in `_meta/REGISTRY.md`. |
+| `list-streams.sh` | The one list of streams: every folder with a `PROJECT.md`, `perma-meta` first. `--count` counts them; `--check` names a registered stream with no `PROJECT.md`. |
 | `generate-contents.sh` | Rebuilds the `CONTENTS.md` inventories. |
 | `perma-help.sh` | What `/perma-help` prints. |
 

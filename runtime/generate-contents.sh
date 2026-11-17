@@ -71,8 +71,9 @@ full_index() {  # whole Permanence, grouped by folder, alphabetical
 if [ -n "$1" ] && [ "$1" != "--quiet" ]; then
   [ -d "$1" ] && stream_index "$1"
 else
-  find . -name .git -prune -o -name PROJECT.md -print 2>/dev/null | sed 's|^\./||;s|/PROJECT.md$||' | while IFS= read -r s; do
-    stream_index "$s"
+  # Every stream from the one list (runtime/list-streams.sh), perma-meta's folder (_meta) included.
+  PERMA_DIR="$PERMA" bash "$PERMA/runtime/list-streams.sh" | cut -f2 | while IFS= read -r s; do
+    [ -d "$s" ] && stream_index "$s"
   done
 fi
 full_index
