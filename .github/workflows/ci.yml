@@ -51,17 +51,19 @@ jobs:
             echo "$VERSION already has a Release — nothing to do."
             exit 0
           fi
-          # The notes are this version's CHANGELOG.md section: every line after its "## [X.Y.Z]"
-          # heading, up to the next "## [" heading. The title is the tag's own "vX.Y.Z — title".
+          # The Release title is the version alone, which GitHub's sidebar shows in full. The notes
+          # open with the CHANGELOG heading's title, then this version's CHANGELOG.md section: every
+          # line after its "## [X.Y.Z]" heading, up to the next "## [" heading.
           NUM="${VERSION#v}"
           TITLE=$(grep -m1 "^## \[$NUM\]" CHANGELOG.md | sed -E 's/^## \[[^]]+\] — //')
           awk -v h="## [$NUM]" 'index($0, h) == 1 { f = 1; next } f && /^## \[/ { exit } f' CHANGELOG.md \
-            > "$RUNNER_TEMP/notes.md"
-          if [ -z "$TITLE" ] || ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            > "$RUNNER_TEMP/section.md"
+          if [ -z "$TITLE" ] || ! grep -q '[^[:space:]]' "$RUNNER_TEMP/section.md"; then
             echo "No CHANGELOG.md section found for $VERSION — refusing to publish a Release without notes."
             exit 1
           fi
-          gh release create "$VERSION" --verify-tag --title "$VERSION — $TITLE" --notes-file "$RUNNER_TEMP/notes.md"
+          { printf '### %s\n' "$TITLE"; cat "$RUNNER_TEMP/section.md"; } > "$RUNNER_TEMP/notes.md"
+          gh release create "$VERSION" --verify-tag --title "$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
           echo "Published the Release for $VERSION"
 
   markdown-lint:
