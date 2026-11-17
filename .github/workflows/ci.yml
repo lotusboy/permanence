@@ -41,6 +41,29 @@ jobs:
           git push origin "$VERSION"
           echo "Tagged $VERSION — $TITLE"
 
+      - name: Publish a GitHub Release for _meta/VERSION if it has none yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION=$(tr -d '[:space:]' < _meta/VERSION)
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "$VERSION already has a Release — nothing to do."
+            exit 0
+          fi
+          # The notes are this version's CHANGELOG.md section: every line after its "## [X.Y.Z]"
+          # heading, up to the next "## [" heading. The title is the tag's own "vX.Y.Z — title".
+          NUM="${VERSION#v}"
+          TITLE=$(grep -m1 "^## \[$NUM\]" CHANGELOG.md | sed -E 's/^## \[[^]]+\] — //')
+          awk -v h="## [$NUM]" 'index($0, h) == 1 { f = 1; next } f && /^## \[/ { exit } f' CHANGELOG.md \
+            > "$RUNNER_TEMP/notes.md"
+          if [ -z "$TITLE" ] || ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "No CHANGELOG.md section found for $VERSION — refusing to publish a Release without notes."
+            exit 1
+          fi
+          gh release create "$VERSION" --verify-tag --title "$VERSION — $TITLE" --notes-file "$RUNNER_TEMP/notes.md"
+          echo "Published the Release for $VERSION"
+
   markdown-lint:
     name: Markdown Lint
     runs-on: ubuntu-latest
