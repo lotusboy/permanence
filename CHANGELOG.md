@@ -16,6 +16,19 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.13.4] — a v1.13.3 test no longer fails inside a real install
+
+**Fixed: one of v1.13.3's tests failed when the suite ran inside a real install.**
+`test_the_shipped_registry_gives_no_warning` read `_meta/REGISTRY.md` and took it for the template's
+blank copy. Inside an install that file is the owner's own registry. Its workspaces exist on the
+machine, but the test's scratch notes folder holds none of their streams, so the check rightly
+warned about each one and the test failed. Permanence itself was right; only the test's input was
+wrong. CI did not see it, because CI runs in the template repo. The test now writes out the
+template's example row itself, and is renamed `test_the_template_example_row_gives_no_warning`.
+
+**Tested:** the full suite passes in the template repo and in a clone of a real install with a
+populated registry (112 of 112); before this fix the same clone failed this test.
+
 ## [1.13.3] — one list of streams, so every command sees the same projects
 
 **Fixed: commands disagreed about which folders are streams (finding F20, from the v1.0 review).** The

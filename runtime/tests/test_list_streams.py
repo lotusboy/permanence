@@ -70,8 +70,14 @@ class OneList(unittest.TestCase):
         # the list, so --check names it too: the check and the list always agree.
         self.assertEqual(self.run_list("--check"), "acme/linked\nregistered/only\n")
 
-    def test_the_shipped_registry_gives_no_warning(self):
-        (self.perma / "_meta" / "REGISTRY.md").write_text((ROOT / "_meta" / "REGISTRY.md").read_text())
+    def test_the_template_example_row_gives_no_warning(self):
+        # The template's own example row, written out here. Reading ROOT/_meta/REGISTRY.md instead
+        # failed in every real install (v1.13.3): there that file is the owner's registry, whose
+        # workspaces exist on the machine while this scratch notes folder holds none of their streams.
+        (self.perma / "_meta" / "REGISTRY.md").write_text(
+            "| workspace | stream | note |\n|---|---|---|\n"
+            f"| {self.perma} | perma-meta | the notes themselves |\n"
+            "| /Users/you/path/to/a-project | home/a-project | example row — replace with your own |\n")
         self.assertEqual(self.run_list("--check"), "")
 
     def test_no_permanence_folder_prints_nothing(self):
