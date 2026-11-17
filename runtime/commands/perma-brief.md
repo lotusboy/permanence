@@ -9,7 +9,7 @@ Produce my morning briefing from Permanence at `~/permanence`. This is the first
 ## How to build it
 
 1. **Timeline first.** Run `git -C ~/permanence log --pretty=format:"%ad  %s" --date=short -20`. This is the canonical chronology of what's moved across all streams — read it before anything else so the per-stream reads land in context, and so a stream whose `PROJECT.md` is stale doesn't fool you about recency.
-2. **Discover the active streams:** every `~/permanence/<customer>/<project>/` that has a `PROJECT.md`. Don't assume the set — find them, so new streams appear automatically.
+2. **Discover the active streams:** run `~/permanence/runtime/list-streams.sh`. Each line is a stream name, a tab, and its folder under `~/permanence/`. Brief every stream it lists except `perma-meta`. Don't assume the set — new streams appear automatically.
 3. **For each stream**, read:
    - `PROJECT.md` (the "Current phase" / headline blocks), noting its `Last updated YYYY-MM-DD` header
    - The **tail** of `LOG.md` (most recent entries only — don't re-read history), noting its most recent date header

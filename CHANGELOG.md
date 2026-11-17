@@ -16,6 +16,45 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.13.3] — one list of streams, so every command sees the same projects
+
+**Fixed: commands disagreed about which folders are streams (finding F20, from the v1.0 review).** The
+README and SPEC say a folder is a stream exactly when it has a `PROJECT.md`. The code had three
+versions of that rule. `/perma-help` counted `PROJECT.md` files two or three levels down, so it
+counted `_meta` as a stream of its own. The morning brief read only `<customer>/<project>/` folders, so
+it missed a stream at any other depth, such as a bare `<slug>`. `/perma-list`, `/perma-consolidate` and
+`/perma-orchestrate` looked at any depth, and `generate-contents.sh` searched every folder but `.git`. So
+`/perma-help`, the brief and the list could each show a different set of your projects.
+
+**New: `runtime/list-streams.sh`, the one list.** Every stream, one per line, as its name and its
+folder: every folder with a `PROJECT.md` at any depth, `perma-meta` first. `_meta` is always shown as
+`perma-meta`, never under its own name, and hidden folders (`.git`, `.consolidation`) are never
+searched. `/perma-help`, `generate-contents.sh` and the brief, list, consolidate and orchestrate
+commands all read it now. The brief still leaves out `perma-meta`, as before. The nightly consolidate may
+run it: its allow-list has the script. In an interactive session, a command asks once before it runs
+the script.
+
+- **What can change for you.** Any folder with a `PROJECT.md` is a stream, at any depth. So a project
+  folder inside another stream with its own `PROJECT.md` (an archive copy, say) is now a stream of its
+  own. On a fresh clone of the template, the two fictional streams in `example/` now appear in the
+  brief until you delete `example/`, as the README says to. Symlinked folders are not followed, and a
+  folder name with a tab or a newline is not supported.
+
+**New: a warning for a registered stream with no `PROJECT.md`.** A row in `_meta/REGISTRY.md` links a
+workspace to a stream, and session start loads that stream; but a registry row does not make a
+stream, because a notes-only stream has no workspace at all. A registered stream with no `PROJECT.md`
+was loaded in its own sessions and missing from every other command, with no sign of it. Now
+`/perma-help` names each one, and `/perma-list` lists them last, with what to check or add.
+`list-streams.sh --check` prints them. Only rows for a workspace that exists on this machine are
+checked, so another laptop's rows and the template's example row give no warning.
+
+**Tested:** 9 new tests: the list (any depth, a name with a space, `_meta` as `perma-meta`; hidden folders,
+a notes folder with no `PROJECT.md`, a folder named `PROJECT.md` and a symlinked folder left out); the
+count; the registry check (once per stream, trailing slashes, a symlinked stream named, a malformed row
+and the example row ignored); the shipped registry gives no warning; no Permanence folder;
+`/perma-help`'s count and warning; `generate-contents.sh`; the nightly allow-list; and the four
+commands' text. Each fails against the code before this release.
+
 ## [1.13.2] — an upgrade from v1.13.0 or earlier finishes again
 
 **Fixed: upgrading to v1.13.1 from v1.13.0 or earlier stopped with 2 files "left for review".** An

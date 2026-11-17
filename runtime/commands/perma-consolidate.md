@@ -33,7 +33,7 @@ surface what's there to reconcile; you don't invent.
 
 1. **Timeline first**, exactly as `perma-brief` does: `git -C ~/permanence log --pretty=format:"%ad  %s" --date=short -30`. The canonical chronology — read it before the per-stream reads so supersessions and staleness land in context.
 2. **Run id for the filename:** `RUN_ID=$(date +%Y-%m-%d-%H%M)`. The timestamp (not just the date) means several runs a day — or a scheduled nightly run plus a manual one — each get their own report without colliding.
-3. **Discover the streams**, don't assume them: every `~/permanence/<...>/` directory containing a `PROJECT.md`, plus the root perma-meta (`~/permanence/LOG.md`). New streams appear automatically.
+3. **Discover the streams**, don't assume them: run `~/permanence/runtime/list-streams.sh`. Each line is a stream name, a tab, and its folder under `~/permanence/`; `perma-meta` comes first (its log is `~/permanence/LOG.md`). New streams appear automatically.
 
 ## Phase 1 — Analyse each stream
 

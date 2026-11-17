@@ -177,6 +177,7 @@ caffeinate -i "$CLAUDE_BIN" -p "/perma-consolidate" \
     "Edit($PERMA/.consolidation/*)" "Edit($HOME/permanence/.consolidation/*)" "Edit(~/permanence/.consolidation/*)" \
     "Bash(git -C $PERMA log:*)" "Bash(git -C $HOME/permanence log:*)" "Bash(git -C ~/permanence log:*)" "Bash(git log:*)" \
     "Bash(date:*)" "Bash(ls:*)" \
+    "Bash($PERMA/runtime/list-streams.sh:*)" "Bash($HOME/permanence/runtime/list-streams.sh:*)" "Bash(~/permanence/runtime/list-streams.sh:*)" \
     "Bash(mkdir -p $PERMA/.consolidation:*)" "Bash(mkdir -p $HOME/permanence/.consolidation:*)" "Bash(mkdir -p ~/permanence/.consolidation:*)" \
   >> "$LOG" 2>&1
 RC=$?

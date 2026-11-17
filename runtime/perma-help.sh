@@ -186,6 +186,10 @@ printf '\n\033[1mThe project team\033[0m  \033[90m(no longer part of Permanence,
 printf '  planned, gated changes, refactors and reviews moved to the bakehouse plugin for Claude Code,\n'
 printf '  switched on per project: https://github.com/lotusboy/bakehouse\n'
 
-streams=$(find "$PERMA" -mindepth 2 -maxdepth 3 -name PROJECT.md -not -path '*/.git/*' 2>/dev/null | wc -l | tr -d ' ')
-printf '\n\033[90m%s streams · %s commands · full reference: %s/SPEC.md\033[0m\n\n' \
+streams=$(PERMA_DIR="$PERMA" bash "$PERMA/runtime/list-streams.sh" --count 2>/dev/null)
+# A registry row whose folder has no PROJECT.md: sessions load it, but no other command sees it.
+PERMA_DIR="$PERMA" bash "$PERMA/runtime/list-streams.sh" --check 2>/dev/null | while IFS= read -r s; do
+  printf '\n\033[33m! %s is registered but has no PROJECT.md, so the brief, list, consolidate and orchestrate passes do not see it. Check the stream name in _meta/REGISTRY.md, or add %s/%s/PROJECT.md.\033[0m\n' "$s" "$PERMA" "$s"
+done
+printf '\n\033[90m%s streams (plus perma-meta) · %s commands · full reference: %s/SPEC.md\033[0m\n\n' \
   "$streams" "$(ls -1 "$CMDS"/perma-*.md 2>/dev/null | wc -l | tr -d ' ')" "$PERMA"

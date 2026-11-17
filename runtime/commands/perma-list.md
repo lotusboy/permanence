@@ -10,9 +10,11 @@ commands need an exact match, and this is how you get one instead of guessing.
 
 ## How to run it
 
-1. **Discover the streams**, the same way `/perma-consolidate` does: every `~/permanence/<...>/`
-   directory containing a `PROJECT.md`, plus the root `perma-meta`. New streams show up
-   automatically — don't rely on a stale list from memory.
+1. **Discover the streams:** run `~/permanence/runtime/list-streams.sh`. Each line is a stream name, a tab, and its folder
+   under `~/permanence/`; `perma-meta` comes first. New streams show up automatically — don't rely
+   on a stale list from memory. Then run it with `--check`: each name it prints is registered in
+   `_meta/REGISTRY.md` but has no `PROJECT.md`, so no command sees it. List those last, under
+   "registered, but not a stream yet: check the name in `_meta/REGISTRY.md`, or add a PROJECT.md".
 2. **For each stream**, gather:
    - The stream name (its path relative to `~/permanence`).
    - A one-line "what it is", read from `PROJECT.md`'s opening description.
