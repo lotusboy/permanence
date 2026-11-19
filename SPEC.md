@@ -57,7 +57,7 @@ an owner's value is theirs and no upgrade ever touches it (a missing file means 
 | `runtime/.update-source` | the template's git URL, for `/perma-upgrade` (`PERMA_UPDATE_SOURCE` overrides) | pre-filled on a clone of the public template |
 | `runtime/.role` | `none`, `pm`, or a path to the owner's own role file (`PERMA_ROLE` overrides) | `none` — no role |
 | `runtime/.consolidate-time` | the nightly run time, `HH:MM` 24-hour, read by `install.sh` | `05:30` |
-| `runtime/.context-warn` | the context meter's threshold, a whole number of percent (1-100), or `off` | `60` |
+| `runtime/.context-warn` | the context meter's threshold, a whole number of percent (1-100), or `off` (the drift line too) | `40` for a window above 500k, `60` otherwise |
 | `runtime/.compact-instructions` | plain text the pre-compact hook gives the compaction summary, under 10,000 characters | the shipped default text |
 
 **Roles.** A role is a standing instruction file a session follows for its whole length. Session-start

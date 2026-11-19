@@ -10,8 +10,15 @@
 # registered workspace (it exits early otherwise). The meter must run on every prompt, in every
 # workspace. Kept apart, each one stays simple and a fault in one cannot silence the other.
 #
-# Threshold: 60% by default. runtime/.context-warn (one line: a whole number 1-100, the percent)
-# overrides it; "off" switches the meter off. Any other value is ignored and 60 is used.
+# Threshold: by default 40% of a window above 500k (a 1M model: about 400k) and 60% of a smaller one (a
+# 200k model: about 120k). runtime/.context-warn (one line: a whole number 1-100, the percent) overrides
+# both; "off" switches the meter off, drift line included. Any other value is ignored and the default is used.
+#
+# Drift (v1.14.0): the drift count is the agent's own (CLAUDE.md's rule), so no hook can count it. The
+# rule asks the agent to write a line "[drift N]" at the start of a line in its reply each time the count
+# rises. The meter finds the latest such line in a main-thread assistant message since the last
+# compaction. At 5 or more it prints a second line: recommend stopping, then compact. Read in the same
+# backward pass as the token count, within the same 8 MB.
 #
 # Window sizes: the table in the Python below, from Anthropic's docs (checked 2026-11-15):
 #   https://platform.claude.com/docs/en/about-claude/models/overview (context window per model)
@@ -41,7 +48,7 @@ WARN="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.context-warn" 2>/dev/null | he
 
 # The program is passed with -c, so the hook's JSON stays on stdin for it to read.
 METER=$(cat <<'PY'
-import json, os, sys
+import json, os, re, sys
 
 CHUNK, LIMIT = 1 << 20, 8 << 20   # read backwards 1 MB at a time, 8 MB at most
 M, K200 = 1000000, 200000
@@ -179,7 +186,34 @@ def read_line(line):
     return model, sum(parts)
 
 
-def last_main_turn(path):
+DRIFT = re.compile(r"^\[drift (\d{1,3})\]", re.M)
+
+
+def read_drift(line):
+    """The count in the last "[drift N]" line of a main-thread assistant message's text; None otherwise."""
+    if b"[drift " not in line:
+        return None
+    try:
+        d = json.loads(line)
+    except ValueError:
+        return None
+    if not isinstance(d, dict) or d.get("isSidechain") or d.get("type") != "assistant":
+        return None
+    content = d.get("message", {}).get("content") if isinstance(d.get("message"), dict) else None
+    if not isinstance(content, list):
+        return None
+    found = None
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+            counts = DRIFT.findall(block["text"])
+            if counts:
+                found = int(counts[-1])
+    return found
+
+
+def scan(path):
+    """(the last main-thread turn or None, the latest drift count or None), both since the last compaction."""
+    turn = drift = None
     with open(path, "rb") as f:
         f.seek(0, 2)
         pos, carry, done = f.tell(), b"", 0
@@ -193,24 +227,34 @@ def last_main_turn(path):
             for line in reversed(lines):
                 got = read_line(line)
                 if got == "stop":
-                    return None
-                if got:
-                    return got
-    return None
+                    return turn, drift
+                if got and turn is None:
+                    turn = got
+                if drift is None:
+                    drift = read_drift(line)
+                if turn is not None and drift is not None:
+                    return turn, drift
+    return turn, drift
 
 
 def main():
     raw = sys.argv[1] if len(sys.argv) > 1 else ""
     if raw.lower() == "off":
         return
-    threshold = int(raw) if raw in {str(n) for n in range(1, 101)} else 60   # "050" is not a value
+    threshold = int(raw) if raw in {str(n) for n in range(1, 101)} else None   # "050" is not a value
     hook = json.load(sys.stdin)
     path = hook.get("transcript_path") if isinstance(hook, dict) else None
     if not isinstance(path, str) or not os.path.isfile(path):
         return
-    found = last_main_turn(path)
-    if not found:
-        return
+    found, drift = scan(path)
+    if found:
+        context_line(found, threshold, hook)
+    if drift is not None and drift >= 5:
+        print(f"[perma] drift count {drift} this session: recommend stopping. At the next natural break, "
+              "write back to the stream, if this workspace has one, then ask the owner to /compact.")
+
+
+def context_line(found, threshold, hook):
     model, used = found
     files = settings_files(hook.get("cwd") if isinstance(hook.get("cwd"), str) else "")
     sized = window_for(model, used, files)
@@ -220,6 +264,8 @@ def main():
     acw = auto_compact(model, files)
     if acw and acw < window:
         window, label = acw, f"{acw // 1000}k, the auto-compact window"
+    if threshold is None:
+        threshold = 40 if window > 500000 else 60
     if used > window or used * 100 < threshold * window:
         return
     print(f"[perma] context {used * 100 // window}% used ({used // 1000}k of {label}): at the next "

@@ -16,6 +16,30 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.14.0] — the drift count reaches the context meter, and a lower line on 1M windows
+
+**New: the drift count is a signal the meter reads.** v1.13.0's drift count was a rule only: the
+agent counted its own errors and, at 5, was to recommend stopping. No hook could see the count, so
+the stop depended on someone noticing. In one long session the count reached 12 at about 40% of a 1M
+window, and the meter, which spoke at 60%, never fired. Now the Claude Code rule asks the agent to
+write `[drift N]` at the start of a line in its reply each time the count rises. On every prompt
+the context meter finds the latest such line in a main-thread reply since the last compaction. At 5
+or more it prints its own line:
+`[perma] drift count 5 this session: recommend stopping. At the next natural break, write back to the stream, if this workspace has one, then ask the owner to /compact.`
+A marker quoted mid-line, in a subagent's reply, in a user message or in thinking does not count. A
+compaction starts the count again from zero. The marker is read in the same backward pass as the
+token count, within the same 8 MB, and needs no file, no session id and no known model. `off` in
+`runtime/.context-warn` silences this line too. The other tools' instruction blocks keep the drift
+rule without the marker, because no hook there reads it.
+
+**Changed: the meter speaks earlier on a 1M window.** The default threshold is now 40% of a window
+above 500k (a 1M model: about 400k tokens) and stays 60% of a smaller one (a 200k model: about 120k).
+The window is the smaller of the model's window and your auto-compact window, as before. A number in
+`runtime/.context-warn` still overrides both. `/perma-help` names the new defaults.
+
+**Tested:** 28 context-meter tests, 7 of them new. The two threshold tests were rewritten for the new
+defaults. Each new test that expects a line fails on v1.13.4's meter.
+
 ## [1.13.4] — a v1.13.3 test no longer fails inside a real install
 
 **Fixed: one of v1.13.3's tests failed when the suite ran inside a real install.**
