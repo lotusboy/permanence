@@ -16,6 +16,52 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.14.0] — the drift count reaches the context meter, and a lower line on 1M windows
+
+**New: the drift count is a signal the meter reads.** v1.13.0's drift count was a rule only: the
+agent counted its own errors and, at 5, was to recommend stopping. No hook could see the count, so
+the stop depended on someone noticing. In one long session the count reached 12 at about 40% of a 1M
+window, and the meter, which spoke at 60%, never fired. Now the Claude Code rule asks the agent to
+write the marker `[drift N]` on a line of its own each time the count rises, and in every reply once
+it is 5 or more, so the marker stays inside the meter's 8 MB read. On every prompt the context meter
+finds the latest marker line in a main-thread reply since the last compaction. A marker line holds
+the marker and nothing else. Formatting around it still counts: up to 3 spaces, a list mark, a
+heading mark, backticks, stars or underscores, in any letter case, with or without a colon, or
+written as "5/5", and with one trailing `.`, `:`, `;` or `!`. At 5 or more the meter prints its own line:
+`[perma] drift count 5 since this session's start or last compaction: recommend stopping. At the next natural break, write back to the stream, if this workspace has one, then ask the owner to /compact.`
+A line with any other words on it is not a marker, so an example in a sentence, a link, a table or a
+bullet with other words never counts; a bullet holding only a marker does count. Nor does a marker in a `>` quote, in indented code, in a subagent's reply, in a
+user message or in thinking, or inside a fenced code block. Fences are CommonMark-style, at any indent: a
+closing fence is the same character as the opening one, at least as long, with nothing after it, so
+a fence nested inside a longer one stays inside. To correct a wrong count, the agent writes the right
+one. A compaction starts the count again from zero. The marker is read in the same backward pass as the
+token count, within the same 8 MB, and needs no file, no session id and no known model. `off` in
+`runtime/.context-warn` silences this line too. The other tools' instruction blocks keep the drift
+rule without the marker, because no hook there reads it.
+
+**Changed: the meter speaks earlier on a 1M window.** The default is now 60% of the window or 400k
+tokens, whichever comes first: 120k on a 200k model, as before, and 400k on a 1M model (it was 600k).
+A larger window never makes it speak earlier. The window is the smaller of the model's window and your
+auto-compact window, as before. A number in `runtime/.context-warn` still replaces the default with
+that percent of the window. `/perma-help` names the new defaults.
+
+**Speed.** Once the meter has the last turn's count, it parses only a line that could be a compaction
+boundary, or an assistant line holding the marker text. On real-shaped transcripts of 8 MB and more a
+prompt takes about 40 ms, against about 20 ms before; most of that is reading the 8 MB.
+
+**Fixed: the meter's program is read with `read`, not inside `$( )`.** bash 3.2, the one macOS ships,
+scans a `$( )` body for quotes and backticks, and could fail on the program's own.
+
+**Reviewed before release:** one adversarial pass and a narrow re-check, no ANDON. The review's P1 (a
+formatted marker was ignored) and the re-check's two P2 (a bulleted example counted; a nested fence
+let an example out) led to the one-line marker rule above. A stale SPEC line is corrected. A review
+of the pull request found 2 P2 and 5 P3, all fixed: the docs no longer call a bare bulleted marker
+safe; one trailing punctuation mark is allowed; the default no longer steps at a 500k window; a fault
+in the context line can no longer drop the drift line.
+
+**Tested:** 35 context-meter tests, 14 of them new. The two threshold tests were rewritten for the new
+defaults. Each new test that expects a line fails on v1.13.4's meter.
+
 ## [1.13.4] — a v1.13.3 test no longer fails inside a real install
 
 **Fixed: one of v1.13.3's tests failed when the suite ran inside a real install.**

@@ -10,8 +10,22 @@
 # registered workspace (it exits early otherwise). The meter must run on every prompt, in every
 # workspace. Kept apart, each one stays simple and a fault in one cannot silence the other.
 #
-# Threshold: 60% by default. runtime/.context-warn (one line: a whole number 1-100, the percent)
-# overrides it; "off" switches the meter off. Any other value is ignored and 60 is used.
+# Threshold: by default 60% of the window or 400k tokens, whichever comes first (a 200k model: 120k; a 1M
+# model: 400k). It never comes later as the window shrinks, nor earlier as it grows. runtime/.context-warn
+# (one line: a whole number 1-100, the percent) replaces it with that percent of the window; "off" switches
+# the meter off, drift line included. Any other value is ignored and the default is used.
+#
+# Drift (v1.14.0): the drift count is the agent's own (CLAUDE.md's rule), so no hook can count it. The
+# rule asks the agent to write the marker "[drift N]" on a line of its own each time the count rises, and
+# in every reply once it is 5 or more (so it stays inside the 8 MB read). A marker line holds the marker
+# and nothing else: formatting around it is allowed (up to 3 spaces, a list mark, a heading mark,
+# backticks, stars or underscores), and so are any letter case, a colon, "5/5" and one trailing . : ; or !.
+# A line with any other words on it is not a marker, so an example in a sentence, in a bullet with other
+# words, or in a table never counts; a bullet holding only a marker does count. Nor does a line inside a
+# fenced code block (CommonMark-style fences, at any indent: a closing fence is the same character, at
+# least as long as the opening one, with nothing after it). The meter finds the latest marker line in a
+# main-thread assistant message since the last compaction. At 5 or more it prints a second line:
+# recommend stopping, then compact. Read in the same backward pass as the token count, within the same 8 MB.
 #
 # Window sizes: the table in the Python below, from Anthropic's docs (checked 2026-11-15):
 #   https://platform.claude.com/docs/en/about-claude/models/overview (context window per model)
@@ -40,8 +54,10 @@ command -v python3 >/dev/null 2>&1 || exit 0
 WARN="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.context-warn" 2>/dev/null | head -n1 | tr -d '[:space:]')"
 
 # The program is passed with -c, so the hook's JSON stays on stdin for it to read.
-METER=$(cat <<'PY'
-import json, os, sys
+# Read with `read`, not $(cat <<...): bash 3.2 (macOS) scans a $( ) body for quotes and backticks and
+# can fail on the Python's own. read -d '' stops at end of input and returns 1 there, hence || true.
+IFS= read -r -d '' METER <<'PY' || true
+import json, os, re, sys
 
 CHUNK, LIMIT = 1 << 20, 8 << 20   # read backwards 1 MB at a time, 8 MB at most
 M, K200 = 1000000, 200000
@@ -179,7 +195,54 @@ def read_line(line):
     return model, sum(parts)
 
 
-def last_main_turn(path):
+DRIFT = re.compile(r" {0,3}(?:(?:[-*+]|\d{1,3}[.)])[ \t]+)?(?:#{1,6}[ \t]+)?[`*_]*"
+                   r"\[drift:?[ \t]*(\d{1,3})(?:/\d{1,3})?\][`*_]*[.:;!]?[ \t]*", re.I)
+FENCE = re.compile(r"[ \t]*(`{3,}|~{3,})(.*)")
+
+
+def drift_in(text):
+    """The count in the last marker line of a reply's text, outside fenced code blocks; None if none."""
+    found, fence = None, None
+    for line in text.splitlines():
+        f = FENCE.fullmatch(line)
+        if fence:
+            if f and f.group(1)[0] == fence[0] and len(f.group(1)) >= len(fence) and not f.group(2).strip():
+                fence = None   # the closing fence
+            continue
+        if f and not (f.group(1)[0] == "`" and "`" in f.group(2)):   # backticks after ``` are inline code
+            fence = f.group(1)
+            continue
+        m = DRIFT.fullmatch(line)
+        if m:
+            found = int(m.group(1))
+    return found
+
+
+def read_drift(line):
+    """The count in the last "[drift N]" line of a main-thread assistant message's text; None otherwise."""
+    if b'"assistant"' not in line or b"[drift" not in line.lower():
+        return None
+    try:
+        d = json.loads(line)
+    except ValueError:
+        return None
+    if not isinstance(d, dict) or d.get("isSidechain") or d.get("type") != "assistant":
+        return None
+    content = d.get("message", {}).get("content") if isinstance(d.get("message"), dict) else None
+    if not isinstance(content, list):
+        return None
+    found = None
+    for block in content:
+        if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+            count = drift_in(block["text"])
+            if count is not None:
+                found = count
+    return found
+
+
+def scan(path):
+    """(the last main-thread turn or None, the latest drift count or None), both since the last compaction."""
+    turn = drift = None
     with open(path, "rb") as f:
         f.seek(0, 2)
         pos, carry, done = f.tell(), b"", 0
@@ -191,26 +254,43 @@ def last_main_turn(path):
             done += n
             carry = lines.pop(0) if pos > 0 else b""   # may be cut; finished by the next chunk
             for line in reversed(lines):
-                got = read_line(line)
+                if turn is not None and b'"compact_boundary"' not in line:
+                    got = None   # the turn is known: only a boundary still matters here
+                else:
+                    got = read_line(line)
                 if got == "stop":
-                    return None
-                if got:
-                    return got
-    return None
+                    return turn, drift
+                if got and turn is None:
+                    turn = got
+                if drift is None:
+                    drift = read_drift(line)
+                if turn is not None and drift is not None:
+                    return turn, drift
+    return turn, drift
 
 
 def main():
     raw = sys.argv[1] if len(sys.argv) > 1 else ""
     if raw.lower() == "off":
         return
-    threshold = int(raw) if raw in {str(n) for n in range(1, 101)} else 60   # "050" is not a value
+    threshold = int(raw) if raw in {str(n) for n in range(1, 101)} else None   # "050" is not a value
     hook = json.load(sys.stdin)
     path = hook.get("transcript_path") if isinstance(hook, dict) else None
     if not isinstance(path, str) or not os.path.isfile(path):
         return
-    found = last_main_turn(path)
-    if not found:
-        return
+    found, drift = scan(path)
+    if found:
+        try:   # its own try: a fault here must not drop the drift line
+            context_line(found, threshold, hook)
+        except Exception:
+            pass
+    if drift is not None and drift >= 5:
+        print(f"[perma] drift count {drift} since this session's start or last compaction: recommend stopping. "
+              "At the next natural break, "
+              "write back to the stream, if this workspace has one, then ask the owner to /compact.")
+
+
+def context_line(found, threshold, hook):
     model, used = found
     files = settings_files(hook.get("cwd") if isinstance(hook.get("cwd"), str) else "")
     sized = window_for(model, used, files)
@@ -220,7 +300,12 @@ def main():
     acw = auto_compact(model, files)
     if acw and acw < window:
         window, label = acw, f"{acw // 1000}k, the auto-compact window"
-    if used > window or used * 100 < threshold * window:
+    if used > window:
+        return
+    if threshold is None:
+        if used < min(window * 60 // 100, 400000):   # 60% of the window, at most 400k
+            return
+    elif used * 100 < threshold * window:
         return
     print(f"[perma] context {used * 100 // window}% used ({used // 1000}k of {label}): at the next "
           "natural break, write back to the stream, if this workspace has one, then ask the owner to /compact.")
@@ -231,6 +316,5 @@ try:
 except BaseException:
     pass
 PY
-)
 python3 -c "$METER" "$WARN" 2>/dev/null
 exit 0

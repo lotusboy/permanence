@@ -84,8 +84,8 @@ This sets up everything global and hands-off. Specifically, it:
 - schedules the nightly consolidate — 05:30 by default; put another time in `runtime/.consolidate-time` (one line, `HH:MM`) and re-run `install.sh`. On a laptop that sleeps overnight, pick a time it is normally open: the run waits for someone to be using the machine and skips the day otherwise
 - merges four hooks and the `~/permanence` permission into `~/.claude/settings.json` — **SessionStart**
   (`session-start.sh`), **UserPromptSubmit** (`session-load.sh`, the one that actually forces the
-  read on your first message, and `context-meter.sh`, which says from 60% full that it is time to
-  write back and compact), and **PreCompact** (`pre-compact.sh`, which logs each compaction and gives
+  read on your first message, and `context-meter.sh`, which says from 60% of the window or 400k tokens,
+  whichever comes first, or at a drift count of 5, that it is time to write back and compact), and **PreCompact** (`pre-compact.sh`, which logs each compaction and gives
   its summary standing instructions)
 - adds a delimited `<!-- perma:begin … end -->` block to your global `~/.claude/CLAUDE.md`, and the
   same block to `~/.config/agents/AGENTS.md` (plus Codex/droid/Amp's global `AGENTS.md` if those are

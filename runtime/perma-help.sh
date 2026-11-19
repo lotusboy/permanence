@@ -115,12 +115,12 @@ hook_has session-start.sh        && on "session-start hook — loads the right s
                                  || off "session-start hook — not wired"
 hook_has session-load.sh         && on "auto context-load on your first prompt (no need to say 'refer to Permanence')" \
                                  || off "auto context-load — not wired"
-# The meter's threshold, read the way context-meter.sh reads it: 1-100, "off", anything else is 60.
+# The meter's threshold, read the way context-meter.sh reads it: 1-100, "off", anything else is the default.
 CW="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.context-warn" 2>/dev/null | head -n1 | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
-case "$CW" in off|[1-9]|[1-9][0-9]|100) ;; *) CW=60 ;; esac
+case "$CW" in off|[1-9]|[1-9][0-9]|100) AT="${CW}% full" ;; *) AT="60% of the window or 400k tokens, whichever comes first" ;; esac
 if ! hook_has runtime/context-meter.sh; then off "context meter — not wired"
 elif [ "$CW" = "off" ]; then off "context meter — switched off in runtime/.context-warn"
-else on "context meter — at ${CW}% full, says to write back and then /compact (runtime/.context-warn changes it)"
+else on "context meter — at ${AT}, or a drift count of 5, says to write back and then /compact (runtime/.context-warn changes it)"
 fi
 hook_has runtime/pre-compact.sh  && on "pre-compact hook — logs each compaction and steers its summary (runtime/.compact-instructions replaces the text)" \
                                  || off "pre-compact hook — not wired"

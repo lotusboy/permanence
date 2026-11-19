@@ -209,28 +209,172 @@ class Meter(unittest.TestCase):
                       self.run_meter(env=dict(self.env, CLAUDE_CODE_DISABLE_1M_CONTEXT="1")))
 
     def test_the_threshold_edge(self):
-        self.write(assistant("claude-opus-5-5", 599999))
+        # The default: 40% of a window above 500k, 60% of a smaller one (v1.14.0).
+        self.write(assistant("claude-opus-5-5", 399999))
         self.assertEqual(self.run_meter(), "")
-        self.write(assistant("claude-opus-5-5", 600000))
-        self.assertIn("60% used (600k of 1M)", self.run_meter())
+        self.write(assistant("claude-opus-5-5", 400000))
+        self.assertIn("40% used (400k of 1M)", self.run_meter())
+        self.write(assistant("claude-haiku-4-5", 119999))
+        self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-haiku-4-5", 120000))
+        self.assertIn("60% used (120k of 200k)", self.run_meter())
+        # 60% of the window or 400k, whichever comes first: a larger window never speaks earlier.
+        first = []
+        for acw in ("200k", "400k", "500k", "501k", "600k", "666k", "667k", "800k", "1M"):
+            env = dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW=acw)
+            lo, hi = 1, 1000000 if acw == "1M" else int(acw[:-1]) * 1000   # silent above the window
+            while lo < hi:
+                mid = (lo + hi) // 2
+                self.write(assistant("claude-opus-5-5", mid))
+                if self.run_meter(env=env):
+                    hi = mid
+                else:
+                    lo = mid + 1
+            first.append(lo)
+        self.assertEqual(first, [120000, 240000, 300000, 300600, 360000, 399600, 400000, 400000, 400000])
+        five_hundred = dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW="500k")
+        self.write(assistant("claude-opus-5-5", 299999))
+        self.assertEqual(self.run_meter(env=five_hundred), "")
+        self.write(assistant("claude-opus-5-5", 300000))
+        self.assertIn("60% used (300k of 500k, the auto-compact window)", self.run_meter(env=five_hundred))
 
     def test_the_override_file(self):
-        self.write(assistant("claude-opus-5-5", 500000))
-        self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-opus-5-5", 450000))
+        self.assertIn("45% used", self.run_meter())          # the default for 1M is 40
         self.warn("50\n")
-        self.assertIn("50% used", self.run_meter())
-        self.warn("\n  51  \n")
         self.assertEqual(self.run_meter(), "")
+        self.warn("45\n")
+        self.assertIn("45% used", self.run_meter())
+        self.warn("\n  46  \n")
+        self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-haiku-4-5", 100000))   # the file overrides the 200k default too
+        self.assertIn("50% used (100k of 200k)", self.run_meter())
         self.write(assistant("claude-opus-5-5", 990000))
         self.warn("off\n")
         self.assertEqual(self.run_meter(), "")
-        for bad in ("abc", "0", "101", "-5", "6O", "050"):   # ignored: the default 60 applies
+        for bad in ("abc", "0", "101", "-5", "6O", "050"):   # ignored: the default 40 applies
             with self.subTest(bad=bad):
                 self.warn(bad)
-                self.write(assistant("claude-opus-5-5", 590000))
+                self.write(assistant("claude-opus-5-5", 390000))
                 self.assertEqual(self.run_meter(), "")
-                self.write(assistant("claude-opus-5-5", 610000))
-                self.assertIn("61% used", self.run_meter())
+                self.write(assistant("claude-opus-5-5", 410000))
+                self.assertIn("41% used", self.run_meter())
+
+    DRIFT_LINE = ("[perma] drift count 5 since this session's start or last compaction: recommend stopping. "
+                  "At the next natural break, write back to the stream, if this workspace has one, then ask the owner to /compact.\n")
+
+    def test_drift_at_5_prints_its_own_line(self):
+        self.write(assistant("claude-opus-5-5", 100000, text="Checked again.\n[drift 5]\na self-contradiction"),
+                   user(), assistant("claude-opus-5-5", 110000, text="later turn, no marker"), user())
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+
+    def test_drift_below_5_prints_nothing(self):
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 4]\nswitching to tested paths"))
+        self.assertEqual(self.run_meter(), "")
+
+    def test_the_latest_marker_wins(self):
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 5]"), user(),
+                   assistant("claude-opus-5-5", 100000, text="[drift 4]\nthen\n[drift 3]"))
+        self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 4]\nthen\n[drift 6]"))
+        self.assertIn("drift count 6 since", self.run_meter())
+
+    def test_only_a_main_thread_reply_line_counts(self):
+        thinking = assistant("claude-opus-5-5", 100000)
+        thinking["message"]["content"] = [{"type": "thinking", "thinking": "[drift 9]"}]
+        for entries in ([assistant("claude-opus-5-5", 100000, text="the marker looks like `[drift 5]`")],
+                        [assistant("claude-opus-5-5", 100000, text="not at a line start: [drift 5]")],
+                        [assistant("claude-opus-5-5", 100000, text="[drift 5]", sidechain=True)],
+                        [user("[drift 5]")],
+                        [thinking]):
+            with self.subTest(entries=entries):
+                self.write(*entries)
+                self.assertEqual(self.run_meter(), "")
+
+    def test_a_formatted_marker_counts(self):
+        for text in ("`[drift 5]`", "**[drift 5]**", "- [drift 5]", "   [drift 5]", "* [drift 5]", "1. [drift 5]",
+                     "## [drift 5]", "_[drift 5]_", "- `[drift 5]`  ", "[Drift 5]", "[drift: 5]", "[drift5]",
+                     "[drift 5/5]", "Checked.\r\n[drift 5]\r\n"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+
+    def test_a_marker_in_a_fenced_block_or_a_quote_does_not_count(self):
+        for text in ("Example:\n```\n[drift 5]\n```", "~~~text\n[drift 5]\n~~~", "  ```md\n  [drift 5]\n  ```",
+                     "> [drift 5]", "The marker is [drift 5], written at a line start.",
+                     # From the re-check: nested fences, and a fence line with an info string inside a fence.
+                     "````md\n```\n[drift 5]\n```\n````", "```\n```python\n[drift 5]\n```",
+                     "~~~~\n~~~\n[drift 5]\n~~~\n~~~~", "    [drift 5]"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-opus-5-5", 100000, text="```\n[drift 9]\n```\n[drift 5]"))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)   # after the fence closes, a marker counts
+
+    def test_a_line_with_other_words_is_not_a_marker(self):
+        # The re-check's P2-1: an example in a bullet, a sentence, a link or a table must not count.
+        for text in ("Fixed:\n- `[drift 5]` in inline code now counts", "[drift 5] is the marker I would write",
+                     "[drift 5](https://example.com)", "[drift 5] | a table cell", "**[drift 5]** a wrong number",
+                     "[drift 5] a self-contradiction"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), "")
+        # A bulleted list of the rule's thresholds after a real 6 does not hide it.
+        self.write(assistant("claude-opus-5-5", 100000,
+                             text="[drift 6]\nThe thresholds:\n- `[drift 3]`: switch method\n- `[drift 5]`: stop"))
+        self.assertIn("drift count 6 since", self.run_meter())
+
+    def test_one_trailing_punctuation_mark_is_allowed(self):
+        for text in ("[drift 5].", "**[drift 5]**.", "[drift 5]!", "`[drift 5]`:", "- [drift 5];"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+        for text in ("[drift 5]..", "[drift 5]. Re-derived a count.", "[drift 5] — re-derived a count"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), "")
+
+    def test_a_bullet_holding_only_a_marker_counts(self):
+        # As the rule says: only a bullet with other words on it is a safe place for an example.
+        self.write(assistant("claude-opus-5-5", 100000, text="- [drift 3]\n- [drift 5]"))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+
+    def test_inline_triple_backticks_do_not_open_a_fence(self):
+        self.write(assistant("claude-opus-5-5", 100000, text="```x``` is inline code\n[drift 5]"))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+
+    def test_a_marker_far_behind_the_last_turn_is_found_and_a_boundary_still_stops_it(self):
+        filler = assistant("claude-opus-5-5", 100000, text="z" * 4000)
+        boundary = {"type": "system", "subtype": "compact_boundary", "isSidechain": False}
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 5]"), *([filler, user()] * 500))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 5]"), *([filler, user()] * 250), boundary,
+                   *([filler, user()] * 250))
+        self.assertEqual(self.run_meter(), "")
+
+    def test_a_compaction_starts_the_count_again(self):
+        boundary = {"type": "system", "subtype": "compact_boundary", "isSidechain": False,
+                    "content": "Conversation compacted", "compactMetadata": {"trigger": "manual"}}
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 7]"), boundary, user(),
+                   assistant("claude-opus-5-5", 50000, text="fresh"))
+        self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 7]"), boundary,
+                   assistant("claude-opus-5-5", 50000, text="[drift 5]"))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+
+    def test_drift_needs_no_known_model_and_comes_after_the_context_line(self):
+        self.write(assistant("my-gateway-model", 990000, text="[drift 5]"))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+        self.write(assistant("claude-opus-5-5", 640000, text="[drift 5]"))
+        out = self.run_meter().splitlines(keepends=True)
+        self.assertEqual(len(out), 2)
+        self.assertIn("context 64% used", out[0])
+        self.assertEqual(out[1], self.DRIFT_LINE)
+
+    def test_off_silences_the_drift_line_too(self):
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 8]"))
+        self.warn("off")
+        self.assertEqual(self.run_meter(), "")
 
     def test_an_unknown_model_prints_nothing(self):
         for model in ("my-gateway-model", "claude-haiku-9-9", "gpt-x"):
