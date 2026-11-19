@@ -277,6 +277,31 @@ class Meter(unittest.TestCase):
                 self.write(*entries)
                 self.assertEqual(self.run_meter(), "")
 
+    def test_a_formatted_marker_counts(self):
+        for text in ("`[drift 5]`", "**[drift 5]** a wrong number", "- [drift 5]", "  [drift 5]", "* [drift 5]",
+                     "[Drift 5]", "[drift: 5]", "[drift 5/5]", "Checked.\r\n[drift 5]\r\n"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+
+    def test_a_marker_in_a_fenced_block_or_a_quote_does_not_count(self):
+        for text in ("Example:\n```\n[drift 5]\n```", "~~~text\n[drift 5]\n~~~", "  ```md\n  [drift 5]\n  ```",
+                     "> [drift 5]", "The marker is [drift 5], written at a line start."):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), "")
+        self.write(assistant("claude-opus-5-5", 100000, text="```\n[drift 9]\n```\n[drift 5]"))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)   # after the fence closes, a marker counts
+
+    def test_a_marker_far_behind_the_last_turn_is_found_and_a_boundary_still_stops_it(self):
+        filler = assistant("claude-opus-5-5", 100000, text="z" * 4000)
+        boundary = {"type": "system", "subtype": "compact_boundary", "isSidechain": False}
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 5]"), *([filler, user()] * 500))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 5]"), *([filler, user()] * 250), boundary,
+                   *([filler, user()] * 250))
+        self.assertEqual(self.run_meter(), "")
+
     def test_a_compaction_starts_the_count_again(self):
         boundary = {"type": "system", "subtype": "compact_boundary", "isSidechain": False,
                     "content": "Conversation compacted", "compactMetadata": {"trigger": "manual"}}

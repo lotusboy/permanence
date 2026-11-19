@@ -15,10 +15,13 @@
 # both; "off" switches the meter off, drift line included. Any other value is ignored and the default is used.
 #
 # Drift (v1.14.0): the drift count is the agent's own (CLAUDE.md's rule), so no hook can count it. The
-# rule asks the agent to write a line "[drift N]" at the start of a line in its reply each time the count
-# rises. The meter finds the latest such line in a main-thread assistant message since the last
-# compaction. At 5 or more it prints a second line: recommend stopping, then compact. Read in the same
-# backward pass as the token count, within the same 8 MB.
+# rule asks the agent to write the marker "[drift N]" at the start of a line in its reply each time the
+# count rises, and in every reply once it is 5 or more (so it never falls out of the 8 MB read). The
+# meter finds the latest marker in a main-thread assistant message since the last compaction. Formatting
+# in front of it is allowed (spaces, a list dash, backticks, bold), and so are any letter case, a colon and
+# "5/5". A line inside a fenced code block never counts, so an example there is safe. At 5 or more the
+# meter prints a second line: recommend stopping, then compact. Read in the same backward pass as the
+# token count, within the same 8 MB.
 #
 # Window sizes: the table in the Python below, from Anthropic's docs (checked 2026-11-15):
 #   https://platform.claude.com/docs/en/about-claude/models/overview (context window per model)
@@ -186,12 +189,28 @@ def read_line(line):
     return model, sum(parts)
 
 
-DRIFT = re.compile(r"^\[drift (\d{1,3})\]", re.M)
+DRIFT = re.compile(r"[ \t]*(?:[-*+][ \t]+)?[`*_]*\[drift:?[ \t]*(\d{1,3})(?:/\d{1,3})?\]", re.I)
+
+
+def drift_in(text):
+    """The count in the last marker line of a reply's text, skipping fenced code blocks; None if none."""
+    found, fence = None, None
+    for line in text.splitlines():
+        mark = line.strip()[:3]
+        if mark in ("```", "~~~"):
+            fence = None if fence == mark else (fence or mark)
+            continue
+        if fence:
+            continue
+        m = DRIFT.match(line)
+        if m:
+            found = int(m.group(1))
+    return found
 
 
 def read_drift(line):
     """The count in the last "[drift N]" line of a main-thread assistant message's text; None otherwise."""
-    if b"[drift " not in line:
+    if b"[drift" not in line.lower():
         return None
     try:
         d = json.loads(line)
@@ -205,9 +224,9 @@ def read_drift(line):
     found = None
     for block in content:
         if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
-            counts = DRIFT.findall(block["text"])
-            if counts:
-                found = int(counts[-1])
+            count = drift_in(block["text"])
+            if count is not None:
+                found = count
     return found
 
 
@@ -225,7 +244,10 @@ def scan(path):
             done += n
             carry = lines.pop(0) if pos > 0 else b""   # may be cut; finished by the next chunk
             for line in reversed(lines):
-                got = read_line(line)
+                if turn is not None and b'"compact_boundary"' not in line:
+                    got = None   # the turn is known: only a boundary still matters here
+                else:
+                    got = read_line(line)
                 if got == "stop":
                     return turn, drift
                 if got and turn is None:

@@ -115,7 +115,7 @@ hook_has session-start.sh        && on "session-start hook — loads the right s
                                  || off "session-start hook — not wired"
 hook_has session-load.sh         && on "auto context-load on your first prompt (no need to say 'refer to Permanence')" \
                                  || off "auto context-load — not wired"
-# The meter's threshold, read the way context-meter.sh reads it: 1-100, "off", anything else is 60.
+# The meter's threshold, read the way context-meter.sh reads it: 1-100, "off", anything else is the default.
 CW="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.context-warn" 2>/dev/null | head -n1 | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
 case "$CW" in off|[1-9]|[1-9][0-9]|100) AT="${CW}% full" ;; *) AT="40% of a 1M window or 60% of a 200k one" ;; esac
 if ! hook_has runtime/context-meter.sh; then off "context meter — not wired"

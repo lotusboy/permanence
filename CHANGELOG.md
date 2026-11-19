@@ -22,12 +22,15 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 agent counted its own errors and, at 5, was to recommend stopping. No hook could see the count, so
 the stop depended on someone noticing. In one long session the count reached 12 at about 40% of a 1M
 window, and the meter, which spoke at 60%, never fired. Now the Claude Code rule asks the agent to
-write `[drift N]` at the start of a line in its reply each time the count rises. On every prompt
-the context meter finds the latest such line in a main-thread reply since the last compaction. At 5
-or more it prints its own line:
+write the marker `[drift N]` at the start of a line in its reply each time the count rises, and in
+every reply once it is 5 or more, so the marker never falls out of the meter's 8 MB read. On every
+prompt the context meter finds the latest marker in a main-thread reply since the last compaction.
+Formatting in front of the marker still counts: spaces, a list dash, backticks or bold, in any letter
+case, with or without a colon, or written as "5/5". At 5 or more the meter prints its own line:
 `[perma] drift count 5 this session: recommend stopping. At the next natural break, write back to the stream, if this workspace has one, then ask the owner to /compact.`
-A marker quoted mid-line, in a subagent's reply, in a user message or in thinking does not count. A
-compaction starts the count again from zero. The marker is read in the same backward pass as the
+A marker mid-sentence, in a `>` quote, inside a fenced code block, in a subagent's reply, in a user
+message or in thinking does not count, so the rule can show the marker as an example there. To
+correct a wrong count, the agent writes the right one. A compaction starts the count again from zero. The marker is read in the same backward pass as the
 token count, within the same 8 MB, and needs no file, no session id and no known model. `off` in
 `runtime/.context-warn` silences this line too. The other tools' instruction blocks keep the drift
 rule without the marker, because no hook there reads it.
@@ -37,7 +40,15 @@ above 500k (a 1M model: about 400k tokens) and stays 60% of a smaller one (a 200
 The window is the smaller of the model's window and your auto-compact window, as before. A number in
 `runtime/.context-warn` still overrides both. `/perma-help` names the new defaults.
 
-**Tested:** 28 context-meter tests, 7 of them new. The two threshold tests were rewritten for the new
+**Faster after the turn is found.** Once the meter has the last turn's count, it parses only a line
+that could be a compaction boundary or hold a marker. On 9 MB of small replies that keeps a prompt
+at about 50 ms.
+
+**Reviewed before release** (one adversarial pass): no ANDON. Its P1 (a formatted marker was ignored)
+and two of its P2 (an example marker counted; a count of 5 fell out of the 8 MB read) are fixed as
+above; a stale SPEC line is corrected.
+
+**Tested:** 31 context-meter tests, 10 of them new. The two threshold tests were rewritten for the new
 defaults. Each new test that expects a line fails on v1.13.4's meter.
 
 ## [1.13.4] — a v1.13.3 test no longer fails inside a real install
