@@ -15,13 +15,15 @@
 # both; "off" switches the meter off, drift line included. Any other value is ignored and the default is used.
 #
 # Drift (v1.14.0): the drift count is the agent's own (CLAUDE.md's rule), so no hook can count it. The
-# rule asks the agent to write the marker "[drift N]" at the start of a line in its reply each time the
-# count rises, and in every reply once it is 5 or more (so it never falls out of the 8 MB read). The
-# meter finds the latest marker in a main-thread assistant message since the last compaction. Formatting
-# in front of it is allowed (spaces, a list dash, backticks, bold), and so are any letter case, a colon and
-# "5/5". A line inside a fenced code block never counts, so an example there is safe. At 5 or more the
-# meter prints a second line: recommend stopping, then compact. Read in the same backward pass as the
-# token count, within the same 8 MB.
+# rule asks the agent to write the marker "[drift N]" on a line of its own each time the count rises, and
+# in every reply once it is 5 or more (so it stays inside the 8 MB read). A marker line holds the marker
+# and nothing else: formatting around it is allowed (up to 3 spaces, a list mark, a heading mark,
+# backticks, stars or underscores), and so are any letter case, a colon and "5/5". A line with any other
+# words on it is not a marker, so an example in a sentence, a bullet or a table never counts. Nor does a
+# line inside a fenced code block (CommonMark fences: a closing fence is the same character, at least as
+# long as the opening one, with nothing after it). The meter finds the latest marker line in a
+# main-thread assistant message since the last compaction. At 5 or more it prints a second line:
+# recommend stopping, then compact. Read in the same backward pass as the token count, within the same 8 MB.
 #
 # Window sizes: the table in the Python below, from Anthropic's docs (checked 2026-11-15):
 #   https://platform.claude.com/docs/en/about-claude/models/overview (context window per model)
@@ -50,7 +52,9 @@ command -v python3 >/dev/null 2>&1 || exit 0
 WARN="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.context-warn" 2>/dev/null | head -n1 | tr -d '[:space:]')"
 
 # The program is passed with -c, so the hook's JSON stays on stdin for it to read.
-METER=$(cat <<'PY'
+# Read with `read`, not $(cat <<...): bash 3.2 (macOS) scans a $( ) body for quotes and backticks and
+# can fail on the Python's own. read -d '' stops at end of input and returns 1 there, hence || true.
+IFS= read -r -d '' METER <<'PY' || true
 import json, os, re, sys
 
 CHUNK, LIMIT = 1 << 20, 8 << 20   # read backwards 1 MB at a time, 8 MB at most
@@ -189,20 +193,24 @@ def read_line(line):
     return model, sum(parts)
 
 
-DRIFT = re.compile(r"[ \t]*(?:[-*+][ \t]+)?[`*_]*\[drift:?[ \t]*(\d{1,3})(?:/\d{1,3})?\]", re.I)
+DRIFT = re.compile(r" {0,3}(?:(?:[-*+]|\d{1,3}[.)])[ \t]+)?(?:#{1,6}[ \t]+)?[`*_]*"
+                   r"\[drift:?[ \t]*(\d{1,3})(?:/\d{1,3})?\][`*_]*[ \t]*", re.I)
+FENCE = re.compile(r"[ \t]*(`{3,}|~{3,})(.*)")
 
 
 def drift_in(text):
-    """The count in the last marker line of a reply's text, skipping fenced code blocks; None if none."""
+    """The count in the last marker line of a reply's text, outside fenced code blocks; None if none."""
     found, fence = None, None
     for line in text.splitlines():
-        mark = line.strip()[:3]
-        if mark in ("```", "~~~"):
-            fence = None if fence == mark else (fence or mark)
-            continue
+        f = FENCE.fullmatch(line)
         if fence:
+            if f and f.group(1)[0] == fence[0] and len(f.group(1)) >= len(fence) and not f.group(2).strip():
+                fence = None   # the closing fence
             continue
-        m = DRIFT.match(line)
+        if f and not (f.group(1)[0] == "`" and "`" in f.group(2)):   # backticks after ``` are inline code
+            fence = f.group(1)
+            continue
+        m = DRIFT.fullmatch(line)
         if m:
             found = int(m.group(1))
     return found
@@ -210,7 +218,7 @@ def drift_in(text):
 
 def read_drift(line):
     """The count in the last "[drift N]" line of a main-thread assistant message's text; None otherwise."""
-    if b"[drift" not in line.lower():
+    if b'"assistant"' not in line or b"[drift" not in line.lower():
         return None
     try:
         d = json.loads(line)
@@ -299,6 +307,5 @@ try:
 except BaseException:
     pass
 PY
-)
 python3 -c "$METER" "$WARN" 2>/dev/null
 exit 0
