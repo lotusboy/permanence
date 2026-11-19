@@ -10,18 +10,20 @@
 # registered workspace (it exits early otherwise). The meter must run on every prompt, in every
 # workspace. Kept apart, each one stays simple and a fault in one cannot silence the other.
 #
-# Threshold: by default 40% of a window above 500k (a 1M model: about 400k) and 60% of a smaller one (a
-# 200k model: about 120k). runtime/.context-warn (one line: a whole number 1-100, the percent) overrides
-# both; "off" switches the meter off, drift line included. Any other value is ignored and the default is used.
+# Threshold: by default 60% of the window or 400k tokens, whichever comes first (a 200k model: 120k; a 1M
+# model: 400k). It never comes later as the window shrinks, nor earlier as it grows. runtime/.context-warn
+# (one line: a whole number 1-100, the percent) replaces it with that percent of the window; "off" switches
+# the meter off, drift line included. Any other value is ignored and the default is used.
 #
 # Drift (v1.14.0): the drift count is the agent's own (CLAUDE.md's rule), so no hook can count it. The
 # rule asks the agent to write the marker "[drift N]" on a line of its own each time the count rises, and
 # in every reply once it is 5 or more (so it stays inside the 8 MB read). A marker line holds the marker
 # and nothing else: formatting around it is allowed (up to 3 spaces, a list mark, a heading mark,
-# backticks, stars or underscores), and so are any letter case, a colon and "5/5". A line with any other
-# words on it is not a marker, so an example in a sentence, a bullet or a table never counts. Nor does a
-# line inside a fenced code block (CommonMark fences: a closing fence is the same character, at least as
-# long as the opening one, with nothing after it). The meter finds the latest marker line in a
+# backticks, stars or underscores), and so are any letter case, a colon, "5/5" and one trailing . : ; or !.
+# A line with any other words on it is not a marker, so an example in a sentence, in a bullet with other
+# words, or in a table never counts; a bullet holding only a marker does count. Nor does a line inside a
+# fenced code block (CommonMark-style fences, at any indent: a closing fence is the same character, at
+# least as long as the opening one, with nothing after it). The meter finds the latest marker line in a
 # main-thread assistant message since the last compaction. At 5 or more it prints a second line:
 # recommend stopping, then compact. Read in the same backward pass as the token count, within the same 8 MB.
 #
@@ -194,7 +196,7 @@ def read_line(line):
 
 
 DRIFT = re.compile(r" {0,3}(?:(?:[-*+]|\d{1,3}[.)])[ \t]+)?(?:#{1,6}[ \t]+)?[`*_]*"
-                   r"\[drift:?[ \t]*(\d{1,3})(?:/\d{1,3})?\][`*_]*[ \t]*", re.I)
+                   r"\[drift:?[ \t]*(\d{1,3})(?:/\d{1,3})?\][`*_]*[.:;!]?[ \t]*", re.I)
 FENCE = re.compile(r"[ \t]*(`{3,}|~{3,})(.*)")
 
 
@@ -278,9 +280,13 @@ def main():
         return
     found, drift = scan(path)
     if found:
-        context_line(found, threshold, hook)
+        try:   # its own try: a fault here must not drop the drift line
+            context_line(found, threshold, hook)
+        except Exception:
+            pass
     if drift is not None and drift >= 5:
-        print(f"[perma] drift count {drift} this session: recommend stopping. At the next natural break, "
+        print(f"[perma] drift count {drift} since this session's start or last compaction: recommend stopping. "
+              "At the next natural break, "
               "write back to the stream, if this workspace has one, then ask the owner to /compact.")
 
 
@@ -294,9 +300,12 @@ def context_line(found, threshold, hook):
     acw = auto_compact(model, files)
     if acw and acw < window:
         window, label = acw, f"{acw // 1000}k, the auto-compact window"
+    if used > window:
+        return
     if threshold is None:
-        threshold = 40 if window > 500000 else 60
-    if used > window or used * 100 < threshold * window:
+        if used < min(window * 60 // 100, 400000):   # 60% of the window, at most 400k
+            return
+    elif used * 100 < threshold * window:
         return
     print(f"[perma] context {used * 100 // window}% used ({used // 1000}k of {label}): at the next "
           "natural break, write back to the stream, if this workspace has one, then ask the owner to /compact.")

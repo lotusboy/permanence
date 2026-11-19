@@ -88,7 +88,7 @@ flowchart LR
   2. **UserPromptSubmit** (`session-load.sh`) fires on your first message — this is the *reliable* trigger. A passive SessionStart note is easy for a model to skim past; this one forces the instruction onto the very message Claude is about to answer, so it actually reads `PROJECT.md` / `QUESTIONS.md` / the `LOG.md` tail before responding.
   3. **Two more hooks look after a long session.** **UserPromptSubmit** also runs the context meter
      (`context-meter.sh`): on every prompt it reads how full the context was on the last turn, and from
-     40% of a 1M window (60% of a 200k one) it puts one line in front of Claude — write back to the
+     60% of the window or 400k tokens, whichever comes first, it puts one line in front of Claude — write back to the
      stream at the next natural break, then ask you to `/compact`. It says the same when Claude's own
      drift count, which it writes as `[drift N]`, reaches 5. **PreCompact** (`pre-compact.sh`) logs each compaction to
      `~/.claude/compaction-log.txt` and gives the compaction summary standing instructions.

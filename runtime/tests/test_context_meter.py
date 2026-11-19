@@ -218,7 +218,21 @@ class Meter(unittest.TestCase):
         self.assertEqual(self.run_meter(), "")
         self.write(assistant("claude-haiku-4-5", 120000))
         self.assertIn("60% used (120k of 200k)", self.run_meter())
-        five_hundred = dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW="500k")   # not above 500k: 60%
+        # 60% of the window or 400k, whichever comes first: a larger window never speaks earlier.
+        first = []
+        for acw in ("200k", "400k", "500k", "501k", "600k", "666k", "667k", "800k", "1M"):
+            env = dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW=acw)
+            lo, hi = 1, 1000000 if acw == "1M" else int(acw[:-1]) * 1000   # silent above the window
+            while lo < hi:
+                mid = (lo + hi) // 2
+                self.write(assistant("claude-opus-5-5", mid))
+                if self.run_meter(env=env):
+                    hi = mid
+                else:
+                    lo = mid + 1
+            first.append(lo)
+        self.assertEqual(first, [120000, 240000, 300000, 300600, 360000, 399600, 400000, 400000, 400000])
+        five_hundred = dict(self.env, CLAUDE_CODE_AUTO_COMPACT_WINDOW="500k")
         self.write(assistant("claude-opus-5-5", 299999))
         self.assertEqual(self.run_meter(env=five_hundred), "")
         self.write(assistant("claude-opus-5-5", 300000))
@@ -246,8 +260,8 @@ class Meter(unittest.TestCase):
                 self.write(assistant("claude-opus-5-5", 410000))
                 self.assertIn("41% used", self.run_meter())
 
-    DRIFT_LINE = ("[perma] drift count 5 this session: recommend stopping. At the next natural break, "
-                  "write back to the stream, if this workspace has one, then ask the owner to /compact.\n")
+    DRIFT_LINE = ("[perma] drift count 5 since this session's start or last compaction: recommend stopping. "
+                  "At the next natural break, write back to the stream, if this workspace has one, then ask the owner to /compact.\n")
 
     def test_drift_at_5_prints_its_own_line(self):
         self.write(assistant("claude-opus-5-5", 100000, text="Checked again.\n[drift 5]\na self-contradiction"),
@@ -255,7 +269,7 @@ class Meter(unittest.TestCase):
         self.assertEqual(self.run_meter(), self.DRIFT_LINE)
 
     def test_drift_below_5_prints_nothing(self):
-        self.write(assistant("claude-opus-5-5", 100000, text="[drift 3] switching to tested paths"))
+        self.write(assistant("claude-opus-5-5", 100000, text="[drift 4]\nswitching to tested paths"))
         self.assertEqual(self.run_meter(), "")
 
     def test_the_latest_marker_wins(self):
@@ -263,7 +277,7 @@ class Meter(unittest.TestCase):
                    assistant("claude-opus-5-5", 100000, text="[drift 4]\nthen\n[drift 3]"))
         self.assertEqual(self.run_meter(), "")
         self.write(assistant("claude-opus-5-5", 100000, text="[drift 4]\nthen\n[drift 6]"))
-        self.assertIn("drift count 6 this session", self.run_meter())
+        self.assertIn("drift count 6 since", self.run_meter())
 
     def test_only_a_main_thread_reply_line_counts(self):
         thinking = assistant("claude-opus-5-5", 100000)
@@ -308,7 +322,22 @@ class Meter(unittest.TestCase):
         # A bulleted list of the rule's thresholds after a real 6 does not hide it.
         self.write(assistant("claude-opus-5-5", 100000,
                              text="[drift 6]\nThe thresholds:\n- `[drift 3]`: switch method\n- `[drift 5]`: stop"))
-        self.assertIn("drift count 6 this session", self.run_meter())
+        self.assertIn("drift count 6 since", self.run_meter())
+
+    def test_one_trailing_punctuation_mark_is_allowed(self):
+        for text in ("[drift 5].", "**[drift 5]**.", "[drift 5]!", "`[drift 5]`:", "- [drift 5];"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), self.DRIFT_LINE)
+        for text in ("[drift 5]..", "[drift 5]. Re-derived a count.", "[drift 5] — re-derived a count"):
+            with self.subTest(text=text):
+                self.write(assistant("claude-opus-5-5", 100000, text=text))
+                self.assertEqual(self.run_meter(), "")
+
+    def test_a_bullet_holding_only_a_marker_counts(self):
+        # As the rule says: only a bullet with other words on it is a safe place for an example.
+        self.write(assistant("claude-opus-5-5", 100000, text="- [drift 3]\n- [drift 5]"))
+        self.assertEqual(self.run_meter(), self.DRIFT_LINE)
 
     def test_inline_triple_backticks_do_not_open_a_fence(self):
         self.write(assistant("claude-opus-5-5", 100000, text="```x``` is inline code\n[drift 5]"))
