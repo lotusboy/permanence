@@ -28,7 +28,7 @@ class StaleLoops(unittest.TestCase):
                     "PERMA_TODAY": TODAY}
         self.git("init", "-q")
         self.git("config", "user.name", "Test")
-        self.git("config", "user.email", "test@example.invalid")
+        self.git("config", "user.email", "ci@example.com")
         self.git("config", "commit.gpgsign", "false")
         self.git("config", "core.hooksPath", "/dev/null")
 
