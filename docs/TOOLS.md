@@ -40,6 +40,7 @@ comment is its full reference.
 | `context-meter.sh` | Every-prompt hook: from 60% of the window or 400k tokens, whichever comes first (`runtime/.context-warn` changes it), or at a drift count of 5, says to write back and compact. |
 | `pre-compact.sh` | Compaction hook: logs each compaction, and gives the summary standing instructions (`runtime/.compact-instructions` replaces them). |
 | `resolve-stream.sh`, `resolve-path.sh` | Look up a folder's stream, or a stream's folder, in `_meta/REGISTRY.md`. |
+| `stale-loops.sh` | The brief's "Stale loops" section: open questions and board rows more than 14 days old or past their `by:` date, and LOG lines with a marker phrase. `stale-loops.sh <stream>` gives one line for one stream. `runtime/.stale-loops` changes the 14 days, or says `off`. |
 | `list-streams.sh` | The one list of streams: every folder with a `PROJECT.md`, `perma-meta` first. `--count` counts them; `--check` names a registered stream with no `PROJECT.md`. |
 | `generate-contents.sh` | Rebuilds the `CONTENTS.md` inventories. |
 | `perma-help.sh` | What `/perma-help` prints. |

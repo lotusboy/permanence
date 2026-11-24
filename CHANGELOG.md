@@ -16,6 +16,44 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.15.0] — stale open loops come back in the morning brief
+
+**New: `/perma-brief` has a "Stale loops" section.** Permanence wrote loose ends down accurately, but
+nothing brought an old one back. The brief and `/perma-startup` show current state and next actions,
+so a loop with no next action never appeared in either. In one real stream a supplier document sat
+"not yet read" for 8 weeks, and a question had no owner for 7, until an outside question needed both.
+A new script, `runtime/stale-loops.sh`, lists:
+
+- open questions in `QUESTIONS.md` (table rows, bullets, or a heading that is itself a question) and
+  board rows in the Now, Blocked and Parked sections of `WIP.md`, when they are more than 14 days old;
+- any of those, and any LOG line, carrying a `by: YYYY-MM-DD` date that has passed;
+- LOG paragraphs that say "not yet read", "to confirm", "unconfirmed", "probably overtaken" or "no
+  owner", when their entry is more than 14 days old.
+
+An item marked `[CLOSED` is never listed. The brief shows at most 10, and at most 3 from one stream,
+oldest first, then a count of the rest, then three choices for each: close it, give it an owner and a
+date (`owner: X, by: YYYY-MM-DD`), or park it on purpose (a `by:` review date and the reason). The brief
+changes no file; the owner chooses in the session that follows. `/perma-startup` gives one line for its
+own stream: the count and the oldest item.
+
+**How age is found.** A LOG line is as old as its entry's date. A question or a board row is as old
+as the commit that wrote its oldest line (`git blame -w -M`, so a row moved inside its file keeps its
+age). Every way this can fail gives a shorter list, never a wrong one: an item whose every line was
+rewritten looks new, uncommitted lines are 0 days old, and an install with short history caps every
+age at its first commit. On one real install, whose largest board file has nearly 900 commits, a run takes 5 to 9 seconds.
+
+**New, optional: `owner:` and `by:` on an open item.** Nothing requires them, and no stream needs
+changing. With a `by:` date the script checks the date instead of the age.
+
+**One edit to an old LOG entry is now allowed** (SPEC.md invariant 2): adding `[CLOSED YYYY-MM-DD: …]`
+to a paragraph that left a loop open, once it is closed. Without it, a matched LOG line would come back
+every morning.
+
+**The setting.** `runtime/.stale-loops` holds a whole number of days (1-3650) or `off`. Anything else
+means 14. `/perma-help` shows the value in use.
+
+No migration notes: nothing for your streams to do.
+
 ## [1.14.0] — the drift count reaches the context meter, and a lower line on 1M windows
 
 **New: the drift count is a signal the meter reads.** v1.13.0's drift count was a rule only: the
