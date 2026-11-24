@@ -16,6 +16,7 @@ The morning bookend to `/perma-shutdown`, scoped to *this* project only — not 
    - `PROJECT.md` — the "Current state" / "where things stand" block, and its `Last updated` date.
    - `QUESTIONS.md` — only the still-open items with an actual next action for me (skip ones purely waiting on someone else).
    - The **tail** of `LOG.md` — last few entries only, to catch anything since PROJECT.md was last touched.
+   - **Stale loops:** run `~/permanence/runtime/stale-loops.sh "<stream>"` with this stream's name. It prints one line (how many open loops in this stream are older than the stale age, 14 days unless `runtime/.stale-loops` says otherwise, or past their `by:` date, and the oldest one), or nothing.
 3. **Staleness check** — same as `/perma-brief`: if `LOG.md`'s most recent entry is dated after `PROJECT.md`'s `Last updated` header, flag it (the headline may be behind).
 4. **Cross-check the real repo, not just Permanence.**
    - **Resolved via cwd or a given path:** that path *is* the real project repo — `git status` and recent commits (`git log --pretty=format:"%h %s" -10`) there.
@@ -27,6 +28,7 @@ The morning bookend to `/perma-shutdown`, scoped to *this* project only — not 
    - 📍 **Where you left off** — one or two lines, concrete (file/ticket/resume point from step 4), not a history recap.
    - 🎯 **Next task options** — 2, at most 3. Each one line: what it is, why it's a candidate. If one is obviously the right next move, just say so plainly instead of forcing a choice between equals.
    - 🤝 Only if relevant: anything that unblocked overnight (a handoff or open question now answered).
+   - 🕸️ Only if the stale-loops line printed: that line, word for word.
 
 ## Guardrails
 

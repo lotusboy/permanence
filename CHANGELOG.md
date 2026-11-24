@@ -16,6 +16,57 @@ streams, never applied without your say-so (SPEC.md invariant 5).
 
 ## [Unreleased]
 
+## [1.15.0] — stale open loops come back in the morning brief
+
+**New: `/perma-brief` has a "Stale loops" section.** Permanence wrote loose ends down accurately, but
+nothing brought an old one back. The brief and `/perma-startup` show current state and next actions,
+so a loop with no next action never appeared in either. In one real stream a supplier document sat
+"not yet read" for 8 weeks, and a question had no owner for 7, until an outside question needed both.
+A new script, `runtime/stale-loops.sh`, lists:
+
+- open questions in `QUESTIONS.md` (table rows, bullets, numbered items, or a heading that is itself a
+  question) and board rows in the Now, Blocked and Parked sections of `WIP.md`, when they are more than
+  14 days old;
+- any of those, and any LOG line, carrying a `by: YYYY-MM-DD` date that has passed;
+- LOG paragraphs that say "not yet read", "still unconfirmed", "probably overtaken" or "no owner", or
+  a name followed by "to confirm" ("Sam to confirm"), when their entry is more than 14 days old. A plain
+  "to confirm" ("re-ran the suite to confirm nothing moved") is finished work, and a bare "unconfirmed"
+  is usually a description, so neither counts. On a real install this kept 3 real loops of 13 phrase
+  matches and dropped 7 that were not loops.
+
+An item is closed by a `[CLOSED` mark in its own text (a mark in one of its sub-bullets closes only
+that sub-bullet), a done task box `- [x]`, or text that opens struck through. A section is closed
+when its heading starts with "Closed" or "Answered", and its sub-headings stay closed. Text in an HTML comment or a fenced code
+block is never read. The brief shows at most 10, and at most 3 from one stream,
+oldest first, then a count of the rest, then three choices for each: close it, give it an owner and a
+date (`owner: X, by: YYYY-MM-DD`), or park it on purpose (a `by:` review date and the reason). The brief
+changes no file; the owner chooses in the session that follows. `/perma-startup` gives one line for its
+own stream: the count and the oldest item.
+
+**How age is found.** A LOG line is as old as its entry's date. A question is as old as the committer
+date of its oldest line: how long it has been open. A board row is as old as its newest line: how long
+since anyone touched it. Both come from `git blame -w -M`, so a block of rows moved inside its file
+keeps its age. The committer date changes on an amend, a rebase or a cherry-pick, so an age can come
+out too young, never too old. It comes out too young when every line of an item was rewritten, when it
+moved to another file, when a short row moved on its own, for uncommitted lines (0 days), and on an
+install with short history. The marker phrases are matched as words, so a LOG line that quotes one, or
+that says it was done in other words, is still listed: close it with a mark. On one real install, whose largest board file has nearly 900 commits, a run takes 5 to 9 seconds.
+
+**New, optional: `owner:` and `by:` on an open item.** Nothing requires them, and no stream needs
+changing. With a `by:` date the script checks the date instead of the age.
+
+**One edit to an old LOG entry is now allowed** (SPEC.md invariant 2): adding `[CLOSED YYYY-MM-DD: …]`
+to a paragraph that left a loop open, once it is closed. Without it, a matched LOG line would come back
+every morning.
+
+**Never silent by mistake.** The script prints nothing only when it is switched off. If `python3` is
+missing, or the check fails, it prints one line saying the loops were not checked.
+
+**The setting.** `runtime/.stale-loops` holds a whole number of days (1-3650) or `off`. Anything else
+means 14. `/perma-help` shows the value in use.
+
+No migration notes: nothing for your streams to do.
+
 ## [1.14.0] — the drift count reaches the context meter, and a lower line on 1M windows
 
 **New: the drift count is a signal the meter reads.** v1.13.0's drift count was a rule only: the

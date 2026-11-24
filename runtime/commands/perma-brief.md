@@ -22,6 +22,7 @@ Produce my morning briefing from Permanence at `~/permanence`. This is the first
    - most recent line is `run complete` → genuinely caught up, say so;
    - `ERROR` / `SKIPPED` / no line for last night → **the nightly did not produce a report**; report that plainly, with the reason from the log. A run that exits 0 but writes no report is logged as an `ERROR` by design, precisely so this case cannot read as healthy.
    - log missing entirely → the nightly has never run; say that rather than implying all is well.
+7. **Stale loops.** Run `~/permanence/runtime/stale-loops.sh`. It lists open loops nobody has come back to: open questions and board rows (Now, Blocked, Parked) more than 14 days old, or past their `by:` date, and LOG lines saying "not yet read", "still unconfirmed", "probably overtaken" or "no owner", or a name followed by "to confirm" ("Sam to confirm"). At most 10, and at most 3 from one stream, oldest first. It can take a few seconds on a long history. Print its output as it is, under **Stale loops**. It prints nothing when the owner has switched it off in `runtime/.stale-loops`; then omit the section. Do not answer the choices yourself, and change no file: the owner chooses for each item, in the session that follows.
 
 ## Output shape
 
@@ -32,6 +33,7 @@ Keep it tight — a screen or so, scannable, no preamble.
 - **Needs me**: open questions or decisions actually waiting on me — not the full backlog. Omit the section if there's nothing.
 - **Recently moved**: 2–3 bullets on what changed most recently (from the git timeline + LOG tails).
 - **Staleness**: any `PROJECT.md` files behind their stream's LOG (per step 4). Omit if everything's fresh.
+- **Stale loops**: the output of step 7, word for word (one line when nothing is stale). Omit only when it printed nothing.
 - **Consolidation**: unreviewed reports (name + date, suggest `/perma-consolidate-review`) and any failed/skipped nightly run (per step 6). Omit if none and the last run was clean.
 
 ## Voice

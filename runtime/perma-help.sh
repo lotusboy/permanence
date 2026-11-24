@@ -122,6 +122,12 @@ if ! hook_has runtime/context-meter.sh; then off "context meter — not wired"
 elif [ "$CW" = "off" ]; then off "context meter — switched off in runtime/.context-warn"
 else on "context meter — at ${AT}, or a drift count of 5, says to write back and then /compact (runtime/.context-warn changes it)"
 fi
+# Stale loops, read the way stale-loops.sh reads it: a whole number 1-3650, "off", anything else is 14.
+SL="$(grep -v '^[[:space:]]*$' "$PERMA/runtime/.stale-loops" 2>/dev/null | head -n1 | tr -d '[:space:]' | tr 'A-Z' 'a-z')"
+case "$SL" in off) off "stale loops in /perma-brief — switched off in runtime/.stale-loops" ;;
+  *) case "$SL" in ''|*[!0-9]*|?????*) SD=14 ;; *) SD=$((10#$SL)); { [ "$SD" -ge 1 ] && [ "$SD" -le 3650 ]; } || SD=14 ;; esac
+     on "stale loops in /perma-brief — open items more than ${SD} days old or past their by: date (runtime/.stale-loops changes it)" ;;
+esac
 hook_has runtime/pre-compact.sh  && on "pre-compact hook — logs each compaction and steers its summary (runtime/.compact-instructions replaces the text)" \
                                  || off "pre-compact hook — not wired"
 if hook_has events-listen.sh || hook_has stop-listen.sh; then

@@ -1,0 +1,424 @@
+#!/usr/bin/env bash
+# stale-loops.sh — open loops nobody has come back to (v1.15.0).
+# ---------------------------------------------------------------------------------
+# Why: Permanence writes loose ends down accurately, but nothing brought an old one back. The brief and
+# the morning orientation show current state and next actions, so a loop with no next action never
+# appeared in either, and sat until an outside question happened to hit it. /perma-brief prints this
+# script's output as its "Stale loops" section; /perma-startup prints its one-line form for one stream.
+#
+# What is an open loop (every stream except perma-meta):
+#   - QUESTIONS.md: a table row, a top-level bullet, or a heading that is itself a question ("## Q — ...",
+#     "### Q12: ..."). Items under a heading that says "closed" or "answered" are not open. Nor is an item
+#     whose own text holds "[CLOSED" (a mark in one of its sub-bullets closes only that sub-bullet; a
+#     heading question is closed by a mark in its heading), a done task box "- [x]", an item whose text
+#     opens struck through ("~~...~~"), or the template's placeholder row. Bullets may be "-", "*", "+" or
+#     numbered ("1." or "1)"). Text inside an HTML comment is never read.
+#   - WIP.md: a top-level bullet in a section whose heading starts with Now, Blocked or Parked. A row that
+#     says only "Nothing." or "None." is skipped. Other sections (Done today, a handover, ...) are not read.
+#   - LOG.md: a paragraph or bullet, under a dated "## YYYY-MM-DD" heading, that holds one of the phrases
+#     "not yet read", "still unconfirmed", "probably overtaken" or "no owner" (any letter case, also across
+#     a line break), or a capitalised word mid-sentence followed by "to confirm" ("Sam to confirm"; not
+#     "re-ran to confirm", which is finished work), or a by: date. A paragraph holding "[CLOSED" is not open: closing one of these is the one
+#     edit allowed to an old LOG entry (SPEC.md invariant 2).
+#   Lines inside a fenced code block are never read (the v1.14.0 meter's rule: a closing fence is the same
+#     character, at least as long, with nothing after it; a backtick run with a backtick after it is inline
+#     code). A sub-heading stays inside its section, closed or board. A by: date or a [CLOSED mark counts
+#     only in the item's own lines, not in its sub-bullets.
+#
+# When is a loop stale:
+#   - An item that holds "by: YYYY-MM-DD" is stale once that date has passed, whatever its age (the latest
+#     by: date in the item counts). A future by: date means it is not stale.
+#   - Otherwise it is stale when it is more than N days old. N is 14, or the whole number (1-3650) on the
+#     first line of runtime/.stale-loops; "off" there silences this script. Any other value: 14.
+#   - Age: for a LOG paragraph, its entry's date (a "## YYYY-MM-DD" heading, or a dated heading at a
+#     deeper level). For a question, `git blame -w -M`: the committer date of the oldest of the item's
+#     lines (how long it has been open). For a board row, the newest of its lines (how long since anyone
+#     touched it) (one blame per file; a block of rows moved inside its file keeps its age, though a
+#     row shorter than about 20 characters moved on its own does not). The committer date, not the author
+#     date, because an amend, a rebase or a cherry-pick gives it the new date: an age can come out too
+#     young, never too old. Ways it comes out too young: an item whose every line was rewritten, or that
+#     moved to another file, looks new; uncommitted lines are 0 days old; an install with short git history
+#     caps every age at its first commit. A file git cannot blame gives no ages (a by: date still counts).
+#     Days are counted in the local timezone.
+#   "owner: X" is for the reader only. An item with an owner but no by: date is judged by its age.
+#
+# Output, oldest first (the number of days old, or the days past its by: date):
+#   stale-loops.sh           the brief's section: at most 10 items and at most 3 from one stream, then a
+#                            count of the rest per stream, then the owner's three choices. With nothing
+#                            stale, one line saying so.
+#   stale-loops.sh <stream>  one line for that stream: its count and its oldest item. Nothing when it has
+#                            none, or when the name is not a stream.
+# Read-only; changes no file. Always exits 0. Prints nothing when ~/permanence is missing, or when
+# runtime/.stale-loops says off. When python3 is missing, or the check fails, it says so in one line, so
+# a failure never looks like "switched off".
+# PERMA_TODAY=YYYY-MM-DD sets "today" (for tests).
+
+PERMA="${PERMA_DIR:-$HOME/permanence}"
+[ -d "$PERMA" ] || exit 0
+command -v python3 >/dev/null 2>&1 || { echo "Stale loops: not checked (python3 is missing)."; exit 0; }
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+python3 - "$PERMA" "$HERE/list-streams.sh" "${1:-}" <<'PY' 2>/dev/null
+import datetime as dt
+import os
+import re
+import subprocess
+import sys
+
+PERMA, LISTER, ONLY = sys.argv[1], sys.argv[2], sys.argv[3].strip().rstrip("/")
+SHOW_TOTAL, SHOW_PER_STREAM = 10, 3
+
+HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+BULLET = re.compile(r"^([-*+]|\d{1,9}[.)])\s+\S")
+MARK = re.compile(r"^\s*([-*+]|\d{1,9}[.)])\s+")
+SUB_ITEM = re.compile(r"^\s+([-*+]|\d{1,9}[.)])\s")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+Q_HEADING = re.compile(r"^Q\d*\s*[—–:-]|^Q\d+\b")
+CLOSED_SECTION = re.compile(r"^\W*(closed|answered)\b", re.I)
+WIP_SECTION = re.compile(r"^(now|blocked|parked)\b", re.I)
+NOTHING_ROW = re.compile(r"^(nothing|none)\b[^.]{0,30}\.?$", re.I)
+TABLE_SEP = re.compile(r"^\|?\s*:?-{3,}")
+PLACEHOLDER = re.compile(r"^<[^>]*>$")
+PHRASES = re.compile(r"\b(not\s+yet\s+read|still\s+unconfirmed|probably\s+overtaken|no\s+owner)\b", re.I)
+NAMED_CONFIRM = re.compile(r"\b[A-Z][a-z]+\s+to\s+confirm\b")  # "<name> to confirm", not "re-ran to confirm"
+BY = re.compile(r"\bby:\s*(\d{4}-\d{2}-\d{2})", re.I)
+LOG_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})\b")
+
+
+def setting():
+    try:
+        with open(os.path.join(PERMA, "runtime", ".stale-loops"), encoding="utf-8", errors="replace") as f:
+            first = next((ln for ln in f if ln.strip("\ufeff \t\r\n")), "")
+    except OSError:
+        return 14
+    v = "".join(first.replace("\ufeff", "").split()).lower()
+    if v == "off":
+        return None
+    if re.fullmatch(r"[0-9]{1,4}", v) and 1 <= int(v) <= 3650:
+        return int(v)
+    return 14
+
+
+def today():
+    try:
+        return dt.date.fromisoformat(os.environ.get("PERMA_TODAY", ""))
+    except ValueError:
+        return dt.date.today()
+
+
+def iso(s):
+    try:
+        return dt.date.fromisoformat(s)
+    except ValueError:
+        return None
+
+
+def read_lines(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return [ln.rstrip("\r\n").rstrip("\r") for ln in f]
+    except OSError:
+        return None
+
+
+def blame(rel):
+    """{line number: date} for a file under PERMA, from the commit that wrote each line."""
+    try:
+        out = subprocess.run(["git", "-C", PERMA, "blame", "-w", "-M", "--line-porcelain", "--", rel],
+                             capture_output=True, encoding="utf-8", errors="replace", timeout=60).stdout
+    except Exception:
+        return {}
+    dates, line_no, when = {}, None, None
+    for ln in out.splitlines():
+        m = re.match(r"^[0-9a-f]{40,64} \d+ (\d+)", ln)
+        if m:
+            line_no = int(m.group(1))
+        elif ln.startswith("committer-time "):
+            when = dt.date.fromtimestamp(int(ln.split()[1]))
+        elif ln.startswith("\t") and line_no is not None and when is not None:
+            dates[line_no] = when
+    return dates
+
+
+def short(text, words=10, chars=70):
+    t = re.sub(r"(\*\*|__|`)", "", text)
+    t = " ".join(t.split())
+    w = t.split(" ")
+    s = " ".join(w[:words])
+    if len(s) > chars:
+        s = s[:chars].rstrip()
+    return s + ("…" if s != t else "")
+
+
+def unfenced(lines):
+    """(line number, text) for each line outside a fenced code block, with HTML comments taken out."""
+    fence, comment = None, False
+    for i, ln in enumerate(lines, 1):
+        if comment:
+            if "-->" not in ln:
+                continue
+            ln, comment = ln.split("-->", 1)[1], False
+        else:
+            m = FENCE.match(ln)
+            if fence is None and m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                fence = m.group(1)  # opened; a backtick run with a backtick after it is inline code
+                continue
+            if fence is not None:
+                if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+                    fence = None  # closed: the same character, at least as long, nothing after it
+                continue
+        ln = re.sub(r"<!--.*?-->", "", ln)
+        if "<!--" in ln:
+            ln, comment = ln.split("<!--", 1)[0], True
+        yield i, ln
+
+
+def blocks(lines):
+    """Headings, top-level bullets with their continuation lines, table rows, and paragraphs, in order.
+    Each is (kind, heading level or None, [(line number, text), ...])."""
+    out, cur = [], None
+    gap = False
+    for i, ln in unfenced(lines):
+        h = HEADING.match(ln)
+        if h:
+            cur = None
+            out.append(("heading", len(h.group(1)), [(i, h.group(2))]))
+            continue
+        if not ln.strip():
+            gap = True
+            continue
+        if ln.lstrip().startswith("|") and not (cur is not None and cur[0] == "bullet" and ln[:1].isspace()):
+            cur = None
+            out.append(("row", None, [(i, ln.strip())]))
+            continue
+        if BULLET.match(ln):
+            cur = ("bullet", None, [(i, ln)])
+            out.append(cur)
+        elif cur is not None and (not gap or ln[:1].isspace()):
+            cur[2].append((i, ln))
+        else:
+            cur = ("para", None, [(i, ln)])
+            out.append(cur)
+        gap = False
+    return out
+
+
+def row_item(rows, k):
+    """The label of table row k, or None when it is a header, a separator or the template placeholder."""
+    text = rows[k][2][0][1]
+    if TABLE_SEP.match(text):
+        return None
+    nxt = rows[k + 1][2][0][1] if k + 1 < len(rows) and rows[k + 1][0] == "row" else ""
+    if TABLE_SEP.match(nxt):
+        return None  # the header row
+    cells = [c.strip() for c in text.strip().strip("|").split("|")]
+    if all(not c or PLACEHOLDER.match(c) for c in cells[1:]) or "<question>" in text:
+        return None
+    if cells and re.fullmatch(r"Q\d+[a-z]?", cells[0], re.I):
+        rest = next((c for c in cells[1:] if c), "")
+        return cells[0] + " " + short(rest, 9)
+    return short(next((c for c in cells if c), ""))
+
+
+def own(body):
+    """A bullet's own lines: up to its first sub-bullet."""
+    out = [body[0]]
+    for n, t in body[1:]:
+        if SUB_ITEM.match(t):
+            break
+        out.append((n, t))
+    return out
+
+
+def question_items(lines):
+    items, bl = [], blocks(lines)
+    closed, section_level = False, 0
+    q_open = None  # the open heading question collecting its body, or None
+    for k, (kind, level, body) in enumerate(bl):
+        if kind == "heading":
+            text = body[0][1]
+            if Q_HEADING.match(text):
+                q_open = None
+                if closed and level > section_level:
+                    continue
+                q_open = {"label": short(text), "lines": [body[0]], "own": [body[0]]}
+                items.append(q_open)
+            else:
+                q_open = None
+                if closed and level > section_level:
+                    continue  # a sub-heading inside a closed section is still closed
+                closed, section_level = level > 1 and bool(CLOSED_SECTION.search(text)), level
+            continue
+        if q_open is not None:
+            q_open["lines"].extend(body)
+            continue
+        if closed:
+            continue
+        if kind == "bullet":
+            items.append({"label": short(MARK.sub("", body[0][1])), "lines": body, "own": own(body)})
+        elif kind == "row":
+            label = row_item(bl, k)
+            if label:
+                items.append({"label": label, "lines": body})
+    return items
+
+
+def board_items(lines):
+    items, inside, inside_level = [], False, 0
+    for kind, level, body in blocks(lines):
+        if kind == "heading":
+            if WIP_SECTION.match(body[0][1]):
+                inside, inside_level = True, level
+            elif not (inside and level > inside_level):  # a sub-heading stays inside its section
+                inside = False
+        elif inside and kind == "bullet":
+            first = MARK.sub("", " ".join(t for _, t in body)).strip().strip("*_ ")
+            if NOTHING_ROW.match(" ".join(first.split())):
+                continue
+            items.append({"label": short(MARK.sub("", body[0][1])), "lines": body, "own": own(body),
+                          "newest": True})
+    return items
+
+
+def find_phrase(text):
+    """Where the first marker phrase starts in a LOG paragraph, or None."""
+    hits = [m.start() for m in [PHRASES.search(text)] if m]
+    for m in NAMED_CONFIRM.finditer(text):
+        before = MARK.sub("", re.sub(r"(\*\*|__)", "", text[:m.start()])).rstrip()
+        if before and before[-1] not in ".!?":  # a name mid-sentence, not a capital that opens one
+            hits.append(m.start())
+            break
+    b = BY.search(text)
+    if b:
+        hits.append(b.start())
+    return min(hits) if hits else None
+
+
+def log_items(lines):
+    items, when = [], None
+    for kind, level, body in blocks(lines):
+        if kind == "heading":  # a dated heading opens an entry; an undated "#" or "##" heading ends it
+            m = LOG_DATE.match(body[0][1]) if level >= 2 else None
+            if m:
+                when = iso(m.group(1))
+            elif level <= 2:
+                when = None
+            continue
+        if when is None or kind == "row":
+            continue
+        starts, pos = [], 0
+        for n, t in body:
+            starts.append((pos, n))
+            pos += len(t) + 1
+        joined = " ".join(t for _, t in body)
+        hit = find_phrase(joined)
+        if hit is None:
+            continue
+        at = next(n for p, n in reversed(starts) if p <= hit)
+        before, after = MARK.sub("", joined[:hit]), joined[hit:]
+        pre = re.search(r"(?:\S+\s+){0,5}\S*$", before).group(0)
+        post = re.match(r"\S*(?:\s+\S+){0,7}", after).group(0)
+        label = ((("\u2026" if pre.strip() != before.strip() else "") + " ".join((pre + post).split()))
+                 + ("\u2026" if post.strip() != after.strip() else ""))
+        items.append({"label": "\u201c" + re.sub(r"(\*\*|__|`)", "", label) + "\u201d", "line": at,
+                      "lines": body, "date": when})
+    return items
+
+
+def stale_in(name, folder, days, now):
+    found = []
+    for fname, reader in (("QUESTIONS.md", question_items), ("WIP.md", board_items), ("LOG.md", log_items)):
+        rel = os.path.join(folder, fname)
+        lines = read_lines(os.path.join(PERMA, rel))
+        if not lines:
+            continue
+        items = reader(lines)
+        dates = None
+        for it in items:
+            text = "\n".join(t for _, t in it["lines"])
+            mine = "\n".join(t for _, t in it.get("own", it["lines"]))
+            head = MARK.sub("", mine.split("\n", 1)[0]).strip()
+            head = re.sub(r"^Q\d*\s*[\u2014\u2013:.-]?\s*", "", head) if fname == "QUESTIONS.md" else head
+            if "[closed" in mine.lower() or re.match(r"\[[xX]\]|~~[^~]+~~", head):
+                continue
+            bys = [d for d in (iso(s) for s in BY.findall(re.sub(r"`[^`]*`", "", mine))) if d]
+            if bys:
+                by = max(bys)
+                if by >= now:
+                    continue
+                measure, how = (now - by).days, "past its by: date " + by.isoformat()
+            else:
+                when = it.get("date")
+                if when is None:
+                    if dates is None:
+                        dates = blame(rel)
+                    known = [dates[n] for n, _ in it["lines"] if n in dates]
+                    when = (max if it.get("newest") else min)(known) if known else None
+                if when is None:
+                    continue
+                age = (now - when).days
+                if age <= days:
+                    continue
+                measure, how = age, None
+            line = it.get("line", it["lines"][0][0])
+            days_txt = "%d day%s" % (measure, "" if measure == 1 else "s")
+            found.append({"stream": name, "where": "%s:%d" % (fname, line), "label": it["label"],
+                          "measure": measure, "age": days_txt + (" " + how if how else " old"),
+                          "key": (-measure, name, fname, line)})
+    return found
+
+
+def main():
+    days = setting()
+    if days is None:
+        return
+    now = today()
+    listing = subprocess.run(["bash", LISTER], capture_output=True, encoding="utf-8", errors="replace",
+                             timeout=60).stdout
+    streams = [ln.split("\t", 1) for ln in listing.splitlines() if "\t" in ln]
+    streams = [(n, f) for n, f in streams if n != "perma-meta"]
+    if ONLY:
+        streams = [(n, f) for n, f in streams if n == ONLY]
+        if not streams:
+            return
+    stale = []
+    for name, folder in streams:
+        stale.extend(stale_in(name, folder, days, now))
+    stale.sort(key=lambda s: s["key"])
+    if ONLY:
+        if stale:
+            s = stale[0]
+            print("Stale loops in this stream: %d. The oldest: %s · %s · %s. /perma-brief shows up to 3 per stream."
+                  % (len(stale), s["where"], s["label"], s["age"]))
+        return
+    rule = "open items more than %d days old, or past their by: date" % days
+    if not stale:
+        print("Stale loops: none (%s)." % rule)
+        return
+    shown, per = [], {}
+    for s in stale:
+        if len(shown) < SHOW_TOTAL and per.get(s["stream"], 0) < SHOW_PER_STREAM:
+            shown.append(s)
+            per[s["stream"]] = per.get(s["stream"], 0) + 1
+    n_streams = len({s["stream"] for s in stale})
+    print("Stale loops: %d in %d stream%s (%s). The oldest:"
+          % (len(stale), n_streams, "" if n_streams == 1 else "s", rule))
+    for s in shown:
+        print("- %s · %s · %s · %s" % (s["stream"], s["where"], s["label"], s["age"]))
+    rest = {}
+    for s in stale:
+        if s not in shown:
+            rest[s["stream"]] = rest.get(s["stream"], 0) + 1
+    if rest:
+        print("Not shown: %d (%s)." % (sum(rest.values()),
+                                        ", ".join("%s %d" % (n, c) for n, c in sorted(rest.items()))))
+    print("For each, choose one: close it ([CLOSED YYYY-MM-DD: answer]); give it an owner and a date "
+          "(owner: X, by: YYYY-MM-DD); or park it on purpose (by: a review date, and the reason).")
+
+
+try:
+    main()
+except Exception as e:  # never silent: an empty output means "switched off" to the brief
+    print("Stale loops: not checked (the check failed: %s)." % type(e).__name__)
+PY
+exit 0
