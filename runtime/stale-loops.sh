@@ -10,16 +10,20 @@
 #   - QUESTIONS.md: a table row, a top-level bullet, or a heading that is itself a question ("## Q — ...",
 #     "### Q12: ..."). Items under a heading that says "closed" or "answered" are not open. Nor is an item
 #     whose own text holds "[CLOSED" (a mark in one of its sub-bullets closes only that sub-bullet; a
-#     heading question is closed by a mark in its heading), a done task box "- [x]", a row struck through
-#     from end to end ("~~...~~"), or the template's placeholder row. Bullets may be "-", "*", "+" or
+#     heading question is closed by a mark in its heading), a done task box "- [x]", an item whose text
+#     opens struck through ("~~...~~"), or the template's placeholder row. Bullets may be "-", "*", "+" or
 #     numbered ("1." or "1)"). Text inside an HTML comment is never read.
 #   - WIP.md: a top-level bullet in a section whose heading starts with Now, Blocked or Parked. A row that
 #     says only "Nothing." or "None." is skipped. Other sections (Done today, a handover, ...) are not read.
 #   - LOG.md: a paragraph or bullet, under a dated "## YYYY-MM-DD" heading, that holds one of the phrases
-#     "not yet read", "to confirm", "unconfirmed", "probably overtaken" or "no owner" (any letter case, also
-#     across a line break), or a by: date. A paragraph holding "[CLOSED" is not open: closing one of these is the one
+#     "not yet read", "still unconfirmed", "probably overtaken" or "no owner" (any letter case, also across
+#     a line break), or a capitalised word mid-sentence followed by "to confirm" ("Sam to confirm"; not
+#     "re-ran to confirm", which is finished work), or a by: date. A paragraph holding "[CLOSED" is not open: closing one of these is the one
 #     edit allowed to an old LOG entry (SPEC.md invariant 2).
-#   Lines inside a fenced code block are never read.
+#   Lines inside a fenced code block are never read (the v1.14.0 meter's rule: a closing fence is the same
+#     character, at least as long, with nothing after it; a backtick run with a backtick after it is inline
+#     code). A sub-heading stays inside its section, closed or board. A by: date or a [CLOSED mark counts
+#     only in the item's own lines, not in its sub-bullets.
 #
 # When is a loop stale:
 #   - An item that holds "by: YYYY-MM-DD" is stale once that date has passed, whatever its age (the latest
@@ -27,8 +31,9 @@
 #   - Otherwise it is stale when it is more than N days old. N is 14, or the whole number (1-3650) on the
 #     first line of runtime/.stale-loops; "off" there silences this script. Any other value: 14.
 #   - Age: for a LOG paragraph, its entry's date (a "## YYYY-MM-DD" heading, or a dated heading at a
-#     deeper level). For a question or a board row, `git blame -w -M`: the committer date of the oldest of
-#     the item's lines (one blame per file; a block of rows moved inside its file keeps its age, though a
+#     deeper level). For a question, `git blame -w -M`: the committer date of the oldest of the item's
+#     lines (how long it has been open). For a board row, the newest of its lines (how long since anyone
+#     touched it) (one blame per file; a block of rows moved inside its file keeps its age, though a
 #     row shorter than about 20 characters moved on its own does not). The committer date, not the author
 #     date, because an amend, a rebase or a cherry-pick gives it the new date: an age can come out too
 #     young, never too old. Ways it comes out too young: an item whose every line was rewritten, or that
@@ -67,14 +72,15 @@ HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 BULLET = re.compile(r"^([-*+]|\d{1,9}[.)])\s+\S")
 MARK = re.compile(r"^\s*([-*+]|\d{1,9}[.)])\s+")
 SUB_ITEM = re.compile(r"^\s+([-*+]|\d{1,9}[.)])\s")
-FENCE = re.compile(r"^\s*(```|~~~)")
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 Q_HEADING = re.compile(r"^Q\d*\s*[—–:-]|^Q\d+\b")
 CLOSED_SECTION = re.compile(r"^\W*(closed|answered)\b", re.I)
 WIP_SECTION = re.compile(r"^(now|blocked|parked)\b", re.I)
 NOTHING_ROW = re.compile(r"^(nothing|none)\b[^.]{0,30}\.?$", re.I)
 TABLE_SEP = re.compile(r"^\|?\s*:?-{3,}")
 PLACEHOLDER = re.compile(r"^<[^>]*>$")
-PHRASES = re.compile(r"\b(not\s+yet\s+read|to\s+confirm|unconfirmed|probably\s+overtaken|no\s+owner)\b", re.I)
+PHRASES = re.compile(r"\b(not\s+yet\s+read|still\s+unconfirmed|probably\s+overtaken|no\s+owner)\b", re.I)
+NAMED_CONFIRM = re.compile(r"\b[A-Z][a-z]+\s+to\s+confirm\b")  # "<name> to confirm", not "re-ran to confirm"
 BY = re.compile(r"\bby:\s*(\d{4}-\d{2}-\d{2})", re.I)
 LOG_DATE = re.compile(r"^(\d{4}-\d{2}-\d{2})\b")
 
@@ -152,13 +158,15 @@ def unfenced(lines):
             if "-->" not in ln:
                 continue
             ln, comment = ln.split("-->", 1)[1], False
-        elif fence is None or FENCE.match(ln):
+        else:
             m = FENCE.match(ln)
-            if m:
-                fence = None if fence == m.group(1) else (fence or m.group(1))
+            if fence is None and m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                fence = m.group(1)  # opened; a backtick run with a backtick after it is inline code
                 continue
-        if fence is not None:
-            continue
+            if fence is not None:
+                if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence) and not m.group(2).strip():
+                    fence = None  # closed: the same character, at least as long, nothing after it
+                continue
         ln = re.sub(r"<!--.*?-->", "", ln)
         if "<!--" in ln:
             ln, comment = ln.split("<!--", 1)[0], True
@@ -237,6 +245,8 @@ def question_items(lines):
                 items.append(q_open)
             else:
                 q_open = None
+                if closed and level > section_level:
+                    continue  # a sub-heading inside a closed section is still closed
                 closed, section_level = level > 1 and bool(CLOSED_SECTION.search(text)), level
             continue
         if q_open is not None:
@@ -254,16 +264,34 @@ def question_items(lines):
 
 
 def board_items(lines):
-    items, inside = [], False
+    items, inside, inside_level = [], False, 0
     for kind, level, body in blocks(lines):
         if kind == "heading":
-            inside = bool(WIP_SECTION.match(body[0][1]))
+            if WIP_SECTION.match(body[0][1]):
+                inside, inside_level = True, level
+            elif not (inside and level > inside_level):  # a sub-heading stays inside its section
+                inside = False
         elif inside and kind == "bullet":
             first = MARK.sub("", " ".join(t for _, t in body)).strip().strip("*_ ")
             if NOTHING_ROW.match(" ".join(first.split())):
                 continue
-            items.append({"label": short(MARK.sub("", body[0][1])), "lines": body, "own": own(body)})
+            items.append({"label": short(MARK.sub("", body[0][1])), "lines": body, "own": own(body),
+                          "newest": True})
     return items
+
+
+def find_phrase(text):
+    """Where the first marker phrase starts in a LOG paragraph, or None."""
+    hits = [m.start() for m in [PHRASES.search(text)] if m]
+    for m in NAMED_CONFIRM.finditer(text):
+        before = MARK.sub("", re.sub(r"(\*\*|__)", "", text[:m.start()])).rstrip()
+        if before and before[-1] not in ".!?":  # a name mid-sentence, not a capital that opens one
+            hits.append(m.start())
+            break
+    b = BY.search(text)
+    if b:
+        hits.append(b.start())
+    return min(hits) if hits else None
 
 
 def log_items(lines):
@@ -283,11 +311,11 @@ def log_items(lines):
             starts.append((pos, n))
             pos += len(t) + 1
         joined = " ".join(t for _, t in body)
-        m = PHRASES.search(joined) or BY.search(joined)
-        if not m:
+        hit = find_phrase(joined)
+        if hit is None:
             continue
-        at = next(n for p, n in reversed(starts) if p <= m.start())
-        before, after = MARK.sub("", joined[:m.start()]), joined[m.start():]
+        at = next(n for p, n in reversed(starts) if p <= hit)
+        before, after = MARK.sub("", joined[:hit]), joined[hit:]
         pre = re.search(r"(?:\S+\s+){0,5}\S*$", before).group(0)
         post = re.match(r"\S*(?:\s+\S+){0,7}", after).group(0)
         label = ((("\u2026" if pre.strip() != before.strip() else "") + " ".join((pre + post).split()))
@@ -310,10 +338,10 @@ def stale_in(name, folder, days, now):
             text = "\n".join(t for _, t in it["lines"])
             mine = "\n".join(t for _, t in it.get("own", it["lines"]))
             head = MARK.sub("", mine.split("\n", 1)[0]).strip()
-            if ("[closed" in mine.lower() or re.match(r"\[[xX]\]", head)
-                    or re.fullmatch(r"~~.+~~\W*", head)):
+            head = re.sub(r"^Q\d*\s*[\u2014\u2013:.-]?\s*", "", head) if fname == "QUESTIONS.md" else head
+            if "[closed" in mine.lower() or re.match(r"\[[xX]\]|~~[^~]+~~", head):
                 continue
-            bys = [d for d in (iso(s) for s in BY.findall(re.sub(r"`[^`]*`", "", text))) if d]
+            bys = [d for d in (iso(s) for s in BY.findall(re.sub(r"`[^`]*`", "", mine))) if d]
             if bys:
                 by = max(bys)
                 if by >= now:
@@ -325,7 +353,7 @@ def stale_in(name, folder, days, now):
                     if dates is None:
                         dates = blame(rel)
                     known = [dates[n] for n, _ in it["lines"] if n in dates]
-                    when = min(known) if known else None
+                    when = (max if it.get("newest") else min)(known) if known else None
                 if when is None:
                     continue
                 age = (now - when).days

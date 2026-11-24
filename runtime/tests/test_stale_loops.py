@@ -144,17 +144,17 @@ class StaleLoops(unittest.TestCase):
             "# LOG\n\n> Append-only. The phrase to confirm here is before any entry.\n\n"
             "## 2026-06-25 — young\n\nStill to confirm, but young.\n\n"
             "## 2026-06-01 — old\n\nThe assessment is attached; not yet\nread here.\n\n"
-            "- The figure is unconfirmed.\n- Probably overtaken by the new plan.\n\n"
-            "Nobody holds it: no owner.\n\nThe date is To Confirm.\n\n"
+            "- The figure is still unconfirmed.\n- Probably overtaken by the new plan.\n\n"
+            "Nobody holds it: no owner.\n\nThe date is for Owner to confirm.\n\n"
             "```\nan example: not yet read\n```\n\n"
-            "### a sub-heading keeps the date\n\nThis one is unconfirmed too.\n"))
+            "### a sub-heading keeps the date\n\nThis one is still unconfirmed too.\n"))
         self.commit(YOUNG)
         out = self.run_it()  # lines 11, 14, 15, 17, 19, 27; not 3 (before any entry), 7 (young), 22 (fenced)
         self.assertIn("Stale loops: 6 in 1 stream", out)
         self.assertEqual([i.split(" · ")[1] for i in self.items(out)], ["LOG.md:11", "LOG.md:14", "LOG.md:15"])
         self.assertIn("Not shown: 3 (acme/shop 3).", out)
         self.assertIn("“The assessment is attached; not yet read here.” · 29 days old", out)
-        self.assertIn("“The figure is unconfirmed.”", out)
+        self.assertIn("“The figure is still unconfirmed.”", out)
 
     # --- by: dates -----------------------------------------------------------------------------
 
@@ -296,12 +296,66 @@ class StaleLoops(unittest.TestCase):
 
     def test_month_grouped_log_and_labels(self):  # P3-7, P3-8
         self.stream("acme/shop", LOG=(
-            "## June 2026\n\n### 2026-06-04 — a day\n\nThe figure is unconfirmed.\n\n"
-            "### 2026-06-05\n\nThe phrase 'to confirm' was used.\n"))
+            "## June 2026\n\n### 2026-06-04 — a day\n\nThe figure is still unconfirmed.\n\n"
+            "### 2026-06-05\n\nThe phrase 'still unconfirmed' was used.\n"))
         self.commit(YOUNG)
         out = self.run_it()
-        self.assertIn("LOG.md:5 · “The figure is unconfirmed.” · 26 days old", out)
-        self.assertIn("LOG.md:9 · “The phrase 'to confirm' was used.” · 25 days old", out)
+        self.assertIn("LOG.md:5 · “The figure is still unconfirmed.” · 26 days old", out)
+        self.assertIn("LOG.md:9 · “The phrase 'still unconfirmed' was used.” · 25 days old", out)
+
+    # --- the PR review's findings (design 2026-11-24, 04) -----------------------------------------
+
+    def test_finished_work_and_bare_adjectives_are_not_loops(self):  # P2-3, owner's narrow rule
+        self.stream("acme/shop", LOG=(
+            "## 2026-06-01 — old\n\nRe-ran the suite to confirm nothing moved.\n\nRe-ran to confirm. Done.\n\n"
+            "- Diffed every file to confirm only two changed.\n\nThe tag is unconfirmed in the data model.\n\n"
+            "- Ran it twice. Checked to confirm.\n\n- **Decision (Owner to confirm direction)**: ship it\n"))
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[1] for i in self.items(self.run_it())], ["LOG.md:13"])
+
+    def test_a_sub_heading_inside_a_closed_section_stays_closed(self):  # P2-1
+        self.stream("acme/shop", QUESTIONS=(
+            "# Questions\n\n## Open\n\n- open one\n\n## Closed\n\n### September\n\n- answered thing\n"
+            "- another\n\n## Later\n\n- reopened section\n"))
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[2] for i in self.items(self.run_it())], ["open one", "reopened section"])
+
+    def test_a_sub_heading_inside_a_board_section_stays_inside(self):  # P2-2
+        self.stream("acme/shop", WIP=(
+            "# WIP\n\n## Now\n\n### Project A\n\n- row under A\n\n## Parked\n\n- parked row\n\n"
+            "## Done today\n\n### Morning\n\n- done row\n"))
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[2] for i in self.items(self.run_it())], ["row under A", "parked row"])
+
+    def test_a_board_row_is_as_old_as_its_newest_line(self):  # P2-4, owner's ruling
+        rows = "## Now\n\n- A row worked on every day\n  - started\n"
+        self.stream("acme/shop", WIP=rows, QUESTIONS="## Open\n\n- A question\n  - started\n")
+        self.commit(OLD)
+        self.write("acme/shop/WIP.md", rows + "  - and updated yesterday\n")
+        self.write("acme/shop/QUESTIONS.md", "## Open\n\n- A question\n  - started\n  - and edited\n")
+        self.commit("2026-06-29T12:00:00")
+        self.assertEqual([i.split(" · ")[1:] for i in self.items(self.run_it())],
+                         [["QUESTIONS.md:3", "A question", "29 days old"]])
+
+    def test_a_struck_heading_question_is_closed(self):  # P3-1
+        self.stream("acme/shop", QUESTIONS="## Q — ~~Old question?~~ ANSWERED 2026-05-27\n\n## Q — Still open?\n")
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[2] for i in self.items(self.run_it())], ["Q — Still open?"])
+
+    def test_fences_follow_the_meters_rule(self):  # P3-2
+        self.stream("acme/shop", QUESTIONS=(
+            "## Open\n\n```bash``` is how\n- not hidden\n\n````\n- in code\n```\n- still in code\n````\n"
+            "- after the fence\n\n~~~\n- tilde code\n```\n~~~\n- after the tilde fence\n"))
+        self.commit(OLD)
+        out = self.run_it()  # exactly three: the code lines inside both fences are not items
+        self.assertEqual([i.split(" · ")[2] for i in self.items(out)],
+                         ["not hidden", "after the fence", "after the tilde fence"])
+        self.assertIn("Stale loops: 3 in 1 stream", out)
+
+    def test_a_sub_items_by_date_does_not_decide_the_parent(self):  # P3-3
+        self.stream("acme/shop", QUESTIONS="## Open\n\n- Parent, young\n  - a part, by: 2026-06-10\n")
+        self.commit(YOUNG)
+        self.assertIn("Stale loops: none", self.run_it())
 
     # --- the commands ---------------------------------------------------------------------------
 

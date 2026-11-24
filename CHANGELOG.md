@@ -28,25 +28,29 @@ A new script, `runtime/stale-loops.sh`, lists:
   question) and board rows in the Now, Blocked and Parked sections of `WIP.md`, when they are more than
   14 days old;
 - any of those, and any LOG line, carrying a `by: YYYY-MM-DD` date that has passed;
-- LOG paragraphs that say "not yet read", "to confirm", "unconfirmed", "probably overtaken" or "no
-  owner", when their entry is more than 14 days old.
+- LOG paragraphs that say "not yet read", "still unconfirmed", "probably overtaken" or "no owner", or
+  a name followed by "to confirm" ("Sam to confirm"), when their entry is more than 14 days old. A plain
+  "to confirm" ("re-ran the suite to confirm nothing moved") is finished work, and a bare "unconfirmed"
+  is usually a description, so neither counts. On a real install this kept 3 real loops of 13 phrase
+  matches and dropped 7 that were not loops.
 
 An item is closed by a `[CLOSED` mark in its own text (a mark in one of its sub-bullets closes only
-that sub-bullet), a done task box `- [x]`, or a row struck through from end to end. A section is
-closed when its heading starts with "Closed" or "Answered". Text in an HTML comment or a fenced code
+that sub-bullet), a done task box `- [x]`, or text that opens struck through. A section is closed
+when its heading starts with "Closed" or "Answered", and its sub-headings stay closed. Text in an HTML comment or a fenced code
 block is never read. The brief shows at most 10, and at most 3 from one stream,
 oldest first, then a count of the rest, then three choices for each: close it, give it an owner and a
 date (`owner: X, by: YYYY-MM-DD`), or park it on purpose (a `by:` review date and the reason). The brief
 changes no file; the owner chooses in the session that follows. `/perma-startup` gives one line for its
 own stream: the count and the oldest item.
 
-**How age is found.** A LOG line is as old as its entry's date. A question or a board row is as old
-as the committer date of its oldest line (`git blame -w -M`, so a block of rows moved inside its file
-keeps its age). The committer date changes on an amend, a rebase or a cherry-pick, so an age can come
+**How age is found.** A LOG line is as old as its entry's date. A question is as old as the committer
+date of its oldest line: how long it has been open. A board row is as old as its newest line: how long
+since anyone touched it. Both come from `git blame -w -M`, so a block of rows moved inside its file
+keeps its age. The committer date changes on an amend, a rebase or a cherry-pick, so an age can come
 out too young, never too old. It comes out too young when every line of an item was rewritten, when it
 moved to another file, when a short row moved on its own, for uncommitted lines (0 days), and on an
 install with short history. The marker phrases are matched as words, so a LOG line that quotes one, or
-that says it was done ("called to confirm; confirmed"), is still listed: close it with a mark. On one real install, whose largest board file has nearly 900 commits, a run takes 5 to 9 seconds.
+that says it was done in other words, is still listed: close it with a mark. On one real install, whose largest board file has nearly 900 commits, a run takes 5 to 9 seconds.
 
 **New, optional: `owner:` and `by:` on an open item.** Nothing requires them, and no stream needs
 changing. With a `by:` date the script checks the date instead of the age.
