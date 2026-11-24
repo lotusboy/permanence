@@ -16,7 +16,7 @@ The morning bookend to `/perma-shutdown`, scoped to *this* project only — not 
    - `PROJECT.md` — the "Current state" / "where things stand" block, and its `Last updated` date.
    - `QUESTIONS.md` — only the still-open items with an actual next action for me (skip ones purely waiting on someone else).
    - The **tail** of `LOG.md` — last few entries only, to catch anything since PROJECT.md was last touched.
-   - **Stale loops:** run `~/permanence/runtime/stale-loops.sh "<stream>"` with this stream's name. It prints one line (how many open loops in this stream are past 14 days or their `by:` date, and the oldest one), or nothing.
+   - **Stale loops:** run `~/permanence/runtime/stale-loops.sh "<stream>"` with this stream's name. It prints one line (how many open loops in this stream are older than the stale age, 14 days unless `runtime/.stale-loops` says otherwise, or past their `by:` date, and the oldest one), or nothing.
 3. **Staleness check** — same as `/perma-brief`: if `LOG.md`'s most recent entry is dated after `PROJECT.md`'s `Last updated` header, flag it (the headline may be behind).
 4. **Cross-check the real repo, not just Permanence.**
    - **Resolved via cwd or a given path:** that path *is* the real project repo — `git status` and recent commits (`git log --pretty=format:"%h %s" -10`) there.

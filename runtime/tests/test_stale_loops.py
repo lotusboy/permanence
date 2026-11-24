@@ -221,13 +221,87 @@ class StaleLoops(unittest.TestCase):
         self.commit("2026-06-10T12:00:00")
         self.assertEqual(self.run_it("acme/shop/"),
                          "Stale loops in this stream: 2. The oldest: QUESTIONS.md:3 · Older one · 29 days old. "
-                         "/perma-brief lists them.\n")
+                         "/perma-brief shows up to 3 per stream.\n")
         self.assertEqual(self.run_it("acme/quiet"), "")
         self.assertEqual(self.run_it("no/such"), "")
 
     def test_no_permanence(self):
         self.env["PERMA_DIR"] = str(self.perma / "missing")
         self.assertEqual(self.run_it(), "")
+
+    # --- the review's findings (design 2026-11-24, 02) --------------------------------------------
+
+    def test_an_amended_row_takes_the_amend_date(self):  # P2-1: committer time, never too old
+        self.stream("acme/shop", WIP="## Now\n\n- First row\n")
+        self.commit(OLD)
+        self.write("acme/shop/WIP.md", "## Now\n\n- First row\n- Added three weeks later by an amend\n")
+        self.git("add", "-A", ".", ":!runtime")
+        env = dict(self.env, GIT_COMMITTER_DATE="2026-06-28T12:00:00")
+        subprocess.run(["git", "-C", str(self.perma), "commit", "-q", "--amend", "--no-edit"], check=True,
+                       capture_output=True, env=env)
+        self.assertIn("Stale loops: none", self.run_it())
+
+    def test_a_closed_sub_item_leaves_its_parent_open(self):  # P2-2
+        self.stream("acme/shop", QUESTIONS=(
+            "## Open\n\n- Parent question still open\n  - a sub-part [CLOSED 2026-06-02: done]\n\n"
+            "### Q10 — A heading question\n\nOne sub-part is [CLOSED 2026-06-02: yes]; the rest is open.\n"))
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[1] for i in self.items(self.run_it())], ["QUESTIONS.md:3", "QUESTIONS.md:6"])
+
+    def test_only_a_heading_that_starts_closed_or_answered_closes_its_section(self):  # P2-3
+        self.stream("acme/shop", QUESTIONS=(
+            "# QUESTIONS — closed-loop pump\n\n## Unanswered\n\n- One\n\n## Not yet answered\n\n- Two\n\n"
+            "## Answered\n\n- Three\n\n## Closed (2026)\n\n- Four\n"))
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[2] for i in self.items(self.run_it())], ["One", "Two"])
+
+    def test_numbered_lists_are_items(self):  # P2-4
+        self.stream("acme/shop", WIP="## Parked\n\n- A bullet row\n1. A numbered row\n2) Another one\n")
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[2] for i in self.items(self.run_it())],
+                         ["A bullet row", "A numbered row", "Another one"])
+
+    def test_a_log_line_with_a_past_by_date_and_no_phrase(self):  # P2-5
+        self.stream("acme/shop", LOG="## 2026-06-25 — x\n\n- Draft due by: 2026-06-10\n\n- Later, by: 2026-07-10\n")
+        self.commit(YOUNG)
+        self.assertEqual([i.split(" · ")[1:] for i in self.items(self.run_it())],
+                         [["LOG.md:3", "“Draft due by: 2026-06-10”", "20 days past its by: date 2026-06-10"]])
+
+    def test_a_failure_says_so(self):  # P2-7
+        self.stream("acme/shop", QUESTIONS="## Open\n\n- A question\n")
+        self.commit(OLD)
+        (self.perma / "runtime" / ".stale-loops").write_bytes(b"\xff14\n")
+        self.assertIn("Stale loops: 1 in 1 stream", self.run_it())  # unreadable setting: the default
+        (self.perma / "runtime" / ".stale-loops").write_bytes("\ufeffoff\n".encode())
+        self.assertEqual(self.run_it(), "")                          # P3-12: a BOM does not hide "off"
+        (self.perma / "runtime" / ".stale-loops").unlink()
+        tools = self.perma.parent / "tools"   # python3 and git on PATH, but no bash for the stream list
+        tools.mkdir()
+        for tool in ("python3", "git", "dirname"):
+            found = subprocess.run(["bash", "-c", f"command -v {tool}"], capture_output=True, text=True).stdout.strip()
+            (tools / tool).symlink_to(found)
+        bash = subprocess.run(["bash", "-c", "command -v bash"], capture_output=True, text=True).stdout.strip()
+        p = subprocess.run([bash, str(RUNTIME / "stale-loops.sh")], capture_output=True, text=True,
+                           env=dict(self.env, PATH=str(tools)))
+        self.assertEqual((p.returncode, p.stdout), (0, "Stale loops: not checked (the check failed: FileNotFoundError).\n"))
+
+    def test_closed_looking_rows_comments_tables_and_code_spans(self):  # P3-1, P3-3, P3-4, P3-5
+        self.stream("acme/shop", WIP=(
+            "## Now\n\n<!-- - A commented row\n- Another -->\n- [x] A done task\n- [ ] An open task\n"
+            "- ~~A struck row~~\n- A row with a table\n  | inner | table |\n"
+            "- A row that only quotes `by: 2099-01-01`\n"))
+        self.commit(OLD)
+        self.assertEqual([i.split(" · ")[2] for i in self.items(self.run_it())[:3]] + [len(self.items(self.run_it()))],
+                         ["[ ] An open task", "A row with a table", "A row that only quotes by: 2099-01-01", 3])
+
+    def test_month_grouped_log_and_labels(self):  # P3-7, P3-8
+        self.stream("acme/shop", LOG=(
+            "## June 2026\n\n### 2026-06-04 — a day\n\nThe figure is unconfirmed.\n\n"
+            "### 2026-06-05\n\nThe phrase 'to confirm' was used.\n"))
+        self.commit(YOUNG)
+        out = self.run_it()
+        self.assertIn("LOG.md:5 · “The figure is unconfirmed.” · 26 days old", out)
+        self.assertIn("LOG.md:9 · “The phrase 'to confirm' was used.” · 25 days old", out)
 
     # --- the commands ---------------------------------------------------------------------------
 
